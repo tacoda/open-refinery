@@ -3,6 +3,23 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.1] — 2026-07-03
+
+### Added
+- **Governance layer graph (strict precedence).** A rule's layer is the rank of
+  its author's role (the **platform → developer** axis). `decide`/`enforce` now
+  resolve strict rules along that graph: the **highest-ranked** strict rule wins
+  and cannot be overridden by a lower layer (ties at that rank deny-override);
+  with no strict rule, plain deny-overrides applies. `decide` takes an optional
+  `rank_of` (defaults to a flat single layer, preserving prior behavior);
+  `enforce` builds it from each policy owner's role rank.
+
+### Note
+- The **factory → harness → charter** artifact axis is folded into the role-rank
+  axis for now (chosen model). A separate `layer` field + 2-D lattice remains a
+  future option (see PLAN). Per-layer approval workflows and the admin
+  governance landscape are still upcoming 0.13.x slices.
+
 ## [0.13.0] — 2026-07-03
 
 ### Changed

@@ -34,6 +34,33 @@ def test_strict_rule_cannot_be_overridden():
     assert decide(ps, "developer", "transition", "done") is False
 
 
+def test_layer_graph_higher_author_strict_wins():
+    # rank by author: platform(2) outranks developer(1)
+    rank = {"plat": 2, "dev": 1}
+    rank_of = lambda p: rank.get(p.owner_id, 0)
+    plat_allow = Policy(effect="allow", strict=True, kind="rule", owner_id="plat")
+    dev_deny = Policy(effect="deny", strict=True, kind="rule", owner_id="dev")
+    ps = [plat_allow, dev_deny]
+    # higher layer's strict allow locks; developer's strict deny cannot override
+    assert decide(ps, "developer", "transition", "done", rank_of=rank_of) is True
+    # flip: developer strict allow can't override platform strict deny
+    ps = [Policy(effect="deny", strict=True, kind="rule", owner_id="plat"),
+          Policy(effect="allow", strict=True, kind="rule", owner_id="dev")]
+    assert decide(ps, "developer", "transition", "done", rank_of=rank_of) is False
+
+
+def test_enforce_resolves_author_layers(monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+    conn = connect("sqlite:///:memory:")
+    dev, _ = create_user(conn, "dev@x.dev", "pw", "developer")
+    plat, _ = create_user(conn, "plat@x.dev", "pw", "platform")
+    # developer strict-denies; platform strict-allows the same action → platform wins
+    create_policy(conn, "deny", dev.id, action="transition", resource="done", strict=True)
+    create_policy(conn, "allow", plat.id, action="transition", resource="done", strict=True)
+    from open_refinery.policies import enforce
+    enforce(conn, "developer", "transition", "done")  # no raise: higher layer allows
+
+
 def test_non_rule_kinds_do_not_gate():
     # a skill/command/agent policy is a governed artifact, not an allow/deny gate
     ps = [make_policy("deny", kind="skill")]

@@ -14,6 +14,7 @@ from sqlmodel import Session, select
 
 from .models import Policy, User
 from .settings import get_setting
+from .users import role_rank
 
 EFFECTS = ("allow", "deny")
 STRICT_DEFAULT_KEY = "policy.strict_default"  # admin setting; "true"/"false"
@@ -65,24 +66,40 @@ def delete_policy(session: Session, policy_id: str) -> None:
         session.commit()
 
 
-def decide(policies: list[Policy], role: str, action: str, resource: str) -> bool:
+def decide(policies: list[Policy], role: str, action: str, resource: str,
+           *, rank_of=None) -> bool:
     """Allow unless a matching rule denies (deny-overrides; default allow).
 
-    Only `rule` policies gate. A **strict** rule cannot be overridden by a
-    lower/other layer: if any matching rule is strict, the strict rules decide
-    alone (still deny-overrides among them). ponytail: strictness is the current
-    override lock; the full factory→harness→charter layer graph lands later.
+    Only `rule` policies gate. **Layer graph:** a policy's layer is the rank of
+    its author's role (`rank_of(policy)`). A **strict** rule locks the decision
+    against *lower* layers — the highest-ranked strict rule wins, and lower rules
+    can't override it; ties at that rank deny-override. With no strict rule,
+    plain deny-overrides applies. `rank_of` defaults to a flat 0 (single layer),
+    so callers that don't supply ranks keep the pre-graph behavior.
     """
+    rank_of = rank_of or (lambda _p: 0)
     matches = [p for p in policies if p.kind == "rule"
                and _match(p.role, role) and _match(p.action, action) and _match(p.resource, resource)]
     strict = [p for p in matches if p.strict]
-    pool = strict or matches
-    return not any(p.effect == "deny" for p in pool)
+    if strict:
+        top = max(rank_of(p) for p in strict)          # highest layer that locked
+        pool = [p for p in strict if rank_of(p) == top]
+        return not any(p.effect == "deny" for p in pool)
+    return not any(p.effect == "deny" for p in matches)
 
 
 def enforce(session: Session, role: str, action: str, resource: str) -> None:
-    """Raise PolicyDenied if the current policy set denies the action."""
-    if not decide(list_policies(session), role, action, resource):
+    """Raise PolicyDenied if the current policy set denies the action.
+
+    Resolves each rule's layer from its author's role rank (the platform→developer
+    axis), so a higher-layer strict rule cannot be overridden by a lower one.
+    """
+    policies = list_policies(session)
+    owners = {p.owner_id for p in policies}
+    ranks = {oid: role_rank(session, u.role)
+             for oid in owners if (u := session.get(User, oid)) is not None}
+    rank_of = lambda p: ranks.get(p.owner_id, 0)
+    if not decide(policies, role, action, resource, rank_of=rank_of):
         raise PolicyDenied(f"policy denies {role!r} {action!r} on {resource!r}")
 
 
