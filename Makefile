@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install test run build up down logs shell clean dist publish
+.PHONY: help install test serve demo clean dist publish
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -11,23 +11,11 @@ install: ## Create venv and install with dev deps (uv)
 test: ## Run the test suite
 	uv run pytest -q
 
-run: ## Run the CLI locally (pass ARGS="--text hi")
-	uv run open-refinery $(ARGS)
+serve: ## Run the HTTP server (background it yourself: make serve &)
+	uv run open-refinery serve
 
-build: ## Build the Docker image
-	docker compose build
-
-up: ## Start the stack (detached)
-	docker compose up -d
-
-down: ## Stop the stack
-	docker compose down
-
-logs: ## Tail container logs
-	docker compose logs -f
-
-shell: ## Open a shell in the running container
-	docker compose exec app /bin/bash
+demo: ## Produce one artifact and print its provenance record
+	uv run open-refinery demo
 
 clean: ## Remove build artifacts and caches
 	rm -rf dist build *.egg-info .pytest_cache

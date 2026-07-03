@@ -259,7 +259,10 @@ Single process serves API + SPA. The full env surface:
 | `PORT`         | HTTP port                               | `8000`                         |
 | `LOG_LEVEL`    | Logging verbosity                       | `INFO`                         |
 
-That's it. Set `SECRET_KEY`, run, open the browser, complete setup.
+That's it. Install with `pip`/`uv`, run `open-refinery serve` (background it
+however you like — `&`, `nohup`, `screen`, `tmux`, or a process manager), open
+the browser, complete setup. No Docker, no daemon manager, no external database
+— SQLite ships with Python.
 
 ### Connections are token-based, entered in the UI
 
@@ -269,8 +272,8 @@ completing an OAuth flow). Tokens are encrypted with `SECRET_KEY`, never logged,
 shown once, and rotatable/revocable from the UI. No credential ever lives in an
 env var or config file.
 
-Ship a `Dockerfile` + `docker-compose.yml` (app + optional Postgres). One
-command up.
+Distributed as a pip/uv package; a single `open-refinery serve` process serves
+API + SPA. Ships as a PyPI release — no container or orchestration required.
 
 ## Roadmap
 
@@ -287,7 +290,7 @@ command up.
 | 0.9.0   | React dashboard: setup wizard, work board, repos, processes, integrations, routing/quotas, oversight, audit + metrics views. |
 | 0.10.0  | Governance policy layer + content filtering over transitions/targets.|
 | 0.11.0  | Hardening: token rotation, secret handling review, RBAC edge cases, retention/residency, docs. |
-| 1.0.0   | Deployable release: Docker, compose, one-command self-host (`SECRET_KEY` only), full docs. |
+| 1.0.0   | Deployable release: `pip install open-refinery && open-refinery serve` self-host (`SECRET_KEY` only), full docs. |
 
 ## Open questions
 

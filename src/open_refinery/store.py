@@ -50,12 +50,14 @@ def _sqlite_path(database_url: str) -> str:
     return database_url[len(prefix):]  # sqlite:///rel, sqlite:////abs, sqlite:///:memory:
 
 
-def connect(database_url: str = DEFAULT_DATABASE_URL) -> sqlite3.Connection:
+def connect(
+    database_url: str = DEFAULT_DATABASE_URL, *, check_same_thread: bool = True
+) -> sqlite3.Connection:
     """Open the store, applying the schema idempotently."""
     path = _sqlite_path(database_url)
     if path != ":memory:":
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, check_same_thread=check_same_thread)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")

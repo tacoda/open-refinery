@@ -60,23 +60,33 @@ factory = Factory(audit=JsonlSink("audit.jsonl"))
 Each production appends one JSON line — a replayable record of who produced
 what, from which inputs, and when.
 
-## Docker
+## Run the server
+
+Needs Python 3.11+. SQLite ships with Python — no separate database to install.
 
 ```bash
-cp .env.example .env    # set SECRET_KEY
-make build              # build the image
-make up                 # start (detached); make logs / make down
+pip install open-refinery        # or: uv pip install open-refinery
+open-refinery serve              # listens on $PORT (default 8000)
 ```
+
+On a VPS, background it however you like:
+
+```bash
+open-refinery serve &            # or nohup / screen / tmux / your process manager
+curl localhost:8000/health       # {"status": "ok"}
+```
+
+Config is env-only (all optional): `PORT`, `DATABASE_URL`
+(`sqlite:///open-refinery.db` by default), `LOG_LEVEL`.
 
 ## Development
 
 ```bash
 make install            # uv sync --extra dev
 make test               # uv run pytest
+make serve              # run the server locally
 make help               # list all tasks
 ```
-
-`make` targets: `install build up down logs shell test run clean dist publish`.
 
 See [PLAN.md](PLAN.md), [CONTRIBUTING.md](CONTRIBUTING.md), and
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
