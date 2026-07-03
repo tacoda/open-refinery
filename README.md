@@ -69,6 +69,23 @@ curl -s -H "$H" "localhost:9000/events?subject=<item>"
 Config is env-only, all optional: `PORT` (or `--port`), `DATABASE_URL`
 (`sqlite:///open-refinery.db` default), `LOG_LEVEL`.
 
+### Sign in with GitHub (optional)
+
+Set these and the dashboard shows a "Sign in with GitHub" button:
+
+```bash
+export GITHUB_CLIENT_ID=...       # from your GitHub OAuth App
+export GITHUB_CLIENT_SECRET=...
+export APP_BASE_URL=https://or.example.com   # optional; used to build the callback
+```
+
+Register the OAuth App's callback as `<APP_BASE_URL>/auth/github/callback`.
+A GitHub login is accepted only when its **verified primary email matches an
+existing user** — provision accounts first (an admin creates them in the UI);
+unknown emails are denied. The OAuth client id/secret are the one bit of config
+that must be env (they're needed before anyone can log in). API/CI accounts keep
+using tokens.
+
 ## Library
 
 open-refinery is also an embeddable core — the same governed-production loop

@@ -286,7 +286,7 @@ API + SPA. Ships as a PyPI release — no container or orchestration required.
 |---------|----------------------------------------------------------------------|
 | 0.1.0 ✅ | Core factory: authorize → produce → record → audit → log            |
 | 0.2.0   | Persistence (SQLite/Postgres), migrations, durable event store; migrate `AuditSink` to SQL. Entities: `User`, `Repository`, `Process`, `WorkItem`. |
-| 0.3.0   | FastAPI + auth: local accounts, API tokens, **OAuth sign-in**, roles, ownership scoping, **first-run setup wizard**. |
+| 0.3.0   | FastAPI + auth: local accounts, API tokens, **GitHub OAuth sign-in** (session tokens; email must match an existing user), roles, ownership scoping. Remaining: first-run setup wizard, more OAuth providers. |
 | 0.4.0   | Process engine: declarative processes, stages, guards, board + doctrine archetypes; the transition loop. Agentic stage actions execute via **LangGraph** (durable checkpointer state). |
 | 0.5.0   | Oversight: autonomy levels (L0–L4), gates, approvals, attestations, quality gates. |
 | 0.6.0   | Integrations: adapter framework + GitHub, GitLab, Jira, Linear; **UI token entry**, encrypted credential store, sync. |

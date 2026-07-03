@@ -7,14 +7,18 @@ own; platform and admin see everything. User management is admin-only.
 
 from __future__ import annotations
 
+import os
+import secrets
 import sqlite3
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+from . import oauth
 
 _STATIC = Path(__file__).parent / "static"
 
@@ -23,7 +27,15 @@ from .metrics import summary
 from .processes import create_process, list_processes
 from .repositories import DuplicateRepository, create_repository, list_repositories
 from .store import DEFAULT_DATABASE_URL, SqliteSink, connect, query_events
-from .users import DuplicateUser, User, create_user, user_by_token
+from .users import (
+    DuplicateUser,
+    User,
+    create_session,
+    create_user,
+    session_user,
+    user_by_email,
+    user_by_token,
+)
 from .work_items import (
     ApprovalRequired,
     InvalidTransition,
@@ -98,7 +110,8 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
         request: Request, authorization: str | None = Header(default=None)
     ) -> User:
         token = (authorization or "").removeprefix("Bearer ").strip()
-        user = user_by_token(request.app.state.conn, token) if token else None
+        conn = request.app.state.conn
+        user = (user_by_token(conn, token) or session_user(conn, token)) if token else None
         if user is None:
             raise HTTPException(status_code=401, detail="invalid or missing token")
         return user
@@ -198,6 +211,45 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
     @app.get("/metrics")
     def metrics(user: User = Depends(current_user)):
         return summary(db_conn(app), owner_id=owner_scope(user))
+
+    # --- OAuth (GitHub) ---
+    def _redirect_uri(request: Request) -> str:
+        base = os.environ.get("APP_BASE_URL", str(request.base_url)).rstrip("/")
+        return f"{base}/auth/github/callback"
+
+    def _home(request: Request) -> str:
+        return os.environ.get("APP_BASE_URL", str(request.base_url)).rstrip("/") + "/"
+
+    @app.get("/auth/providers")
+    def providers():
+        return {"github": oauth.is_enabled()}
+
+    @app.get("/auth/github/login")
+    def github_login(request: Request):
+        if not oauth.is_enabled():
+            raise HTTPException(status_code=404, detail="github oauth not configured")
+        state = secrets.token_urlsafe(16)
+        resp = RedirectResponse(oauth.authorize_url(state, _redirect_uri(request)))
+        resp.set_cookie("or_oauth_state", state, httponly=True, max_age=600, samesite="lax")
+        return resp
+
+    @app.get("/auth/github/callback")
+    def github_callback(request: Request, code: str = "", state: str = ""):
+        if not oauth.is_enabled():
+            raise HTTPException(status_code=404, detail="github oauth not configured")
+        cookie_state = request.cookies.get("or_oauth_state")
+        if not state or state != cookie_state:
+            raise HTTPException(status_code=400, detail="oauth state mismatch")
+
+        access = oauth.exchange_code(code, _redirect_uri(request))
+        email = oauth.primary_email(access)
+        user = user_by_email(db_conn(app), email) if email else None
+        if user is None:
+            return RedirectResponse(_home(request) + "#oauth_error=no-account")
+        token = create_session(db_conn(app), user.id)
+        resp = RedirectResponse(f"{_home(request)}#token={token}")
+        resp.delete_cookie("or_oauth_state")
+        return resp
 
     # Serve the built dashboard last so API routes always match first. Absent in a
     # source checkout without a frontend build; present in the shipped wheel.

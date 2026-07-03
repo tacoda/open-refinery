@@ -22,3 +22,5 @@ export async function api(path: string, opts: RequestInit = {}): Promise<any> {
 
 export const post = (path: string, body: unknown) =>
   api(path, { method: 'POST', body: JSON.stringify(body) })
+
+export const oauthLoginUrl = (provider: string) => `${BASE}/auth/${provider}/login`

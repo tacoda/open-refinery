@@ -35,6 +35,16 @@ register_schema(
     """
 )
 
+register_schema(
+    """
+    CREATE TABLE IF NOT EXISTS sessions (
+        token_hash TEXT PRIMARY KEY,
+        user_id    TEXT NOT NULL REFERENCES users(id),
+        created_at TEXT NOT NULL
+    );
+    """
+)
+
 
 class DuplicateUser(Exception):
     """Raised when an email is already registered."""
@@ -110,6 +120,32 @@ def user_by_token(conn: sqlite3.Connection, token: str) -> User | None:
     """Resolve a bearer token to its user, else None."""
     row = conn.execute(
         "SELECT * FROM users WHERE token_hash = ?", (_hash_token(token),)
+    ).fetchone()
+    return _row_to_user(row) if row else None
+
+
+def user_by_email(conn: sqlite3.Connection, email: str) -> User | None:
+    row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    return _row_to_user(row) if row else None
+
+
+def create_session(conn: sqlite3.Connection, user_id: str) -> str:
+    """Issue a session token (e.g. after OAuth login). Returns the plaintext token."""
+    token = secrets.token_urlsafe(32)
+    conn.execute(
+        "INSERT INTO sessions (token_hash, user_id, created_at) VALUES (?, ?, ?)",
+        (_hash_token(token), user_id, datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    return token
+
+
+def session_user(conn: sqlite3.Connection, token: str) -> User | None:
+    """Resolve a session token to its user, else None."""
+    row = conn.execute(
+        "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id "
+        "WHERE s.token_hash = ?",
+        (_hash_token(token),),
     ).fetchone()
     return _row_to_user(row) if row else None
 

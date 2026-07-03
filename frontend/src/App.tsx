@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { api, post, getToken, setToken, clearToken } from './api'
+import { api, post, getToken, setToken, clearToken, oauthLoginUrl } from './api'
 import { getTheme, applyTheme, watchSystem, type Theme } from './theme'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,6 +20,17 @@ export default function App() {
   const [token, setTok] = useState(getToken())
   const [me, setMe] = useState<any>(null)
   const [view, setView] = useState<View>('work')
+
+  // capture an OAuth result handed back in the URL fragment
+  useEffect(() => {
+    const h = new URLSearchParams(window.location.hash.slice(1))
+    const t = h.get('token'), e = h.get('oauth_error')
+    if (t) { setToken(t); setTok(t); history.replaceState(null, '', '/') }
+    else if (e) {
+      toast.error(e === 'no-account' ? 'No account for that GitHub email — ask an admin.' : e)
+      history.replaceState(null, '', '/')
+    }
+  }, [])
 
   useEffect(() => {
     if (!token) return
@@ -81,7 +92,11 @@ function ThemeToggle() {
 
 function Login({ onToken }: { onToken: (t: string) => void }) {
   const [val, setVal] = useState('')
-  useEffect(() => { applyTheme(getTheme()) }, [])
+  const [github, setGithub] = useState(false)
+  useEffect(() => {
+    applyTheme(getTheme())
+    api('/auth/providers').then((p) => setGithub(!!p.github)).catch(() => {})
+  }, [])
   async function go() {
     setToken(val)
     try { await api('/me'); onToken(val) }
@@ -92,10 +107,15 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
       <div className="login-card">
         <h1 className="app-brand">open-refinery</h1>
         <p className="login-tagline">An open factory to shine light into the dark.</p>
+        {github && (
+          <Button onClick={() => { window.location.href = oauthLoginUrl('github') }}>
+            Sign in with GitHub
+          </Button>
+        )}
         <Input placeholder="API token" value={val} type="password"
                onChange={(e) => setVal(e.target.value)}
                onKeyDown={(e) => e.key === 'Enter' && go()} />
-        <Button onClick={go}>Sign in</Button>
+        <Button variant={github ? 'outline' : 'default'} onClick={go}>Sign in with token</Button>
       </div>
     </div>
   )
