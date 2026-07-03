@@ -3,7 +3,7 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
-## [Unreleased]
+## [0.5.0] — 2026-07-03
 
 ### Changed
 - **Data layer ported to SQLModel** (SQLAlchemy + Pydantic). Entities are now

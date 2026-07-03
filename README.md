@@ -45,11 +45,12 @@ production authorized, owned, provenanced, and logged, with human oversight
 configurable to each team's philosophy. Minimal to run (one process, SQLite,
 env-light), everything managed through the UI, and completely open source.
 
-> Status: **0.4.0.** Everything in 0.3.0 plus **integrations** — GitHub/GitLab
-> repo import and Jira/Linear work-item sync, connected by token or OAuth with
-> encrypted credentials. Auth is email/password (+ GitHub OAuth), roles
-> developer / platform / admin. Next: a SQLModel data layer, then targets /
-> routing / quotas and policy governance. See [CHANGELOG.md](CHANGELOG.md).
+> Status: **0.5.0.** Everything in 0.4.0 (integrations — GitHub/GitLab repo
+> import and Jira/Linear work-item sync) on a new **SQLModel data layer**
+> (typed models, per-request sessions, portable toward other backends). Auth is
+> email/password (+ GitHub OAuth), roles developer / platform / admin. Next:
+> targets / routing / quotas, then policy governance. See
+> [CHANGELOG.md](CHANGELOG.md).
 
 ## Quickstart
 
