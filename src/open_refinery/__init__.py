@@ -33,6 +33,7 @@ from .metrics import (
     wip_by_stage,
 )
 from .oversight import LEVELS, requires_approval
+from .seeds import AlreadySeeded, seed
 from .work_items import (
     ApprovalRequired,
     InvalidTransition,
@@ -105,5 +106,7 @@ __all__ = [
     "event_counts",
     "activity_by_actor",
     "lead_times",
+    "seed",
+    "AlreadySeeded",
     "__version__",
 ]

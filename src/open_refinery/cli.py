@@ -43,6 +43,24 @@ def _create_admin(args: argparse.Namespace) -> int:
     return 0
 
 
+def _seed(args: argparse.Namespace) -> int:
+    import sys
+
+    from .seeds import AlreadySeeded, seed
+    from .store import DEFAULT_DATABASE_URL, connect
+
+    conn = connect(os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL))
+    try:
+        data = seed(conn)
+    except AlreadySeeded:
+        print("database already has users; seed needs a fresh DATABASE_URL", file=sys.stderr)
+        return 1
+    print("seeded sample data. login tokens:")
+    for role, (user, token) in data["users"].items():
+        print(f"  {role:9} {user.email:22} {token}")
+    return 0
+
+
 def _demo(args: argparse.Namespace) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     factory = Factory()
@@ -70,6 +88,9 @@ def main(argv: list[str] | None = None) -> int:
     admin.add_argument("--email", required=True)
     admin.add_argument("--password", default=None, help="omit to be prompted securely")
     admin.set_defaults(func=_create_admin)
+
+    seed = sub.add_parser("seed", help="populate the database with sample data (dev)")
+    seed.set_defaults(func=_seed)
 
     demo = sub.add_parser("demo", help="produce one artifact and print its record")
     demo.add_argument("--actor", default="demo-user")
