@@ -1,20 +1,73 @@
 # open-refinery
 
-A factory for producing artifacts under governance. Every output carries its
-**provenance**, an **owner**, and an **audit trail**; every production is
-**authorized** before it runs and **logged** as it happens.
+*An open factory to shine light into the dark.*
 
-> Status: **0.1.0 — proof of concept.** The core loop (authorize → produce →
-> record → audit) is real and tested. Policy-based governance, richer
-> observability, and pluggable sinks are on the roadmap.
+A self-hosted dark factory that adds auditability to make it open. Work ships
+through customizable processes; every output carries its **provenance**, an
+**owner**, and an **audit trail**; every production is **authorized** before it
+runs and **logged** as it happens.
 
-## Install
+> Status: **0.3.0 — in development.** Server, token auth (developer / platform /
+> admin), repositories, processes (steps + feedback loops), work items with a
+> governed transition loop, oversight levels (L0–L4) with approvals, and an
+> audit trail are working and tested. OAuth, the web dashboard, metrics, and
+> policy governance are on the roadmap.
+
+## Quickstart
+
+Requires **Python 3.11+**. SQLite ships with Python — there is no separate
+database to install.
 
 ```bash
-uv add open-refinery       # or: pip install open-refinery
+pip install open-refinery                        # or: uv pip install open-refinery
+open-refinery create-admin --email you@x.dev     # mints the first admin + token (once)
+open-refinery serve                              # server on port 8000
 ```
 
-## Use
+Background it on a VPS however you like — `&`, `nohup`, `screen`, `tmux`, or
+your process manager:
+
+```bash
+open-refinery serve --port 9000 &                # or: PORT=9000 open-refinery serve
+curl localhost:9000/health                       # {"status": "ok"}
+```
+
+### Using the API
+
+Authenticate every request with the admin token from `create-admin`:
+
+```bash
+TOKEN=<paste the token>
+H="Authorization: Bearer $TOKEN"
+
+# register a repository (a repo = a project, whatever the code architecture)
+curl -s -H "$H" localhost:9000/repositories \
+  -d '{"name":"my-app","git_url":"git@github.com:me/my-app.git"}'
+
+# define a process: steps + oversight (dark = lights-out; assisted needs approval)
+curl -s -H "$H" localhost:9000/processes \
+  -d '{"name":"remediate","archetype":"doctrine",
+       "stages":["detect","triage","patch","verify","close"],
+       "transitions":[["detect","triage"],["triage","patch"],["patch","verify"],
+                      ["verify","close"],["verify","patch"]],
+       "oversight":"supervised","gates":["close"]}'
+
+# ship work through it, then move it a step (approve=true when a gate needs sign-off)
+curl -s -H "$H" localhost:9000/work-items \
+  -d '{"repo_id":"<repo>","process_id":"<proc>","title":"CVE-1234"}'
+curl -s -H "$H" localhost:9000/work-items/<item>/transition -d '{"to":"triage"}'
+
+# read the audit trail — every move, owned and attributed
+curl -s -H "$H" "localhost:9000/events?subject=<item>"
+```
+
+Config is env-only, all optional: `PORT` (or `--port`), `DATABASE_URL`
+(`sqlite:///open-refinery.db` default), `LOG_LEVEL`.
+
+## Library
+
+open-refinery is also an embeddable core — the same governed-production loop
+without the server:
 
 ```python
 from open_refinery import Factory
@@ -26,16 +79,9 @@ def upper(text: str) -> str:
     return text.upper()
 
 artifact, record = factory.produce("upper", actor="ian", text="hello")
-# artifact -> "HELLO"
-# record   -> Record(recipe="upper", actor="ian", owner="ian",
-#                    artifact_id=..., input_digest=..., output_digest=..., created_at=...)
 ```
 
-Try the demo CLI:
-
-```bash
-uv run open-refinery --actor ian --text hello
-```
+`open-refinery demo` prints one such record.
 
 ## Pillars
 
@@ -46,6 +92,7 @@ uv run open-refinery --actor ian --text hello
 | Ownership       | `owner` on every record (defaults to the actor)             |
 | Auditability    | `AuditSink` (`MemorySink`, `JsonlSink`) — append-only trail  |
 | Logging         | stdlib `logging`, logger name `open_refinery`               |
+| Oversight       | Per-process autonomy levels L0–L4; gated steps need recorded approvals |
 | Observability   | *(roadmap)* read-model / metrics over the audit trail       |
 | Governance      | *(roadmap)* policy layer that constrains what may be produced |
 
@@ -59,32 +106,6 @@ factory = Factory(audit=JsonlSink("audit.jsonl"))
 
 Each production appends one JSON line — a replayable record of who produced
 what, from which inputs, and when.
-
-## Run the server
-
-Needs Python 3.11+. SQLite ships with Python — no separate database to install.
-
-```bash
-pip install open-refinery                       # or: uv pip install open-refinery
-open-refinery create-admin --email you@x.dev    # mints the first admin + token (shown once)
-open-refinery serve                             # listens on port 8000
-```
-
-Port is configurable, `--port` flag winning over `$PORT` env over the default:
-
-```bash
-open-refinery serve --port 9000    # or: PORT=9000 open-refinery serve
-```
-
-On a VPS, background it however you like:
-
-```bash
-open-refinery serve &            # or nohup / screen / tmux / your process manager
-curl localhost:8000/health       # {"status": "ok"}
-```
-
-Config is env-only (all optional): `PORT`, `DATABASE_URL`
-(`sqlite:///open-refinery.db` by default), `LOG_LEVEL`.
 
 ## Development
 

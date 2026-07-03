@@ -19,7 +19,9 @@ from .processes import (
     list_processes,
 )
 from .store import SqliteSink, connect, query_events
+from .oversight import LEVELS, requires_approval
 from .work_items import (
+    ApprovalRequired,
     InvalidTransition,
     UnknownWorkItem,
     WorkItem,
@@ -73,10 +75,13 @@ __all__ = [
     "list_processes",
     "WorkItem",
     "InvalidTransition",
+    "ApprovalRequired",
     "UnknownWorkItem",
     "create_work_item",
     "get_work_item",
     "list_work_items",
     "transition",
+    "LEVELS",
+    "requires_approval",
     "__version__",
 ]

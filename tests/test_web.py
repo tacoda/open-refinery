@@ -86,6 +86,32 @@ def test_end_to_end_transition_and_audit(ctx):
     assert len(events) == 1 and events[0]["recipe"] == "transition"
 
 
+def test_oversight_approval_flow(ctx):
+    _, client, _, admin_token = ctx
+    h = auth(admin_token)
+    repo = client.post("/repositories", headers=h,
+                       json={"name": "or", "git_url": "git@x:or.git"}).json()
+    proc = client.post("/processes", headers=h,
+                       json={"name": "flow", "archetype": "board",
+                             "stages": ["todo", "doing"], "oversight": "assisted"}).json()
+    item = client.post("/work-items", headers=h,
+                       json={"repo_id": repo["id"], "process_id": proc["id"],
+                             "title": "T"}).json()
+
+    # without approval → 409
+    blocked = client.post(f"/work-items/{item['id']}/transition", headers=h,
+                          json={"to": "doing"})
+    assert blocked.status_code == 409
+
+    # with approve=true → applies
+    ok = client.post(f"/work-items/{item['id']}/transition", headers=h,
+                     json={"to": "doing", "approve": True})
+    assert ok.status_code == 200 and ok.json()["current_stage"] == "doing"
+
+    events = client.get(f"/events?subject={item['id']}", headers=h).json()
+    assert {e["recipe"] for e in events} == {"transition", "approval"}
+
+
 def test_duplicate_repo_conflicts(ctx):
     _, client, _, admin_token = ctx
     h = auth(admin_token)

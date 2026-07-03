@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from .audit import AuditSink
+from .oversight import requires_approval
 from .processes import get_process
 from .provenance import Record
 from .store import register_schema
@@ -38,6 +39,10 @@ register_schema(
 
 class InvalidTransition(Exception):
     """Raised when a move is not allowed by the item's process."""
+
+
+class ApprovalRequired(Exception):
+    """Raised when the process's oversight level requires a human approval first."""
 
 
 class UnknownWorkItem(KeyError):
@@ -133,11 +138,15 @@ def transition(
     to: str,
     actor_id: str,
     audit: AuditSink,
+    *,
+    approver_id: str | None = None,
 ) -> WorkItem:
     """Move a work item to a new step, recording the governed transition event.
 
-    Order is load-bearing: validate the move, apply it, then audit — nothing is
-    recorded unless the transition was allowed and applied.
+    Order is load-bearing: validate the move, enforce oversight, apply, then
+    audit — nothing is recorded unless the transition was allowed and applied.
+    If the process's oversight level requires approval, an `approver_id` must be
+    supplied or `ApprovalRequired` is raised; the approval is itself audited.
     """
     item = get_work_item(conn, item_id)
     if item is None:
@@ -150,6 +159,16 @@ def transition(
     frm = item.current_stage
     if not process.can_transition(frm, to):
         raise InvalidTransition(f"{frm!r} -> {to!r} not allowed by process {process.name!r}")
+
+    needs_approval = requires_approval(process.oversight, to, process.gates)
+    if needs_approval:
+        if approver_id is None:
+            raise ApprovalRequired(
+                f"moving into {to!r} needs approval "
+                f"(process {process.name!r} is at oversight {process.oversight!r})"
+            )
+        if not _exists(conn, "users", approver_id):
+            raise ValueError(f"unknown approver: {approver_id!r}")
 
     conn.execute("UPDATE work_items SET current_stage = ? WHERE id = ?", (to, item_id))
     conn.commit()
@@ -164,4 +183,15 @@ def transition(
             subject=item_id,
         )
     )
+    if needs_approval:  # record the sign-off as its own audit event
+        audit.write(
+            Record.of(
+                recipe="approval",
+                actor=approver_id,
+                owner=item.owner_id,
+                inputs={"to": to, "moved_by": actor_id, "oversight": process.oversight},
+                output="approved",
+                subject=item_id,
+            )
+        )
     return WorkItem(**{**item.__dict__, "current_stage": to})

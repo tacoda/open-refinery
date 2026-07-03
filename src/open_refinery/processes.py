@@ -14,6 +14,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from .oversight import LEVELS
 from .store import register_schema
 
 ARCHETYPES = ("board", "doctrine")
@@ -43,6 +44,8 @@ class Process:
     transitions: frozenset[tuple[str, str]]
     initial: str
     created_at: str
+    oversight: str = "dark"           # autonomy level; see oversight.LEVELS
+    gates: frozenset[str] = frozenset()  # steps that need approval under supervised
 
     def can_transition(self, frm: str, to: str) -> bool:
         return (frm, to) in self.transitions
@@ -64,9 +67,13 @@ def create_process(
     *,
     transitions: list[tuple[str, str]] | None = None,
     initial: str | None = None,
+    oversight: str = "dark",
+    gates: list[str] | None = None,
 ) -> Process:
     if archetype not in ARCHETYPES:
         raise ValueError(f"unknown archetype: {archetype!r} (expected {ARCHETYPES})")
+    if oversight not in LEVELS:
+        raise ValueError(f"unknown oversight level: {oversight!r} (expected {LEVELS})")
     if not stages:
         raise ValueError("a process needs at least one stage")
 
@@ -74,6 +81,11 @@ def create_process(
     initial = initial or stages_t[0]
     if initial not in stages_t:
         raise ValueError(f"initial stage {initial!r} not in stages")
+
+    gates_f = frozenset(gates or ())
+    unknown_gates = gates_f - set(stages_t)
+    if unknown_gates:
+        raise ValueError(f"gates reference unknown steps: {sorted(unknown_gates)}")
 
     trans = (
         frozenset(map(tuple, transitions))
@@ -96,6 +108,8 @@ def create_process(
         transitions=trans,
         initial=initial,
         created_at=datetime.now(timezone.utc).isoformat(),
+        oversight=oversight,
+        gates=gates_f,
     )
     conn.execute(
         "INSERT INTO processes (id, name, archetype, owner_id, definition, created_at) "
@@ -110,6 +124,8 @@ def create_process(
                     "stages": list(stages_t),
                     "transitions": sorted(map(list, trans)),
                     "initial": initial,
+                    "oversight": oversight,
+                    "gates": sorted(gates_f),
                 }
             ),
             process.created_at,
@@ -130,6 +146,8 @@ def _row_to_process(row: sqlite3.Row) -> Process:
         transitions=frozenset(tuple(t) for t in d["transitions"]),
         initial=d["initial"],
         created_at=row["created_at"],
+        oversight=d.get("oversight", "dark"),
+        gates=frozenset(d.get("gates", ())),
     )
 
 

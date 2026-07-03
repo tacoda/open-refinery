@@ -18,6 +18,7 @@ from .repositories import DuplicateRepository, create_repository, list_repositor
 from .store import DEFAULT_DATABASE_URL, SqliteSink, connect, query_events
 from .users import DuplicateUser, User, create_user, user_by_token
 from .work_items import (
+    ApprovalRequired,
     InvalidTransition,
     UnknownWorkItem,
     create_work_item,
@@ -47,6 +48,8 @@ class NewProcess(BaseModel):
     stages: list[str]
     transitions: list[tuple[str, str]] | None = None
     initial: str | None = None
+    oversight: str = "dark"
+    gates: list[str] | None = None
 
 
 class NewWorkItem(BaseModel):
@@ -57,6 +60,7 @@ class NewWorkItem(BaseModel):
 
 class Move(BaseModel):
     to: str
+    approve: bool = False  # current user signs off, if the process requires it
 
 
 # --- app ------------------------------------------------------------------
@@ -93,6 +97,7 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
         (DuplicateUser, 409),
         (DuplicateRepository, 409),
         (InvalidTransition, 409),
+        (ApprovalRequired, 409),
         (UnknownWorkItem, 404),
         (ValueError, 400),
     ):
@@ -128,6 +133,7 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
         return create_process(
             db_conn(app), body.name, body.archetype, body.stages, user.id,
             transitions=body.transitions, initial=body.initial,
+            oversight=body.oversight, gates=body.gates,
         )
 
     @app.get("/processes")
@@ -144,7 +150,10 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
 
     @app.post("/work-items/{item_id}/transition")
     def move(item_id: str, body: Move, user: User = Depends(current_user)):
-        return transition(db_conn(app), item_id, body.to, user.id, SqliteSink(db_conn(app)))
+        return transition(
+            db_conn(app), item_id, body.to, user.id, SqliteSink(db_conn(app)),
+            approver_id=user.id if body.approve else None,
+        )
 
     @app.get("/events")
     def get_events(
