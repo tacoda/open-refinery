@@ -424,6 +424,7 @@ engine, oversight, metrics, and the dashboard all landed in it).
 | post-1.0 | **Repo relations / systems** — platform can define work and **relations between repositories** that constitute a service, microservice group, or server; customizable at the platform level (repos compose into systems). |
 | post-1.0 | **Admin overview UX** — admin can do everything, but the dashboard presents only **high-level** state prominently; details (a specific user, job, or rule) are reached by intentional drill-in, not shown by default. (Feeds the 1.0 UI revamp.) |
 | post-1.0 | **MFA requirement** — admin-managed multi-factor auth policy (whether MFA is required, and for which roles); defaults off. |
+| post-1.0 | **Background job runner (possibly Celery)** — move long-running backend work (real model calls, ingestion, audits, evals) onto a task queue so the UI stays snappy. Keep it optional: the in-process path stays the zero-dependency default; Celery (or similar) is opt-in for scale. Weigh against the single-`serve`-process, minimal-setup constraint. |
 | post-1.0 | **Demo video** — a Puppeteer script drives the seeded dashboard at human speed with a highlighted cursor + click ripples, recorded to mp4 (ffmpeg). Then a **GitHub Pages project site** (landing page featuring the demo video). |
 
 **Schema stability.** All core entities land before 1.0 so the schema is stable
