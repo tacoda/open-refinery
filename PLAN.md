@@ -286,17 +286,16 @@ API + SPA. Ships as a PyPI release — no container or orchestration required.
 
 | Version | Deliverable                                                          |
 |---------|----------------------------------------------------------------------|
-| 0.1.0 ✅ | Core factory: authorize → produce → record → audit → log            |
+Renumbered to reality: 0.3.0 shipped far more than originally scoped (process
+engine, oversight, metrics, and the dashboard all landed in it).
+
+| 0.1.0 ✅ | Core factory: authorize → produce → record → audit → log. |
 | 0.2.0 ✅ | Persistence (SQLite; Postgres seam), **versioned migrations** (`PRAGMA user_version` + append-only list), durable SQL event store. Entities: `User`, `Repository`, `Process`, `WorkItem`. |
-| 0.3.0 ✅ | FastAPI + auth: local accounts, API tokens, **GitHub OAuth sign-in** (session tokens; email must match an existing user), roles, ownership scoping, **first-run web setup wizard**. (More OAuth providers later.) |
-| 0.4.0   | Process engine: declarative processes, stages, guards, board + doctrine archetypes; the transition loop. Agentic stage actions execute via **LangGraph** (durable checkpointer state). |
-| 0.5.0   | Oversight: autonomy levels (L0–L4), gates, approvals, attestations, quality gates. |
-| 0.6.0   | Integrations: adapter framework + GitHub, GitLab, Jira, Linear; **UI token entry**, encrypted credential store, sync. |
-| 0.7.0   | Targets + routing + quotas: model/MCP/API targets, route rules, budgets, cost tracking, rate limits — all UI-managed. |
-| 0.8.0   | Observability API: event feed queries + metrics read-model (throughput, cycle time, WIP, cost, gate/quota events). |
-| 0.9.0   | React dashboard (bun + Vite + TS + Tailwind + shadcn/ui, light/dark/auto): **initial version done** — sign-in, repos, processes, work + transitions/attest, oversight, audit, metrics. Bundled into the wheel; served same-origin. Remaining: setup wizard, integrations, routing/quotas views. |
-| 0.10.0  | Governance policy layer + content filtering over transitions/targets.|
-| 0.11.0  | Hardening: token rotation, secret handling review, RBAC edge cases, retention/residency, docs. |
+| 0.3.0 ✅ | Full app: FastAPI + auth (email/password, API tokens, **GitHub OAuth**, roles, ownership scoping, first-run wizard); **process engine** (steps + feedback loops, board/doctrine); **oversight** L0–L4 + approvals + attestations; **metrics** read-model; audit API; **React/shadcn dashboard** (bundled in the wheel); seeds. `pip install` + `serve`. |
+| 0.4.0   | **Integrations** (in progress): adapter framework + GitHub (import repos), then GitLab / Jira / Linear; UI token/OAuth connection, **encrypted credential store**, sync. Dashboard integrations view. |
+| 0.5.0   | Targets + routing + quotas: model/MCP/API targets, route rules, budgets, cost tracking, rate limits — all UI-managed. |
+| 0.6.0   | Governance policy layer + content filtering over transitions/targets. |
+| 0.7.0   | Hardening: token rotation, secret-handling review, RBAC edge cases, retention/residency; more OAuth providers; LangGraph stage executors. |
 | 1.0.0   | Deployable release: `pip install open-refinery && open-refinery serve` self-host (`SECRET_KEY` only), full docs. |
 
 ## Open questions

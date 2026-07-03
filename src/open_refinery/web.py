@@ -23,6 +23,12 @@ from . import oauth
 _STATIC = Path(__file__).parent / "static"
 
 from .attestations import AttestationFailed, AttestationMissing, attest
+from .integrations import (
+    create_integration,
+    list_integrations,
+    list_remote_repos,
+)
+from .integrations import verify as verify_integration
 from .metrics import summary
 from .processes import create_process, list_processes
 from .repositories import DuplicateRepository, create_repository, list_repositories
@@ -98,6 +104,12 @@ class Setup(BaseModel):
 class Credentials(BaseModel):
     email: str
     password: str
+
+
+class NewIntegration(BaseModel):
+    kind: str
+    name: str
+    token: str
 
 
 # --- app ------------------------------------------------------------------
@@ -235,6 +247,23 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
     @app.get("/metrics")
     def metrics(user: User = Depends(current_user)):
         return summary(db_conn(app), owner_id=owner_scope(user))
+
+    # --- integrations (external services) ---
+    @app.post("/integrations", status_code=201)
+    def add_integration(body: NewIntegration, user: User = Depends(current_user)):
+        return create_integration(db_conn(app), body.kind, body.name, body.token, user.id)
+
+    @app.get("/integrations")
+    def get_integrations(user: User = Depends(current_user)):
+        return list_integrations(db_conn(app), owner_id=owner_scope(user))
+
+    @app.post("/integrations/{integ_id}/verify")
+    def check_integration(integ_id: str, _: User = Depends(current_user)):
+        return verify_integration(db_conn(app), integ_id)
+
+    @app.get("/integrations/{integ_id}/repos")
+    def integration_repos(integ_id: str, _: User = Depends(current_user)):
+        return list_remote_repos(db_conn(app), integ_id)
 
     # --- OAuth (GitHub) ---
     def _redirect_uri(request: Request) -> str:

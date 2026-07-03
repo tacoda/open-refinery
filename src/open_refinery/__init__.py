@@ -25,6 +25,12 @@ from .attestations import (
     attest,
     attestations_for,
 )
+from .integrations import (
+    Integration,
+    create_integration,
+    get_integration,
+    list_integrations,
+)
 from .migrations import run_migrations
 from .metrics import (
     activity_by_actor,
@@ -110,5 +116,9 @@ __all__ = [
     "seed",
     "AlreadySeeded",
     "run_migrations",
+    "Integration",
+    "create_integration",
+    "get_integration",
+    "list_integrations",
     "__version__",
 ]
