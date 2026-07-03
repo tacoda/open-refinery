@@ -336,8 +336,19 @@ engine, oversight, metrics, and the dashboard all landed in it).
 | 0.6.0 ◐ | Targets + routing + quotas: model/MCP/API targets (encrypted creds), route rules (process/step/priority resolution), usage quotas enforced pre-call — all UI-managed. Remaining: rate/concurrency windows, failover, cost attribution (with the executor). |
 | 0.7.0 ◐ | Governance policy layer (role-based allow/deny rules, deny-overrides, enforced on transitions) + content filtering (secret/PII redaction). Remaining: policy at the target-invocation seam (with the executor), DLP config. |
 | 0.8.0 ✅ | **Executor** — the governed call site (`POST /execute`): resolve route → **role-based invoke authorization** → **quota** → **secrets injection** (decrypt + hand to backend, never returned) → **content filter** in/out → pluggable backend → audit (`invoke`/`invoke-failed`), with **failover** across routes. Ships a stub backend; real model/MCP/API backends register in `EXECUTORS`. |
-| 0.9.0   | Hardening: token rotation, secret-handling review, RBAC edge cases, retention/residency; more OAuth providers; rate/concurrency windows; real target backends; cost attribution by team. |
-| 1.0.0   | Deployable release: `pip install open-refinery && open-refinery serve` self-host (`SECRET_KEY` only), full docs. |
+| 0.9.0 ◐ | Hardening toward 1.0: **API token rotation** (`POST /me/token/rotate`); secret-handling review; RBAC edge cases; retention/residency; more OAuth providers; rate/concurrency windows; real target backends; cost attribution by team. **Goal: land every entity so the schema is stable before 1.0.** |
+| 1.0.0   | Deployable release: `pip install open-refinery && open-refinery serve` self-host (`SECRET_KEY` only), full docs. **Schema frozen** — post-1.0 changes are additive-only (via the migration runner), no restructures. |
+
+**Schema stability.** All core entities land before 1.0 so the schema is stable
+at release. Pre-1.0, breaking restructures are accepted (recreate the DB);
+**at 1.0 the schema freezes** and later changes are additive (new tables /
+nullable columns via the migration runner) — no churn. Teams (vs per-user
+ownership) would arrive additively (a `Team` table + optional `team_id`), so
+deferring them past 1.0 carries no restructure risk.
+
+**Seeds are opt-in.** Nothing is seeded automatically. A fresh instance is empty
+and prompts the setup wizard; `open-refinery seed` loads *example* data (sample
+users/repos/processes) for evaluation only — never run in normal operation.
 
 ## Open questions
 

@@ -61,6 +61,7 @@ from .users import (
     count_users,
     create_session,
     create_user,
+    rotate_token,
     session_user,
     user_by_email,
     user_by_token,
@@ -260,6 +261,10 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     @app.get("/me")
     def me(user: User = Depends(current_user)):
         return user
+
+    @app.post("/me/token/rotate")
+    def rotate_my_token(session: Session = Depends(get_session), user: User = Depends(current_user)):
+        return {"token": rotate_token(session, user.id)}  # old API token invalidated
 
     @app.post("/users", status_code=201)
     def add_user(body: NewUser, session: Session = Depends(get_session),

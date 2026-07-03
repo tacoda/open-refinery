@@ -190,7 +190,7 @@ make test               # uv run pytest
 make serve              # run the server locally
 make help               # list all tasks
 
-open-refinery seed      # populate a fresh DB with sample data + login tokens (dev)
+open-refinery seed      # optional: load EXAMPLE data + login tokens (never auto-run)
 ```
 
 Frontend (dashboard) lives in `frontend/` — React + TypeScript + Vite + Tailwind
