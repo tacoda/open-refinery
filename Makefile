@@ -2,8 +2,8 @@
 .PHONY: help install ui ui-dev test serve dev seed demo clean dist publish
 
 # --- dev-only convenience (end users use `pip install open-refinery && open-refinery serve`) ---
-DEV_DB  := sqlite:///$(CURDIR)/devtest.db
-DEV_ENV := SECRET_KEY=dev-secret-change-me DATABASE_URL=$(DEV_DB) PORT=8000
+# Secrets live in .env (gitignored); `make dev` sources it. DB is a local file.
+DEV_DB := sqlite:///$(CURDIR)/devtest.db
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -24,8 +24,9 @@ test: ## Run the test suite
 serve: ## Run the HTTP server (background it yourself: make serve &)
 	uv run open-refinery serve
 
-dev: ## Dev server: fixed SECRET_KEY + local devtest.db on :8000 (absolute path)
-	$(DEV_ENV) uv run open-refinery serve
+dev: ## Dev server: sources .env for secrets, local devtest.db on :8000
+	@test -f .env || { echo "no .env — copy .env.example to .env and set SECRET_KEY"; exit 1; }
+	set -a; . ./.env; set +a; DATABASE_URL=$(DEV_DB) PORT=8000 uv run open-refinery serve
 
 seed: ## Seed the local devtest.db with sample data + login tokens
 	DATABASE_URL=$(DEV_DB) uv run open-refinery seed
