@@ -50,6 +50,7 @@ from .targets import (
     resolve_target,
     target_credential,
 )
+from .executor import EXECUTORS, ExecutionError, execute
 from .models import Policy, Quota, Route, Target
 from .policies import (
     PolicyDenied,
@@ -181,5 +182,9 @@ __all__ = [
     "decide",
     "enforce",
     "scan_content",
+    "execute",
+    "EXECUTORS",
+    "ExecutionError",
+    "resolve_target",
     "__version__",
 ]

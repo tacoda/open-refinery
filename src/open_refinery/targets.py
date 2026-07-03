@@ -94,20 +94,23 @@ def delete_route(session: Session, route_id: str) -> None:
         session.commit()
 
 
-def resolve_target(session: Session, process_id: str, step: str | None = None) -> Target | None:
-    """Pick the target for a process/step: highest-priority matching route wins.
+def resolve_targets(session: Session, process_id: str, step: str | None = None) -> list[Target]:
+    """Targets for a process/step, best first — for routing with failover.
 
-    A step-specific route (step == the given step) is preferred over a
-    process-wide one (step is None) at equal priority.
+    Ordered by priority desc, step-specific routes before process-wide ones at
+    equal priority.
     """
-    routes = session.exec(
-        select(Route).where(Route.process_id == process_id)
-    ).all()
+    routes = session.exec(select(Route).where(Route.process_id == process_id)).all()
     candidates = [r for r in routes if r.step is None or r.step == step]
-    if not candidates:
-        return None
-    best = max(candidates, key=lambda r: (r.priority, r.step is not None))
-    return session.get(Target, best.target_id)
+    candidates.sort(key=lambda r: (r.priority, r.step is not None), reverse=True)
+    targets = [session.get(Target, r.target_id) for r in candidates]
+    return [t for t in targets if t is not None]
+
+
+def resolve_target(session: Session, process_id: str, step: str | None = None) -> Target | None:
+    """The single best target for a process/step (highest-priority match)."""
+    targets = resolve_targets(session, process_id, step)
+    return targets[0] if targets else None
 
 
 # --- quotas ---------------------------------------------------------------

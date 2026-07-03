@@ -21,6 +21,7 @@ from sqlmodel import Session
 
 from . import oauth
 from .attestations import AttestationFailed, AttestationMissing, attest
+from .executor import ExecutionError, execute
 from .integrations import (
     create_connect_state,
     create_integration,
@@ -168,6 +169,13 @@ class ScanRequest(BaseModel):
     text: str
 
 
+class ExecuteRequest(BaseModel):
+    process_id: str
+    payload: str
+    step: str | None = None
+    work_item_id: str | None = None
+
+
 # --- app ------------------------------------------------------------------
 
 def create_app(session: Session | None = None, database_url: str = DEFAULT_DATABASE_URL) -> FastAPI:
@@ -218,6 +226,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         (AttestationFailed, 409),
         (QuotaExceeded, 429),
         (PolicyDenied, 403),
+        (ExecutionError, 502),
         (UnknownWorkItem, 404),
         (ValueError, 400),
     ):
@@ -439,6 +448,12 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def content_scan(body: ScanRequest, _: User = Depends(current_user)):
         clean, hits = scan_content(body.text)
         return {"clean": clean, "hits": hits}
+
+    @app.post("/execute")
+    def run_execute(body: ExecuteRequest, session: Session = Depends(get_session),
+                    user: User = Depends(current_user)):
+        return execute(session, user.id, body.process_id, body.payload, SqliteSink(session),
+                      step=body.step, work_item_id=body.work_item_id)
 
     # --- auth ---
     def _redirect_uri(request: Request) -> str:
