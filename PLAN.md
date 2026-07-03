@@ -81,6 +81,49 @@ implement them; it governs the *calls* a harness makes, not its internal loop.
 | Eval & tracing of agent reasoning | Reasoning is internal (harness-native observability) |
 | Session persistence & checkpointing | Internal to the agent lifecycle |
 
+## Customizability & agnosticism (core pillar)
+
+open-refinery works at a **higher level than any specific tool**. A team defines
+their **processes** as they actually work; everything a process touches is
+pluggable and **agnostic**:
+
+- **Work board / methodology** — board (kanban) or doctrine, arbitrary steps and
+  feedback loops; the team defines the shape.
+- **Code host** — GitHub, GitLab, … (integration adapters).
+- **Work tracker** — Jira, Linear, … (integration adapters).
+- **Model / provider** — any model target; routed per process/step (executor
+  backends).
+- **Harness tool** — Claude Code, Cursor, any agent/app. Harnesses call *through*
+  the platform; open-refinery neither knows nor cares which one — it governs the
+  calls, not the tool.
+
+**It's the upper (governance) layers that are fully customizable** — everything
+UI-managed, so a team defines *how their system works*:
+
+- **Processes** — steps, transitions, feedback loops, archetype.
+- **Oversight & risk profile** — autonomy level (L0–L4), gated steps, required
+  checks, `min_approver_role`, and the **approval chain** (e.g. senior → platform).
+- **Policy** — role-based allow/deny rules over actions and resources.
+- **Routing** — which target serves which process/step, with priority/failover.
+- **Quotas** — usage caps per target.
+- **Roles & standards** — the authority ladder and the standards cascade
+  (platform sets org policy; developers set project standards).
+
+The lower layers (code host, tracker, model provider, harness tool) are agnostic
+connectors chosen by the project. **Every external source is an integration**,
+connected in the UI via an **API token or OAuth** — the same pattern across code
+hosts, trackers, model providers, and harness tools. All of them are
+**ports and adapters**: a small port (a registry of callables / a Protocol) with
+one adapter per vendor (`ADAPTERS`, `EXECUTORS`, `PROVIDERS`). Adding a tool is
+writing an adapter behind an existing port
+(see `.claude/references/ports-and-adapters.md`), never changing the governed
+core. If a feature forces the core to know a specific vendor, that's a design
+smell — push it into an adapter.
+
+*Consistency to reach for pre-1.0:* targets (model/MCP/API) should support the
+same **token-or-OAuth** connect that integrations already do (targets are
+token-only today; OAuth-connect for them is additive).
+
 ## Locked decisions
 
 | Area      | Choice                                                              |
@@ -341,7 +384,7 @@ engine, oversight, metrics, and the dashboard all landed in it).
 | 0.7.0 ◐ | Governance policy layer (role-based allow/deny rules, deny-overrides, enforced on transitions) + content filtering (secret/PII redaction). Remaining: policy at the target-invocation seam (with the executor), DLP config. |
 | 0.8.0 ✅ | **Executor** — the governed call site (`POST /execute`): resolve route → **role-based invoke authorization** → **quota** → **secrets injection** (decrypt + hand to backend, never returned) → **content filter** in/out → pluggable backend → audit (`invoke`/`invoke-failed`), with **failover** across routes. Ships a stub backend; real model/MCP/API backends register in `EXECUTORS`. |
 | 0.9.0 ◐ | Hardening: **`senior` role** (four-role ladder) with a **configurable per-process risk profile** (oversight + gates + checks + `min_approver_role`); **API token rotation**; seeds confirmed opt-in. |
-| 0.10.0  | **Async approval queue** — request→approve-later with a pending-approvals view, and **chained approvals** (e.g. a developer's platform/devops change needs a senior sign-off, *then* a platform sign-off). |
+| 0.10.0 ✅ | **Async approval queue** — request→approve-later with a pending-approvals view, and **chained approvals** (`approval_chain`, e.g. senior *then* platform; distinct signer per slot, in order). Plus DX: self-hosted `/api-docs`, OpenAPI→TS type parity, `.claude/references/`. |
 | 0.11.0  | **Structured output in the executor** — a step/target may declare a schema; the executor requests structured (JSON) output from the model, validates it, and persists it structured (see `.claude/rules/structured-output.md`). Plus real target backends (Anthropic / OpenAI / MCP). |
 | 0.12.0  | Rate/concurrency windows on quotas; retention/purge & residency; cost attribution by team; more OAuth providers; secret-handling & RBAC review. |
 | 1.0.0   | Deployable release: `pip install open-refinery && open-refinery serve` self-host (`SECRET_KEY` only), full docs. **Schema frozen** — post-1.0 changes are additive-only (via the migration runner), no restructures. |

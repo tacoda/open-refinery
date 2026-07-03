@@ -3,6 +3,21 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.10.0] — 2026-07-03
+
+### Added
+- **Async approval queue** — request a gated move now, approve it later. Pending
+  requests are a queue (dashboard "Approvals" tab); `POST
+  /work-items/{id}/request-approval`, `GET /approvals`, `/approvals/{id}/approve`
+  and `/reject`.
+- **Chained approvals** — a process's `approval_chain` (ordered roles, e.g.
+  `["senior","platform"]`) requires each slot signed by a **distinct** approver
+  at or above that role, in order; the move applies when the chain completes.
+  Defaults to `[min_approver_role]`.
+- **Developer experience**: self-hosted Swagger UI at `/api-docs`;
+  `frontend/src/api-types.ts` generated from the OpenAPI schema for
+  backend/frontend type parity; `.claude/references/` design-lineage notes.
+
 ## [0.9.0] — 2026-07-03
 
 ### Added

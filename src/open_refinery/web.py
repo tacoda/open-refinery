@@ -21,6 +21,8 @@ from pydantic import BaseModel
 from sqlmodel import Session
 
 from . import oauth
+from .approvals import approve as approve_request
+from .approvals import list_approvals, reject as reject_request, request_approval
 from .attestations import AttestationFailed, AttestationMissing, attest
 from .executor import ExecutionError, execute
 from .integrations import (
@@ -104,6 +106,7 @@ class NewProcess(BaseModel):
     gates: list[str] | None = None
     checks: dict[str, list[str]] | None = None
     min_approver_role: str = "senior"
+    approval_chain: list[str] | None = None
 
 
 class NewWorkItem(BaseModel):
@@ -115,6 +118,10 @@ class NewWorkItem(BaseModel):
 class Move(BaseModel):
     to: str
     approve: bool = False  # current user signs off, if the process requires it
+
+
+class RequestApproval(BaseModel):
+    to: str
 
 
 class Attest(BaseModel):
@@ -304,7 +311,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
             session, body.name, body.archetype, body.stages, user.id,
             transitions=body.transitions, initial=body.initial,
             oversight=body.oversight, gates=body.gates, checks=body.checks,
-            min_approver_role=body.min_approver_role,
+            min_approver_role=body.min_approver_role, approval_chain=body.approval_chain,
         )
 
     @app.get("/processes")
@@ -332,6 +339,28 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
              user: User = Depends(current_user)):
         return transition(session, item_id, body.to, user.id, SqliteSink(session),
                           approver_id=user.id if body.approve else None)
+
+    # --- async approval queue (chained sign-off) ---
+    @app.post("/work-items/{item_id}/request-approval", status_code=201)
+    def request_move_approval(item_id: str, body: RequestApproval,
+                              session: Session = Depends(get_session),
+                              user: User = Depends(current_user)):
+        return request_approval(session, item_id, body.to, user.id, SqliteSink(session))
+
+    @app.get("/approvals")
+    def get_approvals(session: Session = Depends(get_session), _: User = Depends(current_user),
+                      status: str | None = "pending"):
+        return list_approvals(session, status=status)
+
+    @app.post("/approvals/{request_id}/approve")
+    def approve_move(request_id: str, session: Session = Depends(get_session),
+                     user: User = Depends(current_user)):
+        return approve_request(session, request_id, user.id, SqliteSink(session))
+
+    @app.post("/approvals/{request_id}/reject")
+    def reject_move(request_id: str, session: Session = Depends(get_session),
+                    user: User = Depends(current_user)):
+        return reject_request(session, request_id, user.id, SqliteSink(session))
 
     @app.get("/events")
     def get_events(session: Session = Depends(get_session), user: User = Depends(current_user),

@@ -50,8 +50,15 @@ from .targets import (
     resolve_target,
     target_credential,
 )
+from .approvals import (
+    approve,
+    get_approval,
+    list_approvals,
+    reject,
+    request_approval,
+)
 from .executor import EXECUTORS, ExecutionError, execute
-from .models import Policy, Quota, Route, Target
+from .models import ApprovalRequest, Policy, Quota, Route, Target
 from .policies import (
     PolicyDenied,
     create_policy,
@@ -76,6 +83,7 @@ from .work_items import (
     InvalidTransition,
     UnknownWorkItem,
     WorkItem,
+    apply_transition,
     create_work_item,
     find_by_external_ref,
     get_work_item,
@@ -96,7 +104,7 @@ from .users import (
     user_by_token,
 )
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 __all__ = [
     "Factory",
@@ -192,5 +200,12 @@ __all__ = [
     "EXECUTORS",
     "ExecutionError",
     "resolve_target",
+    "ApprovalRequest",
+    "request_approval",
+    "approve",
+    "reject",
+    "get_approval",
+    "list_approvals",
+    "apply_transition",
     "__version__",
 ]

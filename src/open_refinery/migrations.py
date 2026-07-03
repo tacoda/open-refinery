@@ -22,6 +22,8 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE work_items ADD COLUMN external_ref TEXT;",
     # v2 (0.9.0): per-process risk profile — min role to approve a gated move
     "ALTER TABLE processes ADD COLUMN min_approver_role TEXT NOT NULL DEFAULT 'senior';",
+    # v3 (0.10.0): ordered approval chain (roles) for async/chained approvals
+    "ALTER TABLE processes ADD COLUMN approval_chain TEXT NOT NULL DEFAULT '[]';",
 ]
 
 

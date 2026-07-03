@@ -36,6 +36,7 @@ def create_process(
     gates: list[str] | None = None,
     checks: dict[str, list[str]] | None = None,
     min_approver_role: str = "senior",
+    approval_chain: list[str] | None = None,
 ) -> Process:
     if archetype not in ARCHETYPES:
         raise ValueError(f"unknown archetype: {archetype!r} (expected {ARCHETYPES})")
@@ -43,6 +44,10 @@ def create_process(
         raise ValueError(f"unknown oversight level: {oversight!r} (expected {LEVELS})")
     if min_approver_role not in ROLES:
         raise ValueError(f"unknown min_approver_role: {min_approver_role!r} (expected {ROLES})")
+    chain = list(approval_chain or ())
+    for r in chain:
+        if r not in ROLES:
+            raise ValueError(f"approval_chain role {r!r} not in {ROLES}")
     if not stages:
         raise ValueError("a process needs at least one stage")
 
@@ -70,7 +75,8 @@ def create_process(
 
     process = Process(name=name, archetype=archetype, owner_id=owner_id, initial=initial,
                       oversight=oversight, min_approver_role=min_approver_role,
-                      stages=stages, transitions=trans, gates=gates, checks=checks)
+                      approval_chain=chain, stages=stages, transitions=trans,
+                      gates=gates, checks=checks)
     session.add(process)
     session.commit()
     session.refresh(process)

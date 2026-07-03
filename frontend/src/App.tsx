@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'events' | 'metrics'
+type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'events' | 'metrics'
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
 export default function App() {
@@ -54,6 +54,7 @@ export default function App() {
                 <span className="app-brand">open-refinery</span>
                 <TabsList>
                   <TabsTrigger value="work">Work</TabsTrigger>
+                  <TabsTrigger value="approvals">Approvals</TabsTrigger>
                   <TabsTrigger value="repos">Repos</TabsTrigger>
                   <TabsTrigger value="processes">Processes</TabsTrigger>
                   <TabsTrigger value="integrations">Integrations</TabsTrigger>
@@ -71,6 +72,7 @@ export default function App() {
                 </Button>
               </header>
               <TabsContent value="work"><Work /></TabsContent>
+              <TabsContent value="approvals"><Approvals /></TabsContent>
               <TabsContent value="repos"><Repos /></TabsContent>
               <TabsContent value="processes"><Processes /></TabsContent>
               <TabsContent value="integrations"><Integrations /></TabsContent>
@@ -204,10 +206,12 @@ function Processes() {
   const [stages, setStages] = useState('todo, doing, done')
   const [oversight, setOversight] = useState('dark'), [gates, setGates] = useState('')
   const [minApprover, setMinApprover] = useState('senior')
+  const [chain, setChain] = useState('')
   const add = () => post('/processes', {
     name, archetype: arch, oversight, min_approver_role: minApprover,
     stages: stages.split(',').map((s) => s.trim()).filter(Boolean),
     gates: gates.split(',').map((s) => s.trim()).filter(Boolean),
+    approval_chain: chain.split(',').map((s) => s.trim()).filter(Boolean),
   }).then(() => { setName(''); load() }).catch(fail)
   return (
     <section className="page">
@@ -230,6 +234,8 @@ function Processes() {
           <SelectContent>{['developer', 'senior', 'platform', 'admin'].map((r) =>
             <SelectItem key={r} value={r}>approver: {r}+</SelectItem>)}</SelectContent>
         </Select>
+        <Input className="field" placeholder="approval chain (roles, comma)" value={chain}
+               onChange={(e) => setChain(e.target.value)} />
         <Button onClick={add}>Add process</Button>
       </div>
       <Card><CardContent>
@@ -555,6 +561,9 @@ function Work() {
   const attest = (id: string, check: string, passed: boolean) =>
     post(`/work-items/${id}/attest`, { check, passed })
       .then(() => toast.success(`attested ${check}`)).catch(fail)
+  const requestApproval = (id: string, to: string) =>
+    post(`/work-items/${id}/request-approval`, { to })
+      .then(() => toast.success('approval requested')).catch(fail)
   return (
     <section className="page">
       <h2 className="page-title">Work items</h2>
@@ -571,13 +580,14 @@ function Work() {
         <Button onClick={add}>Ship work</Button>
       </div>
       <div className="work-list">
-        {rows.map((w) => <WorkRow key={w.id} w={w} onMove={move} onAttest={attest} />)}
+        {rows.map((w) => <WorkRow key={w.id} w={w} onMove={move} onAttest={attest}
+                                  onRequest={requestApproval} />)}
       </div>
     </section>
   )
 }
 
-function WorkRow({ w, onMove, onAttest }: any) {
+function WorkRow({ w, onMove, onAttest, onRequest }: any) {
   const [to, setTo] = useState(''), [check, setCheck] = useState('')
   return (
     <Card>
@@ -590,12 +600,47 @@ function WorkRow({ w, onMove, onAttest }: any) {
           <Input className="field" placeholder="→ step" value={to} onChange={(e) => setTo(e.target.value)} />
           <Button variant="secondary" size="sm" onClick={() => onMove(w.id, to, false)}>Move</Button>
           <Button size="sm" onClick={() => onMove(w.id, to, true)}>Move + approve</Button>
+          <Button variant="outline" size="sm" onClick={() => onRequest(w.id, to)}>Request approval</Button>
           <Input className="field" placeholder="check" value={check} onChange={(e) => setCheck(e.target.value)} />
           <Button variant="outline" size="sm" onClick={() => onAttest(w.id, check, true)}>Attest ✓</Button>
           <Button variant="outline" size="sm" onClick={() => onAttest(w.id, check, false)}>Attest ✗</Button>
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function Approvals() {
+  const { rows, load } = useList('/approvals?status=pending')
+  const act = (id: string, action: string) => api(`/approvals/${id}/${action}`, { method: 'POST' })
+    .then(() => { toast.success(action === 'approve' ? 'approved' : 'rejected'); load() }).catch(fail)
+  return (
+    <section className="page">
+      <h2 className="page-title">Pending approvals</h2>
+      <div className="work-list">
+        {rows.map((r) => {
+          const signed = r.approvals.length
+          const next = r.required_roles[signed]
+          return (
+            <Card key={r.id}>
+              <CardContent>
+                <div className="work-head">
+                  <span className="work-title">→ {r.to_step}</span>
+                  <Badge variant="outline">{signed}/{r.required_roles.length} signed</Badge>
+                  {next && <Badge>next: {next}</Badge>}
+                </div>
+                <div className="work-actions">
+                  <span className="mono">chain: {r.required_roles.join(' → ')}</span>
+                  <Button size="sm" onClick={() => act(r.id, 'approve')}>Approve</Button>
+                  <Button variant="outline" size="sm" onClick={() => act(r.id, 'reject')}>Reject</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
+        {!rows.length && <div className="muted">no pending approvals</div>}
+      </div>
+    </section>
   )
 }
 

@@ -56,11 +56,11 @@ Man-Month* — is the condition under which adding effort actually adds
 throughput, whereas work requiring communication incurs overhead that a central
 agent bottleneck would impose.
 
-> Status: **0.9.0.** Hardening toward 1.0: a four-role ladder (developer <
-> **senior** < platform < admin) with a **configurable per-process risk profile**
-> (oversight, gated steps, required checks, min approver role), and API token
-> rotation — atop the executor, policy governance, targets / routing / quotas,
-> integrations, oversight, metrics, and a full audit trail. Auth is
+> Status: **0.10.0.** Adds an **async approval queue** with **chained approvals**
+> (e.g. senior → platform), on top of the four-role ladder + configurable
+> per-process risk profile, the executor, policy governance, targets / routing /
+> quotas, integrations, oversight, metrics, and a full audit trail. Self-hosted
+> API docs at `/api-docs`; OpenAPI→TypeScript type parity. Auth is
 > email/password (+ GitHub OAuth). See [CHANGELOG.md](https://github.com/tacoda/open-refinery/blob/main/CHANGELOG.md).
 
 ## Quickstart

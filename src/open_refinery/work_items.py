@@ -70,12 +70,13 @@ def list_work_items(session: Session, *, owner_id: str | None = None,
     return list(session.exec(stmt.order_by(WorkItem.created_at.desc())))
 
 
-def transition(session: Session, item_id: str, to: str, actor_id: str, audit: AuditSink,
-               *, approver_id: str | None = None) -> WorkItem:
-    """Move a work item to a new step, recording the governed transition event.
+def apply_transition(session: Session, item_id: str, to: str, actor_id: str,
+                     audit: AuditSink) -> WorkItem:
+    """Apply a move: validate the move + policy + required checks, then move + audit.
 
-    Validate the move, enforce required checks and oversight, apply, then audit —
-    nothing is recorded unless the transition was allowed and applied.
+    Does NOT run the oversight approval gate — callers that reach here have already
+    satisfied approval (the sync `transition` after its gate, or the approval queue
+    after its chain completes).
     """
     item = get_work_item(session, item_id)
     if item is None:
@@ -89,8 +90,7 @@ def transition(session: Session, item_id: str, to: str, actor_id: str, audit: Au
     if not process.can_transition(frm, to):
         raise InvalidTransition(f"{frm!r} -> {to!r} not allowed by process {process.name!r}")
 
-    # org-wide policy: may this role move a work item into this step?
-    enforce_policy(session, actor.role, "transition", to)
+    enforce_policy(session, actor.role, "transition", to)  # org-wide role policy
 
     required = process.required_checks(to)
     if required:
@@ -99,6 +99,29 @@ def transition(session: Session, item_id: str, to: str, actor_id: str, audit: Au
             raise AttestationMissing(f"entering {to!r} needs checks attested: {missing}")
         if failed:
             raise AttestationFailed(f"entering {to!r} blocked by failed checks: {failed}")
+
+    item.current_stage = to
+    session.add(item)
+    session.commit()
+    audit.write(Record.of(
+        recipe="transition", actor=actor_id, owner=item.owner_id,
+        inputs={"from": frm, "process": item.process_id, "repo": item.repo_id},
+        output=to, subject=item_id,
+    ))
+    session.refresh(item)
+    return item
+
+
+def transition(session: Session, item_id: str, to: str, actor_id: str, audit: AuditSink,
+               *, approver_id: str | None = None) -> WorkItem:
+    """Synchronous move: enforce the oversight approval gate inline, then apply.
+
+    For approve-later flows, use the approval queue (`approvals.request_approval`).
+    """
+    item = get_work_item(session, item_id)
+    if item is None:
+        raise UnknownWorkItem(item_id)
+    process = get_process(session, item.process_id)
 
     needs_approval = requires_approval(process.oversight, to, set(process.gates))
     if needs_approval:
@@ -109,28 +132,19 @@ def transition(session: Session, item_id: str, to: str, actor_id: str, audit: Au
         approver = session.get(User, approver_id)
         if approver is None:
             raise ValueError(f"unknown approver: {approver_id!r}")
-        # escalated: a risky move needs sign-off at the process's configured level
         if not at_least(approver.role, process.min_approver_role):
             raise PolicyDenied(
                 f"approval requires {process.min_approver_role}+ (got {approver.role!r})")
 
-    item.current_stage = to
-    session.add(item)
-    session.commit()
-
-    audit.write(Record.of(
-        recipe="transition", actor=actor_id, owner=item.owner_id,
-        inputs={"from": frm, "process": item.process_id, "repo": item.repo_id},
-        output=to, subject=item_id,
-    ))
-    if needs_approval:  # record the sign-off as its own audit event
+    result = apply_transition(session, item_id, to, actor_id, audit)
+    if needs_approval:
         audit.write(Record.of(
-            recipe="approval", actor=approver_id, owner=item.owner_id,
+            recipe="approval", actor=approver_id, owner=result.owner_id,
             inputs={"to": to, "moved_by": actor_id, "oversight": process.oversight},
             output="approved", subject=item_id,
         ))
-    session.refresh(item)  # reload after commit so all attributes serialize
-    return item
+        session.refresh(result)  # the approval-event commit expired attrs; reload
+    return result
 
 
 def sync_tracker(session: Session, integ_id: str, repo_id: str, process_id: str,
