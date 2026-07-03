@@ -59,7 +59,7 @@ task-specific) belong to the calling agent/app and are explicit non-goals.
 | Rate limits & concurrency caps | Multi-tenant fairness, provider quotas | ◐ usage quotas (0.6); rate/concurrency windows are a quota extension |
 | Per-policy model routing (cost, region, compliance) | Org-wide policy, not per-task | ◐ routes by process/step/priority (0.6); policy-driven routing is 0.7 |
 | Failover when a provider degrades | Transparent to the harness; consistent SLOs | ○ routes carry priority; failover selection is planned |
-| Content filtering & DLP on prompts/responses | Regulatory / data-protection consistency | ○ roadmap (0.7 content filter) |
+| Content filtering & DLP on prompts/responses | Regulatory / data-protection consistency | ◐ `scan_content` redacts secrets/PII (0.7); applied at target boundary with the executor |
 | Audit trail of every model & tool call | Single source of truth for compliance | ✅ append-only event store, subject-linked; extends to target calls with the executor |
 | Traffic-graph observability & correlation | Cross-agent visibility | ◐ metrics + audit feed; cross-agent graph is roadmap |
 | Cost attribution by team/product | Enforced at the call site, not self-reported | ○ quotas track usage; cost + team attribution needs teams + the executor |
@@ -334,7 +334,7 @@ engine, oversight, metrics, and the dashboard all landed in it).
 | 0.4.0 ✅ | **Integrations**: adapter framework + GitHub & GitLab (import repos) and Jira & Linear (**work-item sync**, deduped by external ref); UI token *or* OAuth connection (per-provider gated), **encrypted credential store**, disconnect, idempotent import. Dashboard integrations + sync view. |
 | 0.5.0 ✅ | **Data-layer ORM — SQLModel** (SQLAlchemy + Pydantic): entities are SQLModel table models; modules use per-request `Session`s; `connect()` returns a Session, `engine_for()` backs the web layer. Migration runner + audit event store kept. Portable toward other backends (Postgres, …). |
 | 0.6.0 ◐ | Targets + routing + quotas: model/MCP/API targets (encrypted creds), route rules (process/step/priority resolution), usage quotas enforced pre-call — all UI-managed. Remaining: rate/concurrency windows, failover, cost attribution (with the executor). |
-| 0.7.0   | Governance policy layer + content filtering over transitions/targets. |
+| 0.7.0 ◐ | Governance policy layer (role-based allow/deny rules, deny-overrides, enforced on transitions) + content filtering (secret/PII redaction). Remaining: policy at the target-invocation seam (with the executor), DLP config. |
 | 0.8.0   | Hardening: token rotation, secret-handling review, RBAC edge cases, retention/residency; more OAuth providers; LangGraph stage executors. |
 | 1.0.0   | Deployable release: `pip install open-refinery && open-refinery serve` self-host (`SECRET_KEY` only), full docs. |
 

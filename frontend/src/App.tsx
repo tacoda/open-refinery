@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'repos' | 'processes' | 'integrations' | 'targets' | 'events' | 'metrics'
+type View = 'work' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'events' | 'metrics'
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
 export default function App() {
@@ -58,6 +58,7 @@ export default function App() {
                   <TabsTrigger value="processes">Processes</TabsTrigger>
                   <TabsTrigger value="integrations">Integrations</TabsTrigger>
                   <TabsTrigger value="targets">Targets</TabsTrigger>
+                  <TabsTrigger value="policies">Policies</TabsTrigger>
                   <TabsTrigger value="events">Audit</TabsTrigger>
                   <TabsTrigger value="metrics">Metrics</TabsTrigger>
                 </TabsList>
@@ -74,6 +75,7 @@ export default function App() {
               <TabsContent value="processes"><Processes /></TabsContent>
               <TabsContent value="integrations"><Integrations /></TabsContent>
               <TabsContent value="targets"><Targets /></TabsContent>
+              <TabsContent value="policies"><Policies /></TabsContent>
               <TabsContent value="events"><Events /></TabsContent>
               <TabsContent value="metrics"><Metrics /></TabsContent>
             </Tabs>
@@ -353,6 +355,67 @@ function SyncPanel({ integ }: any) {
       </Select>
       <Button size="sm" onClick={sync}>Sync issues</Button>
     </div>
+  )
+}
+
+function Policies() {
+  const { rows, load } = useList('/policies')
+  const [effect, setEffect] = useState('deny'), [role, setRole] = useState('*')
+  const [action, setAction] = useState('transition'), [resource, setResource] = useState('*')
+  const add = () => post('/policies', { effect, role, action, resource })
+    .then(load).catch(fail)
+  const del = (id: string) => api(`/policies/${id}`, { method: 'DELETE' }).then(load).catch(fail)
+
+  const [text, setText] = useState(''), [scan, setScan] = useState<any>(null)
+  const runScan = () => post('/content/scan', { text }).then(setScan).catch(fail)
+
+  return (
+    <section className="page">
+      <h2 className="page-title">Policies</h2>
+      <Card>
+        <CardHeader><CardTitle>Add a policy (deny-overrides; default allow)</CardTitle></CardHeader>
+        <CardContent>
+          <div className="toolbar">
+            <Select value={effect} onValueChange={(v) => setEffect(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+              <SelectContent>{['deny', 'allow'].map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
+            </Select>
+            <Input className="field" placeholder="role (* = any)" value={role} onChange={(e) => setRole(e.target.value)} />
+            <Input className="field" placeholder="action (transition / *)" value={action} onChange={(e) => setAction(e.target.value)} />
+            <Input className="field" placeholder="resource (step / *)" value={resource} onChange={(e) => setResource(e.target.value)} />
+            <Button onClick={add}>Add policy</Button>
+          </div>
+          <Table>
+            <TableHeader><TableRow><TableHead>Effect</TableHead><TableHead>Role</TableHead><TableHead>Action</TableHead><TableHead>Resource</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>{rows.map((p) => (
+              <TableRow key={p.id}>
+                <TableCell><Badge variant={p.effect === 'deny' ? 'destructive' : 'secondary'}>{p.effect}</Badge></TableCell>
+                <TableCell className="mono">{p.role}</TableCell>
+                <TableCell className="mono">{p.action}</TableCell>
+                <TableCell className="mono">{p.resource}</TableCell>
+                <TableCell><Button variant="outline" size="sm" onClick={() => del(p.id)}>Delete</Button></TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Content filter — test redaction</CardTitle></CardHeader>
+        <CardContent>
+          <div className="toolbar">
+            <Input className="field" placeholder="text with secrets/PII" value={text} onChange={(e) => setText(e.target.value)} />
+            <Button onClick={runScan}>Scan</Button>
+          </div>
+          {scan && (
+            <div>
+              <div className="kv-row"><span className="muted">redacted</span><span className="mono">{scan.clean}</span></div>
+              <div className="kv-row"><span className="muted">hits</span><span>{scan.hits.map((h: string) => <Badge key={h} variant="secondary">{h}</Badge>)}</span></div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </section>
   )
 }
 

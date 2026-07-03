@@ -50,7 +50,16 @@ from .targets import (
     resolve_target,
     target_credential,
 )
-from .models import Quota, Route, Target
+from .models import Policy, Quota, Route, Target
+from .policies import (
+    PolicyDenied,
+    create_policy,
+    decide,
+    delete_policy,
+    enforce,
+    list_policies,
+    scan_content,
+)
 from .migrations import run_migrations
 from .metrics import (
     activity_by_actor,
@@ -164,5 +173,13 @@ __all__ = [
     "create_quota",
     "list_quotas",
     "consume_quota",
+    "Policy",
+    "PolicyDenied",
+    "create_policy",
+    "list_policies",
+    "delete_policy",
+    "decide",
+    "enforce",
+    "scan_content",
     "__version__",
 ]

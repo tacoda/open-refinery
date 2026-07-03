@@ -125,6 +125,17 @@ class Quota(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
+class Policy(SQLModel, table=True):
+    __tablename__ = "policies"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    effect: str                  # allow | deny
+    role: str = "*"              # role this applies to, or "*"
+    action: str = "*"            # e.g. "transition", "invoke", or "*"
+    resource: str = "*"          # step name, target kind, or "*"
+    owner_id: str = Field(foreign_key="users.id", index=True)
+    created_at: str = Field(default_factory=now_iso)
+
+
 class ConnectState(SQLModel, table=True):
     __tablename__ = "connect_states"
     state: str = Field(primary_key=True)

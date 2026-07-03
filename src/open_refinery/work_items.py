@@ -15,6 +15,7 @@ from .audit import AuditSink
 from .integrations import TRACKER_KINDS, get_integration, list_issues
 from .models import Process, Repository, User, WorkItem
 from .oversight import requires_approval
+from .policies import enforce as enforce_policy
 from .processes import get_process
 from .provenance import Record
 
@@ -77,13 +78,17 @@ def transition(session: Session, item_id: str, to: str, actor_id: str, audit: Au
     item = get_work_item(session, item_id)
     if item is None:
         raise UnknownWorkItem(item_id)
-    if session.get(User, actor_id) is None:
+    actor = session.get(User, actor_id)
+    if actor is None:
         raise ValueError(f"unknown actor: {actor_id!r}")
 
     process = get_process(session, item.process_id)
     frm = item.current_stage
     if not process.can_transition(frm, to):
         raise InvalidTransition(f"{frm!r} -> {to!r} not allowed by process {process.name!r}")
+
+    # org-wide policy: may this role move a work item into this step?
+    enforce_policy(session, actor.role, "transition", to)
 
     required = process.required_checks(to)
     if required:

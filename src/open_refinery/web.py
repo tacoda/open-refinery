@@ -32,6 +32,13 @@ from .integrations import (
 )
 from .integrations import verify as verify_integration
 from .metrics import summary
+from .policies import (
+    PolicyDenied,
+    create_policy,
+    delete_policy,
+    list_policies,
+    scan_content,
+)
 from .processes import create_process, list_processes
 from .repositories import DuplicateRepository, create_repository, import_or_get, list_repositories
 from .store import DEFAULT_DATABASE_URL, SqliteSink, engine_for, query_events
@@ -150,6 +157,17 @@ class NewQuota(BaseModel):
     limit: int
 
 
+class NewPolicy(BaseModel):
+    effect: str
+    role: str = "*"
+    action: str = "*"
+    resource: str = "*"
+
+
+class ScanRequest(BaseModel):
+    text: str
+
+
 # --- app ------------------------------------------------------------------
 
 def create_app(session: Session | None = None, database_url: str = DEFAULT_DATABASE_URL) -> FastAPI:
@@ -199,6 +217,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         (AttestationMissing, 409),
         (AttestationFailed, 409),
         (QuotaExceeded, 429),
+        (PolicyDenied, 403),
         (UnknownWorkItem, 404),
         (ValueError, 400),
     ):
@@ -398,6 +417,28 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     @app.get("/quotas")
     def get_quotas(session: Session = Depends(get_session), user: User = Depends(current_user)):
         return list_quotas(session, owner_id=owner_scope(user))
+
+    # --- policy governance + content filtering ---
+    @app.post("/policies", status_code=201)
+    def add_policy(body: NewPolicy, session: Session = Depends(get_session),
+                   user: User = Depends(require("platform", "admin"))):
+        return create_policy(session, body.effect, user.id, role=body.role,
+                           action=body.action, resource=body.resource)
+
+    @app.get("/policies")
+    def get_policies(session: Session = Depends(get_session), _: User = Depends(current_user)):
+        return list_policies(session)
+
+    @app.delete("/policies/{policy_id}")
+    def remove_policy(policy_id: str, session: Session = Depends(get_session),
+                      _: User = Depends(require("platform", "admin"))):
+        delete_policy(session, policy_id)
+        return {"status": "deleted"}
+
+    @app.post("/content/scan")
+    def content_scan(body: ScanRequest, _: User = Depends(current_user)):
+        clean, hits = scan_content(body.text)
+        return {"clean": clean, "hits": hits}
 
     # --- auth ---
     def _redirect_uri(request: Request) -> str:
