@@ -45,12 +45,24 @@ production authorized, owned, provenanced, and logged, with human oversight
 configurable to each team's philosophy. Minimal to run (one process, SQLite,
 env-light), everything managed through the UI, and completely open source.
 
-> Status: **0.6.0.** Adds the Platform layer's outbound governance — **targets**
-> (models / MCP / APIs), **routing** (process/step/priority), and **quotas**
-> (usage caps enforced before a call) — on the SQLModel data layer, with
-> integrations, oversight, metrics, and a full audit trail. Auth is
-> email/password (+ GitHub OAuth), roles developer / platform / admin. Next:
-> policy governance + content filtering. See [CHANGELOG.md](CHANGELOG.md).
+**The orchestrator is a queue, not an agent.** Work advances through processes
+via deterministic code (the transition loop over a durable store), not an LLM
+deciding what happens next. That determinism is the point: it's cheap (no model
+call to move a step), reproducible, and auditable — the agent's judgment is
+confined to the work *inside* a step, while sequencing stays plain software.
+It also keeps work items **partitionable**: independent items advance through
+the queue without intercommunication, which — per Brooks in *The Mythical
+Man-Month* — is the condition under which adding effort actually adds
+throughput, whereas work requiring communication incurs overhead that a central
+agent bottleneck would impose.
+
+> Status: **0.7.0.** Adds **policy governance** (role-based allow/deny rules,
+> deny-overrides, enforced on transitions) and **content filtering** (secret/PII
+> redaction), atop targets / routing / quotas, integrations, oversight, metrics,
+> and a full audit trail — on the SQLModel data layer. Auth is email/password
+> (+ GitHub OAuth), roles developer / platform / admin. Next: the executor
+> (0.8) — where invocation authz, secrets injection, and cost attribution land.
+> See [CHANGELOG.md](CHANGELOG.md).
 
 ## Quickstart
 
@@ -204,6 +216,10 @@ The harness-vs-platform framing that shapes open-refinery's design — the
 platform as the out-of-process governance layer that harnesses call through —
 draws on Traefik Labs' mental model:
 [Harness engineering vs platform engineering](https://traefik.io/blog/harness-engineering-vs-platform-engineering-a-mental-model-for-how-both-win).
+
+The deterministic-queue orchestrator — the orchestrator *is* the queue (plain
+code), not an agent, for cost, determinism, and parallelism — is inspired by
+Mike Piccolo's [Loop Engineering](https://www.linkedin.com/pulse/loop-engineering-just-software-we-have-name-mike-piccolo-yb73c/).
 
 ## License
 

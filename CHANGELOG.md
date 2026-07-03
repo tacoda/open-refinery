@@ -3,6 +3,16 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.7.0] — 2026-07-03
+
+### Added
+- **Policy governance** — org-wide `(effect, role, action, resource)` rules with
+  a deny-overrides engine (default allow), enforced on work-item transitions by
+  the actor's role (`403` on denial). Platform/admin manage policies.
+- **Content filtering** — `scan_content` redacts secrets and PII (emails, card
+  numbers, AWS keys, bearer tokens); `POST /content/scan`.
+- Dashboard "Policies" tab with a content-filter tester.
+
 ## [0.6.0] — 2026-07-03
 
 ### Added
