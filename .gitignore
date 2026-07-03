@@ -1,0 +1,14 @@
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+# audit trails / runtime state — regenerated, not versioned
+*.jsonl
+# env
+.env
+# personal Claude Code permissions (not shared)
+.claude/settings.local.json
