@@ -391,7 +391,7 @@ engine, oversight, metrics, and the dashboard all landed in it).
 | 0.13.0  | Real target backends (Anthropic / OpenAI / MCP); targets token-**or-OAuth** connect (parity with integrations); rate/concurrency windows; retention/purge & residency; cost attribution by team. |
 | 0.14.0  | **Webhook registration** — register webhook URLs (with an event filter + signing secret) so audit events fan out to external services. Endpoints are FastAPI routes, so they appear in `/api-docs` automatically; the outbound payload is documented there too. |
 | 1.0.0   | Deployable release + full docs. **UI revamp** (to be defined). **Schema frozen** — post-1.0 changes are additive-only (via the migration runner), no restructures. |
-| post-1.0 | GitHub Pages project site. |
+| post-1.0 | **Demo video** — a Puppeteer script drives the seeded dashboard at human speed with a highlighted cursor + click ripples, recorded to mp4 (ffmpeg). Then a **GitHub Pages project site** (landing page featuring the demo video). |
 
 **Schema stability.** All core entities land before 1.0 so the schema is stable
 at release. Pre-1.0, breaking restructures are accepted (recreate the DB);
