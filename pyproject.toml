@@ -1,6 +1,6 @@
 [project]
 name = "open-refinery"
-version = "0.13.5"
+version = "0.13.6"
 description = "A factory for producing artifacts under governance — provenance, ownership, authorization, and an append-only audit trail on every output."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,6 +23,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "httpx>=0.27"]
+providers = ["anthropic>=0.40"]  # real Anthropic model backend (opt-in)
 
 [project.urls]
 Homepage = "https://github.com/tacoda/open-refinery"

@@ -3,6 +3,26 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.6] — 2026-07-03
+
+### Added
+- **Real Anthropic model backend.** The executor's `model` targets now dispatch
+  by provider: with a credential (`{"provider":"anthropic","api_key":...}` or a
+  `claude*` endpoint + key) a real **Anthropic Messages API** call runs via the
+  official SDK — honoring a target's `output_schema` through structured outputs,
+  returning output-token `units`, and treating a `refusal` stop reason as a
+  failure (so the executor fails over). **No credential (or no real backend) →
+  the stub**, so a fresh install still works offline and the suite stays hermetic.
+  Model id = the target `endpoint` (default `claude-opus-4-8`). Anthropic SDK is
+  an opt-in extra: `pip install open-refinery[providers]`.
+
+### Note
+- OpenAI and MCP register as provider slots (`MODEL_BACKENDS`) but ship the stub;
+  a Claude-independent OpenAI backend and the MCP transport are follow-ups.
+- The live API path can't be exercised in CI (no key); dispatch, request
+  building, structured parsing, and refusal handling are covered against a
+  stand-in SDK.
+
 ## [0.13.5] — 2026-07-03
 
 ### Added

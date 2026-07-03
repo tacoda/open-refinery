@@ -70,7 +70,69 @@ def stub_backend(target, credential, payload: str) -> dict:
     return {"output": f"[{target.kind}:{target.endpoint}] {payload}", "units": 1}
 
 
-EXECUTORS = {"model": stub_backend, "mcp": stub_backend, "api": stub_backend}
+DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-8"
+
+
+def _provider(target, credential: dict) -> str:
+    """Which model provider a target uses — explicit credential wins, else the
+    model-id prefix on the endpoint."""
+    if credential.get("provider"):
+        return credential["provider"]
+    ep = (target.endpoint or "").lower()
+    if ep.startswith("claude") or ep.startswith("anthropic"):
+        return "anthropic"
+    if ep.startswith(("gpt", "o1", "o3", "o4")):
+        return "openai"
+    return ""
+
+
+def anthropic_backend(target, credential: dict, payload: str) -> dict:
+    """Real Anthropic Messages API call. Honors a target's output_schema via
+    structured outputs. Returns {"output": text|dict, "units": output_tokens}."""
+    try:
+        import anthropic
+    except ModuleNotFoundError as exc:  # optional dependency
+        raise RuntimeError("anthropic SDK not installed — `pip install open-refinery[providers]`") from exc
+
+    api_key = credential.get("api_key") or credential.get("token")
+    client = anthropic.Anthropic(api_key=api_key)
+    model = target.endpoint or DEFAULT_ANTHROPIC_MODEL
+
+    kwargs: dict = {"model": model, "max_tokens": 16000,
+                    "messages": [{"role": "user", "content": payload}]}
+    if target.output_schema:  # constrain the response to the declared shape
+        kwargs["output_config"] = {"format": {"type": "json_schema", "schema": target.output_schema}}
+
+    resp = client.messages.create(**kwargs)
+    if getattr(resp, "stop_reason", None) == "refusal":
+        raise RuntimeError("model refused the request")
+
+    text = next((b.text for b in resp.content if getattr(b, "type", None) == "text"), "")
+    if target.output_schema:
+        import json
+        output = json.loads(text)  # format guarantees valid JSON
+    else:
+        output = text
+    units = getattr(resp.usage, "output_tokens", 0) or 0
+    return {"output": output, "units": int(units)}
+
+
+# Registered model providers. Add "openai" here when a Claude-independent backend
+# is authored; MCP/API keep the stub until their transports land.
+MODEL_BACKENDS = {"anthropic": anthropic_backend}
+
+
+def model_backend(target, credential: dict, payload: str) -> dict:
+    """Dispatch a model target to its provider; fall back to the stub when there's
+    no credential or no real backend (keeps a fresh install working offline)."""
+    provider = _provider(target, credential)
+    backend = MODEL_BACKENDS.get(provider)
+    if backend is None or not (credential.get("api_key") or credential.get("token")):
+        return stub_backend(target, credential, payload)
+    return backend(target, credential, payload)
+
+
+EXECUTORS = {"model": model_backend, "mcp": stub_backend, "api": stub_backend}
 
 
 def execute(session: Session, actor_id: str, process_id: str, payload: str, audit: AuditSink,
