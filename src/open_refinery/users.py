@@ -14,31 +14,76 @@ import secrets
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from .models import User, UserSession
+from .models import Role, User, UserSession
 
-ROLES = ("developer", "senior", "lead", "platform", "admin")
-# Authority ladder / concerns:
-#   developer — a subset of senior; drives work on their repos.
-#   senior    — repo level; may *suggest* team-layer changes and approve devs'
-#               risky moves.
-#   lead      — approves and applies seniors' suggested (team-layer) changes.
-#   platform  — org/team policy and the governance surface.
-#   admin     — audits everything.
-ROLE_RANK = {"developer": 1, "senior": 2, "lead": 3, "platform": 4, "admin": 5}
-MIN_APPROVER_ROLE = "senior"  # approvals of gated moves need senior or higher
+# Roles are admin-configurable DATA, not a fixed enum. A fresh store is seeded
+# with this minimal ladder; admins add/rank more (senior, lead, …) via the UI.
+#   developer — drives work on their repos.
+#   platform  — org policy + the governance surface; approves gated moves.
+#   admin     — audits everything; manages roles + approval workflows.
+DEFAULT_ROLES = (("developer", 1), ("platform", 2), ("admin", 3))
+ADMIN_ROLE = "admin"
+DEFAULT_MIN_APPROVER_ROLE = "platform"  # default approver tier for a gated move
 _PBKDF2_ROUNDS = 600_000
-
-
-def role_rank(role: str) -> int:
-    return ROLE_RANK.get(role, 0)
-
-
-def at_least(role: str, minimum: str) -> bool:
-    return role_rank(role) >= role_rank(minimum)
 
 
 class DuplicateUser(Exception):
     """Raised when an email is already registered."""
+
+
+class RoleInUse(Exception):
+    """Raised when deleting a role still assigned to a user."""
+
+
+def ensure_default_roles(session: Session) -> None:
+    """Seed the default role ladder into an empty roles table (idempotent)."""
+    if session.exec(select(Role)).first() is not None:
+        return
+    for name, rank in DEFAULT_ROLES:
+        session.add(Role(name=name, rank=rank))
+    session.commit()
+
+
+def list_roles(session: Session) -> list[Role]:
+    return list(session.exec(select(Role).order_by(Role.rank)))
+
+
+def valid_role(session: Session, name: str) -> bool:
+    return session.get(Role, name) is not None
+
+
+def role_rank(session: Session, name: str) -> int:
+    role = session.get(Role, name)
+    return role.rank if role else 0
+
+
+def at_least(session: Session, role: str, minimum: str) -> bool:
+    return role_rank(session, role) >= role_rank(session, minimum)
+
+
+def create_role(session: Session, name: str, rank: int) -> Role:
+    """Create (or re-rank) a role — admin only."""
+    role = session.get(Role, name)
+    if role is None:
+        role = Role(name=name, rank=rank)
+    else:
+        role.rank = rank
+    session.add(role)
+    session.commit()
+    session.refresh(role)
+    return role
+
+
+def delete_role(session: Session, name: str) -> None:
+    """Remove a role — admin only. Refuses the admin role or one still in use."""
+    if name == ADMIN_ROLE:
+        raise ValueError("the admin role cannot be removed")
+    if session.exec(select(User.id).where(User.role == name)).first() is not None:
+        raise RoleInUse(name)
+    role = session.get(Role, name)
+    if role is not None:
+        session.delete(role)
+        session.commit()
 
 
 def _hash_pw(password: str, salt: bytes | None = None) -> tuple[str, str]:
@@ -58,8 +103,8 @@ def _hash_token(token: str) -> str:
 
 def create_user(session: Session, email: str, password: str, role: str) -> tuple[User, str]:
     """Create a user, returning the user and their plaintext token (shown once)."""
-    if role not in ROLES:
-        raise ValueError(f"unknown role: {role!r} (expected one of {ROLES})")
+    if not valid_role(session, role):
+        raise ValueError(f"unknown role: {role!r} (not a configured role)")
     salt_hex, hash_hex = _hash_pw(password)
     token = secrets.token_urlsafe(32)
     user = User(email=email, role=role, pw_salt=salt_hex, pw_hash=hash_hex,

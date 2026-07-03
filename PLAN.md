@@ -141,7 +141,10 @@ The 0.1.0 core generalizes cleanly: a **recipe** becomes a **stage transition**,
 
 | Concept      | Meaning                                                                 |
 |--------------|-------------------------------------------------------------------------|
-| `User`       | Authenticated principal. Email, password hash, role (`developer`/`platform`/`admin`), hashed API token. |
+| `User`       | Authenticated principal. Email, password hash, role (a configured `Role` by name), hashed API token. |
+| `Role`       | **Admin-configurable** authority tier: name + rank. Seeded developer/platform/admin; admins add/re-rank. All rank checks (approvals, invitations) resolve against it. |
+| `Pack`       | A code-defined, role-gated bundle of starter `Standard`s for a topic (software/charter for developers, platform/infrastructure for platform, org-policy for admin). Enabled/disabled on demand; a `PackState` tracks which are on. |
+| `Standard`   | A unit of guidance (topic + title + body) seeded by an enabled pack; readable by any authenticated user. |
 | `Repository` | **The atomic unit** the factory operates on ("project" is a synonym). One git repo = one `Repository`, regardless of code architecture: a monorepo is one repo; N services in N repos are N repos; microservices don't change the unit. Imported from a source-control integration; has owner + credentials ref. |
 | `Integration`| A team-configured connection to an external system via a pluggable **adapter** — source control (GitHub, GitLab), issue trackers (Jira, Linear), and more. Owns its own credentials; every call audited. Repos import from source-control integrations; work items can sync from trackers. |
 | `Process`    | A named, customizable workflow: ordered/graph of **stages** + allowed transitions + guards. Archetypes: **board** (kanban) or **doctrine** (fixed procedure). |
@@ -155,7 +158,7 @@ The 0.1.0 core generalizes cleanly: a **recipe** becomes a **stage transition**,
 | `Gate`       | A checkpoint on a transition requiring approval / evals / checks before it proceeds. Carries an oversight level. |
 | `Approval`   | A recorded human sign-off on a gated transition — who, when, decision, note. The accountability chain for oversight. |
 | `Attestation`| A signed claim that a check passed (evals, tests, code-health, content-filter) — attached to the transition's provenance. |
-| `Policy`     | *(roadmap)* Constraint on transitions — governance layer.               |
+| `Policy`     | An **authored** governed harness artifact (users create these): `kind` ∈ rule / skill / command / agent (hooks TBD). A **rule** is an allow/deny constraint (`effect`/`role`/`action`/`resource`), deny-overrides. A **strict** flag locks a rule against lower-layer override (strict default is an admin Setting). Skills/commands/agents carry `content`. Packs are the **starter** counterpart — pre-built bundles that seed a starting set. |
 
 **Ship work = a work item transitions through a process's stages.** Each
 transition is authorized → executed → recorded (provenance + ownership) →
@@ -399,7 +402,12 @@ engine, oversight, metrics, and the dashboard all landed in it).
 | 0.11.0 ✅ | **Structured output in the executor** — a target may declare an `output_schema`; the executor validates the model's output against it, content-filters string leaves, and persists it **structured** (see `.claude/rules/structured-output.md`). Real backends (Anthropic / OpenAI / MCP) next. |
 | 0.12.0 ✅ | **User invitations** — a role invites *lower* roles by email (admin→any, platform→senior & below, senior→developer); invite carries an **expiring token** (default 1 week, configurable) and the assigned role. The invitee opens the link and **sets their own password** to register. Email is a **port/adapter** (default: Linux `mail`); the email service and its credentials are **configurable in the UI by admin/platform** (another provider — SMTP, SendGrid, … — can be swapped in), stored in the DB settings (see 0.12.5). |
 | 0.12.5 ✅ | **Config in the DB, not env** — encrypted `Setting` store; OAuth provider client id/secret resolved from DB settings (env fallback), edited in the UI by platform/admin (`/settings`, Settings tab). **Only `SECRET_KEY` is required in the environment.** |
-| 0.13.0  | Real target backends (Anthropic / OpenAI / MCP); targets token-**or-OAuth** connect (parity with integrations); rate/concurrency windows; retention/purge & residency; cost attribution by team. |
+| 0.13.0  | **Roles + governance foundation.** Roles are **admin-configurable data** (seeded developer/platform/admin; add/re-rank via `/roles`); rank checks, invitations, approval chains resolve from the store. **Packs** — opt-in, role-gated topic bundles of starter `Standard`s (software/charter for developers; platform/infrastructure for platform; org-policy for admin), enable/disable via CLI (`packs`) and the dashboard **Packs** tab; the base install seeds almost nothing. **Policies become governed harness artifacts** — `kind` ∈ rule / skill / command / agent (hooks TBD), each with a **strict** flag (a lower layer may not override a strict rule; strict rules decide alone, deny-overrides among them). Strict's **default is an admin Setting** (`policy.strict_default`, off unless set). |
+| 0.13.x  | Real target backends (Anthropic / OpenAI / MCP); targets token-**or-OAuth** connect (parity with integrations); rate/concurrency windows; retention/purge & residency; cost attribution by team. |
+| 0.13.x  | **Governance layer graph** — model the two override axes explicitly: **factory → harness → charter** and **platform → developer**. Strict-override precedence resolves along the graph (higher layer wins unless it allows override); every rule/skill/command/agent is tagged with the layer that defined it. |
+| 0.13.x  | **Per-layer approval workflows** — admin defines, per role layer, the ordered chain that must approve a standards/policy change, with **accept / deny / feedback (revise & resubmit)** at each step (extends the approval queue; supersedes the old "cascading suggestions" note). |
+| 0.13.x  | **Admin governance landscape** — a read view of the whole picture: what is defined where (by layer/role), what overrides what, and where **drift and violations** are happening (feeds debt audits + the admin overview UX). |
+| 0.13.x  | **Packs bundle harness artifacts** — a pack seeds not just prose `Standard`s but the same governed artifacts a policy carries: **rules / skills / commands / agents**. Example: a **TDD** pack ships a `tdd` command or skill. Artifacts are **namespaced** (company / department / team / project — exact scheme TBD). Enabling a pack seeds its artifacts (pack-tagged so disable removes them); design the pack-item ↔ Policy-artifact unification here. |
 | 0.17.0  | **Cascading suggestions** — anyone proposes a change; it escalates up the role chain (senior→lead team changes, lead→platform infrastructure). Each level can **accept** (advance/apply), **deny** (stop), or give **feedback** (return to revise & resubmit). Extends the approval queue with a three-outcome step. |
 | 0.16.0  | **Eval / experiment system** — run experiments at each layer (project, platform, harness, charter) using the scientific method: a **hypothesis**, the **change** under test, **evals before and after**, and a **statistical analysis** of the observed effect (is the difference real?). Work can be run through the system **marked as an experiment** (tagged, isolated from normal metrics), and experiments can be **iterated** like engineers do — refine hypothesis/change and re-run, tracking rounds over time and tying into the health scores. |
 | 0.15.0  | **Debt audits & health** — run audits (at the user's level) that identify **factory debt** (this service), **harness debt** (e.g. Claude Code), and **charter debt** (e.g. the `.claude/` folder): surface findings, let the user audit them, run reports, resolve/learn/prune, and show a **health score** + metrics + **insights on what to try next** per area. |
@@ -407,6 +415,7 @@ engine, oversight, metrics, and the dashboard all landed in it).
 | 1.0.0   | Deployable release + full docs. **UI revamp** (to be defined). **Schema frozen** — post-1.0 changes are additive-only (via the migration runner), no restructures. |
 | post-1.0 | **Repo relations / systems** — platform can define work and **relations between repositories** that constitute a service, microservice group, or server; customizable at the platform level (repos compose into systems). |
 | post-1.0 | **Admin overview UX** — admin can do everything, but the dashboard presents only **high-level** state prominently; details (a specific user, job, or rule) are reached by intentional drill-in, not shown by default. (Feeds the 1.0 UI revamp.) |
+| post-1.0 | **MFA requirement** — admin-managed multi-factor auth policy (whether MFA is required, and for which roles); defaults off. |
 | post-1.0 | **Demo video** — a Puppeteer script drives the seeded dashboard at human speed with a highlighted cursor + click ripples, recorded to mp4 (ffmpeg). Then a **GitHub Pages project site** (landing page featuring the demo video). |
 
 **Schema stability.** All core entities land before 1.0 so the schema is stable
@@ -416,9 +425,12 @@ nullable columns via the migration runner) — no churn. Teams (vs per-user
 ownership) would arrive additively (a `Team` table + optional `team_id`), so
 deferring them past 1.0 carries no restructure risk.
 
-**Seeds are opt-in.** Nothing is seeded automatically. A fresh instance is empty
-and prompts the setup wizard; `open-refinery seed` loads *example* data (sample
-users/repos/processes) for evaluation only — never run in normal operation.
+**Seeds are opt-in and minimal.** A fresh install seeds only the role ladder
+(developer/platform/admin) and prompts the setup wizard for the first admin —
+no topic content. Curated topic content ships as **packs**: role-gated bundles
+enabled on demand via `open-refinery packs enable <key> --as-user <email>` or the
+dashboard Packs tab. `open-refinery seed` still loads a full *example* dataset
+(sample users/repos/processes) for evaluation only — never run in normal operation.
 
 ## Open questions
 

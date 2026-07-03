@@ -72,6 +72,34 @@ def _seed(args: argparse.Namespace) -> int:
     return 0
 
 
+def _packs(args: argparse.Namespace) -> int:
+    import sys
+
+    from .packs import disable_pack, enable_pack, list_packs
+    from .store import DEFAULT_DATABASE_URL, connect
+    from .users import user_by_email
+
+    conn = connect(os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL))
+    if args.pack_cmd == "list":
+        for p in list_packs(conn):
+            mark = "x" if p["enabled"] else " "
+            print(f"[{mark}] {p['key']:18} {p['role']:9} {p['title']}")
+        return 0
+
+    actor = user_by_email(conn, args.as_user)
+    if actor is None:
+        print(f"error: no user with email {args.as_user!r}", file=sys.stderr)
+        return 1
+    try:
+        fn = enable_pack if args.pack_cmd == "enable" else disable_pack
+        state = fn(conn, args.key, actor)
+    except Exception as exc:  # PolicyDenied / unknown pack
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"{args.key} enabled={state['enabled']}")
+    return 0
+
+
 def _demo(args: argparse.Namespace) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     factory = Factory()
@@ -102,6 +130,12 @@ def main(argv: list[str] | None = None) -> int:
 
     seed = sub.add_parser("seed", help="populate the database with sample data (dev)")
     seed.set_defaults(func=_seed)
+
+    packs = sub.add_parser("packs", help="list or enable/disable topic packs")
+    packs.add_argument("pack_cmd", choices=("list", "enable", "disable"))
+    packs.add_argument("key", nargs="?", help="pack key (for enable/disable)")
+    packs.add_argument("--as-user", help="acting user's email (role-gated; enable/disable)")
+    packs.set_defaults(func=_packs)
 
     openapi = sub.add_parser("openapi", help="print the OpenAPI spec (build tooling)")
     openapi.set_defaults(func=_openapi)

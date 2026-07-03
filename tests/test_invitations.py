@@ -20,27 +20,27 @@ def setup():
     conn = connect("sqlite:///:memory:")
     admin, _ = create_user(conn, "admin@x.dev", "pw", "admin")
     platform, _ = create_user(conn, "plat@x.dev", "pw", "platform")
-    senior, _ = create_user(conn, "senior@x.dev", "pw", "senior")
     dev, _ = create_user(conn, "dev@x.dev", "pw", "developer")
-    return conn, admin, platform, senior, dev
+    return conn, admin, platform, dev
 
 
 def test_role_gated_invites():
-    conn, admin, platform, senior, dev = setup()
-    # senior may invite developer, not senior/platform
-    inv, _ = create_invitation(conn, "new@x.dev", "developer", senior.id)
+    conn, admin, platform, dev = setup()
+    # platform may invite developer, not platform (equal) or admin (higher)
+    inv, _ = create_invitation(conn, "new@x.dev", "developer", platform.id)
     assert inv.role == "developer" and inv.status == "pending"
     with pytest.raises(PolicyDenied):
-        create_invitation(conn, "x@x.dev", "senior", senior.id)     # equal role
-    with pytest.raises(PolicyDenied):
         create_invitation(conn, "x@x.dev", "platform", platform.id)  # equal role
-    # platform may invite senior; admin may invite platform
-    create_invitation(conn, "s@x.dev", "senior", platform.id)
+    with pytest.raises(PolicyDenied):
+        create_invitation(conn, "x@x.dev", "admin", platform.id)     # higher role
+    # admin may invite platform; developer may invite nobody lower (none exists)
     create_invitation(conn, "p@x.dev", "platform", admin.id)
+    with pytest.raises(PolicyDenied):
+        create_invitation(conn, "d@x.dev", "developer", dev.id)      # no lower role
 
 
 def test_accept_sets_password_and_registers():
-    conn, admin, platform, senior, dev = setup()
+    conn, admin, platform, dev = setup()
     inv, token = create_invitation(conn, "new@x.dev", "developer", admin.id)
     assert invitation_email(conn, token) == "new@x.dev"
 

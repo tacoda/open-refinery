@@ -18,7 +18,7 @@ from sqlmodel import Session, select
 from .email import send_email
 from .models import Invitation, User, now_iso
 from .policies import PolicyDenied
-from .users import ROLES, DuplicateUser, create_session, create_user, role_rank
+from .users import DuplicateUser, create_session, create_user, role_rank, valid_role
 
 DEFAULT_TTL_DAYS = 7
 
@@ -30,12 +30,12 @@ def _hash(token: str) -> str:
 def create_invitation(session: Session, email: str, role: str, invited_by: str,
                       *, ttl_days: int = DEFAULT_TTL_DAYS) -> tuple[Invitation, str]:
     """Create an invite; returns (invitation, plaintext token). Role-gated."""
-    if role not in ROLES:
-        raise ValueError(f"unknown role: {role!r} (expected {ROLES})")
+    if not valid_role(session, role):
+        raise ValueError(f"unknown role: {role!r} (not a configured role)")
     inviter = session.get(User, invited_by)
     if inviter is None:
         raise ValueError(f"unknown inviter: {invited_by!r}")
-    if role_rank(role) >= role_rank(inviter.role):
+    if role_rank(session, role) >= role_rank(session, inviter.role):
         raise PolicyDenied(f"{inviter.role!r} may only invite lower roles, not {role!r}")
 
     token = secrets.token_urlsafe(32)

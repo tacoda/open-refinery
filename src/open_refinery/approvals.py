@@ -78,7 +78,7 @@ def approve(session: Session, request_id: str, approver_id: str, audit: AuditSin
 
     slot = len(req.approvals)
     required_role = req.required_roles[slot]
-    if not at_least(approver.role, required_role):
+    if not at_least(session, approver.role, required_role):
         raise PolicyDenied(f"slot {slot} needs {required_role}+ (got {approver.role!r})")
     if any(a["user_id"] == approver_id for a in req.approvals):
         raise PolicyDenied("an approver may sign a chain only once (separation of duties)")
@@ -105,7 +105,7 @@ def reject(session: Session, request_id: str, approver_id: str, audit: AuditSink
     if req.status != "pending":
         raise ValueError(f"approval request is {req.status}, not pending")
     approver = session.get(User, approver_id)
-    if approver is None or not at_least(approver.role, req.required_roles[0]):
+    if approver is None or not at_least(session, approver.role, req.required_roles[0]):
         raise PolicyDenied("insufficient role to reject this request")
     req.status = "rejected"
     session.add(req)

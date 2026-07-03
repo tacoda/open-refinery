@@ -62,6 +62,12 @@ def _init_schema(engine: Engine) -> None:
     finally:
         raw.close()
 
+    # Roles are load-bearing (create_user validates against them) — seed the
+    # default ladder before anything creates a user.
+    from .users import ensure_default_roles
+    with Session(engine) as s:
+        ensure_default_roles(s)
+
 
 def connect(database_url: str = DEFAULT_DATABASE_URL, *, check_same_thread: bool = True) -> Session:
     """Open the store (schema + migrations applied) and return a Session."""

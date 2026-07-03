@@ -26,6 +26,10 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE processes ADD COLUMN approval_chain TEXT NOT NULL DEFAULT '[]';",
     # v4 (0.11.0): optional structured-output schema per target
     "ALTER TABLE targets ADD COLUMN output_schema TEXT NOT NULL DEFAULT '{}';",
+    # v5 (0.13.0): policies become governed harness artifacts + strict override lock
+    "ALTER TABLE policies ADD COLUMN kind TEXT NOT NULL DEFAULT 'rule';"
+    "ALTER TABLE policies ADD COLUMN strict INTEGER NOT NULL DEFAULT 0;"
+    "ALTER TABLE policies ADD COLUMN content TEXT NOT NULL DEFAULT '';",
 ]
 
 

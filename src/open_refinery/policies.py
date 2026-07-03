@@ -13,8 +13,14 @@ import re
 from sqlmodel import Session, select
 
 from .models import Policy, User
+from .settings import get_setting
 
 EFFECTS = ("allow", "deny")
+STRICT_DEFAULT_KEY = "policy.strict_default"  # admin setting; "true"/"false"
+
+
+def strict_default(session: Session) -> bool:
+    return (get_setting(session, STRICT_DEFAULT_KEY) or "false").lower() == "true"
 
 
 class PolicyDenied(Exception):
@@ -25,13 +31,22 @@ def _match(pattern: str, value: str) -> bool:
     return pattern == "*" or pattern == value
 
 
+POLICY_KINDS = ("rule", "skill", "command", "agent")  # what a governed harness artifact can be
+
+
 def create_policy(session: Session, effect: str, owner_id: str, *, role: str = "*",
-                  action: str = "*", resource: str = "*") -> Policy:
+                  action: str = "*", resource: str = "*", strict: bool | None = None,
+                  kind: str = "rule", content: str = "") -> Policy:
     if effect not in EFFECTS:
         raise ValueError(f"unknown effect: {effect!r} (expected {EFFECTS})")
+    if kind not in POLICY_KINDS:
+        raise ValueError(f"unknown policy kind: {kind!r} (expected {POLICY_KINDS})")
     if session.get(User, owner_id) is None:
         raise ValueError(f"unknown owner: {owner_id!r}")
-    policy = Policy(effect=effect, role=role, action=action, resource=resource, owner_id=owner_id)
+    if strict is None:
+        strict = strict_default(session)  # admin-configured default (off unless set)
+    policy = Policy(effect=effect, role=role, action=action, resource=resource,
+                    strict=strict, kind=kind, content=content, owner_id=owner_id)
     session.add(policy)
     session.commit()
     session.refresh(policy)
@@ -51,10 +66,18 @@ def delete_policy(session: Session, policy_id: str) -> None:
 
 
 def decide(policies: list[Policy], role: str, action: str, resource: str) -> bool:
-    """Allow unless a matching policy denies (deny-overrides; default allow)."""
-    matches = [p for p in policies
-               if _match(p.role, role) and _match(p.action, action) and _match(p.resource, resource)]
-    return not any(p.effect == "deny" for p in matches)
+    """Allow unless a matching rule denies (deny-overrides; default allow).
+
+    Only `rule` policies gate. A **strict** rule cannot be overridden by a
+    lower/other layer: if any matching rule is strict, the strict rules decide
+    alone (still deny-overrides among them). ponytail: strictness is the current
+    override lock; the full factory→harness→charter layer graph lands later.
+    """
+    matches = [p for p in policies if p.kind == "rule"
+               and _match(p.role, role) and _match(p.action, action) and _match(p.resource, resource)]
+    strict = [p for p in matches if p.strict]
+    pool = strict or matches
+    return not any(p.effect == "deny" for p in pool)
 
 
 def enforce(session: Session, role: str, action: str, resource: str) -> None:

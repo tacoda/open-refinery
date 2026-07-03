@@ -44,6 +44,7 @@ from .integrations import (
 )
 from .integrations import verify as verify_integration
 from .metrics import summary
+from .packs import disable_pack, enable_pack, list_packs, list_standards
 from .policies import (
     PolicyDenied,
     create_policy,
@@ -67,12 +68,17 @@ from .targets import (
     list_targets,
 )
 from .users import (
+    DEFAULT_MIN_APPROVER_ROLE,
     DuplicateUser,
+    RoleInUse,
     User,
     authenticate,
     count_users,
+    create_role,
     create_session,
     create_user,
+    delete_role,
+    list_roles,
     rotate_token,
     session_user,
     user_by_email,
@@ -114,7 +120,7 @@ class NewProcess(BaseModel):
     oversight: str = "dark"
     gates: list[str] | None = None
     checks: dict[str, list[str]] | None = None
-    min_approver_role: str = "senior"
+    min_approver_role: str = DEFAULT_MIN_APPROVER_ROLE
     approval_chain: list[str] | None = None
 
 
@@ -131,6 +137,11 @@ class Move(BaseModel):
 
 class RequestApproval(BaseModel):
     to: str
+
+
+class NewRole(BaseModel):
+    name: str
+    rank: int
 
 
 class NewInvitation(BaseModel):
@@ -195,10 +206,13 @@ class NewQuota(BaseModel):
 
 
 class NewPolicy(BaseModel):
-    effect: str
+    effect: str = "allow"
     role: str = "*"
     action: str = "*"
     resource: str = "*"
+    strict: bool | None = None   # None → admin-configured default
+    kind: str = "rule"
+    content: str = ""
 
 
 class ScanRequest(BaseModel):
@@ -263,6 +277,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         (AttestationFailed, 409),
         (QuotaExceeded, 429),
         (PolicyDenied, 403),
+        (RoleInUse, 409),
         (ExecutionError, 502),
         (UnknownWorkItem, 404),
         (ValueError, 400),
@@ -318,6 +333,42 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     @app.post("/me/token/rotate")
     def rotate_my_token(session: Session = Depends(get_session), user: User = Depends(current_user)):
         return {"token": rotate_token(session, user.id)}  # old API token invalidated
+
+    # --- roles (admin-configurable authority ladder) ---
+    @app.get("/roles")
+    def get_roles(session: Session = Depends(get_session), _: User = Depends(current_user)):
+        return list_roles(session)  # any authed user: forms need the role list
+
+    @app.post("/roles", status_code=201)
+    def add_role(body: NewRole, session: Session = Depends(get_session),
+                 _: User = Depends(require("admin"))):
+        return create_role(session, body.name, body.rank)
+
+    @app.delete("/roles/{name}")
+    def remove_role(name: str, session: Session = Depends(get_session),
+                    _: User = Depends(require("admin"))):
+        delete_role(session, name)
+        return {"status": "deleted"}
+
+    # --- packs (opt-in topic bundles; enable/disable role-gated) ---
+    @app.get("/packs")
+    def get_packs(session: Session = Depends(get_session), _: User = Depends(current_user)):
+        return list_packs(session)
+
+    @app.post("/packs/{key}/enable")
+    def enable_a_pack(key: str, session: Session = Depends(get_session),
+                      user: User = Depends(current_user)):
+        return enable_pack(session, key, user)  # PolicyDenied → 403 if role too low
+
+    @app.post("/packs/{key}/disable")
+    def disable_a_pack(key: str, session: Session = Depends(get_session),
+                       user: User = Depends(current_user)):
+        return disable_pack(session, key, user)
+
+    @app.get("/standards")
+    def get_standards(pack: str | None = None, session: Session = Depends(get_session),
+                      _: User = Depends(current_user)):
+        return list_standards(session, pack=pack)
 
     # --- invitations (role-gated; invitee sets their own password) ---
     @app.post("/invitations", status_code=201)
@@ -552,7 +603,8 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def add_policy(body: NewPolicy, session: Session = Depends(get_session),
                    user: User = Depends(require("platform", "admin"))):
         return create_policy(session, body.effect, user.id, role=body.role,
-                           action=body.action, resource=body.resource)
+                           action=body.action, resource=body.resource,
+                           strict=body.strict, kind=body.kind, content=body.content)
 
     @app.get("/policies")
     def get_policies(session: Session = Depends(get_session), _: User = Depends(current_user)):

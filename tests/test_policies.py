@@ -17,8 +17,43 @@ from open_refinery import (
 )
 
 
-def make_policy(effect, role="*", action="*", resource="*"):
-    return Policy(effect=effect, role=role, action=action, resource=resource, owner_id="x")
+def make_policy(effect, role="*", action="*", resource="*", strict=False, kind="rule"):
+    return Policy(effect=effect, role=role, action=action, resource=resource,
+                  strict=strict, kind=kind, owner_id="x")
+
+
+def test_strict_rule_cannot_be_overridden():
+    # a non-strict deny would normally win (deny-overrides)...
+    ps = [make_policy("allow", strict=True), make_policy("deny")]
+    assert decide(ps, "developer", "transition", "done") is True   # strict allow decides alone
+    # a strict deny stays denied against a non-strict allow
+    ps = [make_policy("deny", strict=True), make_policy("allow")]
+    assert decide(ps, "developer", "transition", "done") is False
+    # among strict rules, deny still overrides
+    ps = [make_policy("allow", strict=True), make_policy("deny", strict=True)]
+    assert decide(ps, "developer", "transition", "done") is False
+
+
+def test_non_rule_kinds_do_not_gate():
+    # a skill/command/agent policy is a governed artifact, not an allow/deny gate
+    ps = [make_policy("deny", kind="skill")]
+    assert decide(ps, "developer", "transition", "done") is True
+
+
+def test_strict_default_is_admin_setting(monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+    from open_refinery.policies import strict_default
+    from open_refinery.settings import set_setting
+
+    conn = connect("sqlite:///:memory:")
+    admin, _ = create_user(conn, "a@x.dev", "pw", "admin")
+    assert strict_default(conn) is False                       # off unless set
+    p1 = create_policy(conn, "deny", admin.id)
+    assert p1.strict is False
+    set_setting(conn, "policy.strict_default", "true", admin.id)
+    assert strict_default(conn) is True
+    p2 = create_policy(conn, "deny", admin.id)
+    assert p2.strict is True                                   # inherits the admin default
 
 
 def test_decide_default_allow_and_deny_overrides():

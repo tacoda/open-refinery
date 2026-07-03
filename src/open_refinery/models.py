@@ -34,6 +34,13 @@ class User(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
+class Role(SQLModel, table=True):
+    __tablename__ = "roles"
+    name: str = Field(primary_key=True)
+    rank: int = Field(index=True)  # higher = more authority / wider scope
+    created_at: str = Field(default_factory=now_iso)
+
+
 class UserSession(SQLModel, table=True):
     __tablename__ = "sessions"
     token_hash: str = Field(primary_key=True)
@@ -58,7 +65,7 @@ class Process(SQLModel, table=True):
     owner_id: str = Field(foreign_key="users.id", index=True)
     initial: str
     oversight: str = "dark"
-    min_approver_role: str = "senior"  # min role to approve a gated move (risk profile)
+    min_approver_role: str = "platform"  # min role to approve a gated move (risk profile)
     approval_chain: list = Field(default_factory=list, sa_column=Column(JSON))  # ordered roles; [] = [min_approver_role]
     stages: list = Field(default_factory=list, sa_column=Column(JSON))
     transitions: list = Field(default_factory=list, sa_column=Column(JSON))  # [[from, to], ...]
@@ -131,10 +138,13 @@ class Quota(SQLModel, table=True):
 class Policy(SQLModel, table=True):
     __tablename__ = "policies"
     id: str = Field(default_factory=new_id, primary_key=True)
-    effect: str                  # allow | deny
+    kind: str = "rule"           # rule | skill | command | agent (governed harness artifact)
+    effect: str                  # allow | deny (meaningful for kind=rule)
     role: str = "*"              # role this applies to, or "*"
     action: str = "*"            # e.g. "transition", "invoke", or "*"
     resource: str = "*"          # step name, target kind, or "*"
+    strict: bool = False         # a lower layer may not override a strict rule
+    content: str = ""            # body for skill/command/agent kinds
     owner_id: str = Field(foreign_key="users.id", index=True)
     created_at: str = Field(default_factory=now_iso)
 
@@ -188,6 +198,26 @@ class ApprovalRequest(SQLModel, table=True):
     required_roles: list = Field(default_factory=list, sa_column=Column(JSON))  # ordered chain
     approvals: list = Field(default_factory=list, sa_column=Column(JSON))       # [{role,user_id,at}]
     status: str = Field(default="pending", index=True)  # pending | applied | rejected
+    created_at: str = Field(default_factory=now_iso)
+
+
+class PackState(SQLModel, table=True):
+    __tablename__ = "pack_states"
+    key: str = Field(primary_key=True)      # pack catalog key
+    enabled: bool = False
+    updated_by: str = Field(foreign_key="users.id")
+    updated_at: str = Field(default_factory=now_iso)
+
+
+class Standard(SQLModel, table=True):
+    """A unit of guidance seeded by an enabled pack (topic reference/standard)."""
+    __tablename__ = "standards"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    pack: str = Field(index=True)           # source pack key
+    topic: str
+    title: str
+    body: str
+    owner_id: str = Field(foreign_key="users.id", index=True)
     created_at: str = Field(default_factory=now_iso)
 
 

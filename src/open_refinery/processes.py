@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 
 from .models import Process, User
 from .oversight import LEVELS
-from .users import ROLES
+from .users import DEFAULT_MIN_APPROVER_ROLE, valid_role
 
 ARCHETYPES = ("board", "doctrine")
 
@@ -35,19 +35,19 @@ def create_process(
     oversight: str = "dark",
     gates: list[str] | None = None,
     checks: dict[str, list[str]] | None = None,
-    min_approver_role: str = "senior",
+    min_approver_role: str = DEFAULT_MIN_APPROVER_ROLE,
     approval_chain: list[str] | None = None,
 ) -> Process:
     if archetype not in ARCHETYPES:
         raise ValueError(f"unknown archetype: {archetype!r} (expected {ARCHETYPES})")
     if oversight not in LEVELS:
         raise ValueError(f"unknown oversight level: {oversight!r} (expected {LEVELS})")
-    if min_approver_role not in ROLES:
-        raise ValueError(f"unknown min_approver_role: {min_approver_role!r} (expected {ROLES})")
+    if not valid_role(session, min_approver_role):
+        raise ValueError(f"unknown min_approver_role: {min_approver_role!r} (not a configured role)")
     chain = list(approval_chain or ())
     for r in chain:
-        if r not in ROLES:
-            raise ValueError(f"approval_chain role {r!r} not in {ROLES}")
+        if not valid_role(session, r):
+            raise ValueError(f"approval_chain role {r!r} is not a configured role")
     if not stages:
         raise ValueError("a process needs at least one stage")
 

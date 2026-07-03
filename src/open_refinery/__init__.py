@@ -68,6 +68,12 @@ from .invitations import (
 )
 from .models import ApprovalRequest, Invitation, Policy, Quota, Route, Setting, Target
 from .settings import delete_setting, get_setting, list_setting_keys, set_setting
+from .packs import (
+    disable_pack,
+    enable_pack,
+    list_packs,
+    list_standards,
+)
 from .policies import (
     PolicyDenied,
     create_policy,
@@ -101,19 +107,22 @@ from .work_items import (
     transition,
 )
 from .users import (
-    ROLE_RANK,
-    ROLES,
+    DEFAULT_ROLES,
     DuplicateUser,
     User,
     at_least,
     authenticate,
+    create_role,
     create_user,
+    delete_role,
+    list_roles,
     role_rank,
     rotate_token,
     user_by_token,
+    valid_role,
 )
 
-__version__ = "0.12.6"
+__version__ = "0.13.0"
 
 __all__ = [
     "Factory",
@@ -130,10 +139,13 @@ __all__ = [
     "connect",
     "query_events",
     "User",
-    "ROLES",
-    "ROLE_RANK",
+    "DEFAULT_ROLES",
     "role_rank",
     "at_least",
+    "valid_role",
+    "list_roles",
+    "create_role",
+    "delete_role",
     "DuplicateUser",
     "create_user",
     "authenticate",
@@ -205,6 +217,10 @@ __all__ = [
     "decide",
     "enforce",
     "scan_content",
+    "list_packs",
+    "enable_pack",
+    "disable_pack",
+    "list_standards",
     "execute",
     "EXECUTORS",
     "ExecutionError",

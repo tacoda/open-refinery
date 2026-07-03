@@ -43,6 +43,28 @@ def test_only_admin_creates_users(ctx):
     assert r2.status_code == 403
 
 
+def test_roles_are_admin_configurable(ctx):
+    _, client, _, admin_token = ctx
+    dev_token = client.post("/users", headers=auth(admin_token),
+                            json={"email": "dev@x.dev", "password": "pw", "role": "developer"}
+                            ).json()["token"]
+
+    # default ladder is seeded and any authed user can read it
+    names = [r["name"] for r in client.get("/roles", headers=auth(dev_token)).json()]
+    assert names == ["developer", "platform", "admin"]
+
+    # only admin adds roles
+    assert client.post("/roles", headers=auth(dev_token),
+                       json={"name": "senior", "rank": 15}).status_code == 403
+    assert client.post("/roles", headers=auth(admin_token),
+                       json={"name": "senior", "rank": 15}).status_code == 201
+    assert "senior" in [r["name"] for r in client.get("/roles", headers=auth(admin_token)).json()]
+
+    # the admin role is protected
+    assert client.delete("/roles/admin", headers=auth(admin_token)).status_code == 400
+    assert client.delete("/roles/senior", headers=auth(admin_token)).status_code == 200
+
+
 def test_ownership_scoping_on_repos(ctx):
     _, client, _, admin_token = ctx
     dev_token = client.post("/users", headers=auth(admin_token),

@@ -13,13 +13,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'invitations' | 'settings' | 'events' | 'metrics'
-const RANK: Record<string, number> = { developer: 1, senior: 2, lead: 3, platform: 4, admin: 5 }
+type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'packs' | 'invitations' | 'settings' | 'events' | 'metrics'
+type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
 export default function App() {
   const [token, setTok] = useState(getToken())
   const [me, setMe] = useState<any>(null)
+  const [roles, setRoles] = useState<Role[]>([])  // admin-configurable authority ladder
   const [view, setView] = useState<View>('work')
 
   // capture an OAuth result handed back in the URL fragment
@@ -41,11 +42,18 @@ export default function App() {
   useEffect(() => {
     if (!token) return
     api('/me').then(setMe).catch(() => { clearToken(); setTok(''); setMe(null) })
+    api('/roles').then(setRoles).catch(() => {})
   }, [token])
 
   useEffect(() => {
     document.title = me ? `open refinery · ${view[0].toUpperCase()}${view.slice(1)}` : 'open refinery'
   }, [view, me])
+
+  const rank = (r: string) => roles.find((x) => x.name === r)?.rank ?? 0
+  const minRank = roles.length ? Math.min(...roles.map((r) => r.rank)) : 0
+  const canInvite = !!me && rank(me.role) > minRank  // has a lower role to invite
+  // ponytail: Settings (org config) gated by name; backend enforces platform/admin.
+  const isPlatform = !!me && ['platform', 'admin'].includes(me.role)
 
   return (
     <>
@@ -65,8 +73,9 @@ export default function App() {
                   <TabsTrigger value="integrations">Integrations</TabsTrigger>
                   <TabsTrigger value="targets">Targets</TabsTrigger>
                   <TabsTrigger value="policies">Policies</TabsTrigger>
-                  {RANK[me.role] >= RANK.senior && <TabsTrigger value="invitations">Invitations</TabsTrigger>}
-                  {RANK[me.role] >= RANK.platform && <TabsTrigger value="settings">Settings</TabsTrigger>}
+                  <TabsTrigger value="packs">Packs</TabsTrigger>
+                  {canInvite && <TabsTrigger value="invitations">Invitations</TabsTrigger>}
+                  {isPlatform && <TabsTrigger value="settings">Settings</TabsTrigger>}
                   <TabsTrigger value="events">Audit</TabsTrigger>
                   <TabsTrigger value="metrics">Metrics</TabsTrigger>
                 </TabsList>
@@ -85,8 +94,9 @@ export default function App() {
               <TabsContent value="integrations"><Integrations /></TabsContent>
               <TabsContent value="targets"><Targets /></TabsContent>
               <TabsContent value="policies"><Policies /></TabsContent>
-              {RANK[me.role] >= RANK.senior && <TabsContent value="invitations"><Invitations me={me} /></TabsContent>}
-              {RANK[me.role] >= RANK.platform && <TabsContent value="settings"><Settings /></TabsContent>}
+              <TabsContent value="packs"><Packs me={me} roles={roles} /></TabsContent>
+              {canInvite && <TabsContent value="invitations"><Invitations me={me} roles={roles} /></TabsContent>}
+              {isPlatform && <TabsContent value="settings"><Settings /></TabsContent>}
               <TabsContent value="events"><Events /></TabsContent>
               <TabsContent value="metrics"><Metrics /></TabsContent>
             </Tabs>
@@ -245,10 +255,11 @@ function Repos() {
 
 function Processes() {
   const { rows, load } = useList('/processes')
+  const { rows: roleRows } = useList('/roles')
   const [name, setName] = useState(''), [arch, setArch] = useState('board')
   const [stages, setStages] = useState('todo, doing, done')
   const [oversight, setOversight] = useState('dark'), [gates, setGates] = useState('')
-  const [minApprover, setMinApprover] = useState('senior')
+  const [minApprover, setMinApprover] = useState('platform')
   const [chain, setChain] = useState('')
   const add = () => post('/processes', {
     name, archetype: arch, oversight, min_approver_role: minApprover,
@@ -274,8 +285,8 @@ function Processes() {
         <Input className="field" placeholder="gated steps (comma)" value={gates} onChange={(e) => setGates(e.target.value)} />
         <Select value={minApprover} onValueChange={(v) => setMinApprover(v ?? '')}>
           <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-          <SelectContent>{['developer', 'senior', 'lead', 'platform', 'admin'].map((r) =>
-            <SelectItem key={r} value={r}>approver: {r}+</SelectItem>)}</SelectContent>
+          <SelectContent>{roleRows.map((r: any) =>
+            <SelectItem key={r.name} value={r.name}>approver: {r.name}+</SelectItem>)}</SelectContent>
         </Select>
         <Input className="field" placeholder="approval chain (roles, comma)" value={chain}
                onChange={(e) => setChain(e.target.value)} />
@@ -415,9 +426,11 @@ function SyncPanel({ integ }: any) {
 
 function Policies() {
   const { rows, load } = useList('/policies')
+  const [kind, setKind] = useState('rule')
   const [effect, setEffect] = useState('deny'), [role, setRole] = useState('*')
   const [action, setAction] = useState('transition'), [resource, setResource] = useState('*')
-  const add = () => post('/policies', { effect, role, action, resource })
+  const [strict, setStrict] = useState(false), [content, setContent] = useState('')
+  const add = () => post('/policies', { kind, effect, role, action, resource, strict, content })
     .then(load).catch(fail)
   const del = (id: string) => api(`/policies/${id}`, { method: 'DELETE' }).then(load).catch(fail)
 
@@ -428,26 +441,42 @@ function Policies() {
     <section className="page">
       <h2 className="page-title">Policies</h2>
       <Card>
-        <CardHeader><CardTitle>Add a policy (deny-overrides; default allow)</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Add a governed artifact (rule / skill / command / agent)</CardTitle></CardHeader>
         <CardContent>
           <div className="toolbar">
-            <Select value={effect} onValueChange={(v) => setEffect(v ?? '')}>
+            <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
               <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-              <SelectContent>{['deny', 'allow'].map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
+              <SelectContent>{['rule', 'skill', 'command', 'agent'].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
             </Select>
-            <Input className="field" placeholder="role (* = any)" value={role} onChange={(e) => setRole(e.target.value)} />
-            <Input className="field" placeholder="action (transition / *)" value={action} onChange={(e) => setAction(e.target.value)} />
-            <Input className="field" placeholder="resource (step / *)" value={resource} onChange={(e) => setResource(e.target.value)} />
-            <Button onClick={add}>Add policy</Button>
+            {kind === 'rule' ? (
+              <>
+                <Select value={effect} onValueChange={(v) => setEffect(v ?? '')}>
+                  <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                  <SelectContent>{['deny', 'allow'].map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
+                </Select>
+                <Input className="field" placeholder="role (* = any)" value={role} onChange={(e) => setRole(e.target.value)} />
+                <Input className="field" placeholder="action (transition / *)" value={action} onChange={(e) => setAction(e.target.value)} />
+                <Input className="field" placeholder="resource (step / *)" value={resource} onChange={(e) => setResource(e.target.value)} />
+              </>
+            ) : (
+              <Input className="field" placeholder={`${kind} content`} value={content} onChange={(e) => setContent(e.target.value)} />
+            )}
+            <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <input type="checkbox" checked={strict} onChange={(e) => setStrict(e.target.checked)} />
+              strict (no lower-layer override)
+            </label>
+            <Button onClick={add}>Add</Button>
           </div>
           <Table>
-            <TableHeader><TableRow><TableHead>Effect</TableHead><TableHead>Role</TableHead><TableHead>Action</TableHead><TableHead>Resource</TableHead><TableHead /></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Kind</TableHead><TableHead>Effect</TableHead><TableHead>Role</TableHead><TableHead>Action</TableHead><TableHead>Resource</TableHead><TableHead>Strict</TableHead><TableHead /></TableRow></TableHeader>
             <TableBody>{rows.map((p) => (
               <TableRow key={p.id}>
-                <TableCell><Badge variant={p.effect === 'deny' ? 'destructive' : 'secondary'}>{p.effect}</Badge></TableCell>
+                <TableCell><Badge variant="outline">{p.kind}</Badge></TableCell>
+                <TableCell>{p.kind === 'rule' ? <Badge variant={p.effect === 'deny' ? 'destructive' : 'secondary'}>{p.effect}</Badge> : <span className="mono">{p.content}</span>}</TableCell>
                 <TableCell className="mono">{p.role}</TableCell>
                 <TableCell className="mono">{p.action}</TableCell>
                 <TableCell className="mono">{p.resource}</TableCell>
+                <TableCell>{p.strict ? <Badge>strict</Badge> : ''}</TableCell>
                 <TableCell><Button variant="outline" size="sm" onClick={() => del(p.id)}>Delete</Button></TableCell>
               </TableRow>
             ))}</TableBody>
@@ -517,11 +546,51 @@ function Settings() {
   )
 }
 
-function Invitations({ me }: any) {
+function Packs({ me, roles }: any) {
+  const { rows, load } = useList('/packs')
+  const rank = (r: string) => roles.find((x: Role) => x.name === r)?.rank ?? 0
+  const canManage = (packRole: string) => rank(me.role) >= rank(packRole)
+  const toggle = (p: any) =>
+    api(`/packs/${p.key}/${p.enabled ? 'disable' : 'enable'}`, { method: 'POST' })
+      .then(load).catch(fail)
+  return (
+    <section className="page">
+      <h2 className="page-title">Packs</h2>
+      <p className="muted">Opt-in topic bundles of starter standards. Enable/disable per your role level.</p>
+      <Card>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>Pack</TableHead><TableHead>Layer</TableHead>
+              <TableHead>Description</TableHead><TableHead>State</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>{rows.map((p: any) => (
+              <TableRow key={p.key}>
+                <TableCell>{p.title}</TableCell>
+                <TableCell><Badge variant="secondary">{p.role}</Badge></TableCell>
+                <TableCell>{p.description}</TableCell>
+                <TableCell>{p.enabled ? <Badge>enabled</Badge> : <Badge variant="outline">off</Badge>}</TableCell>
+                <TableCell>
+                  <Button size="sm" variant={p.enabled ? 'outline' : 'default'}
+                          disabled={!canManage(p.role)} onClick={() => toggle(p)}>
+                    {p.enabled ? 'Disable' : 'Enable'}
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
+function Invitations({ me, roles }: any) {
   const { rows, load } = useList('/invitations')
-  const options = Object.keys(RANK).filter((r) => RANK[r] < RANK[me.role])  // lower roles only
-  const [email, setEmail] = useState(''), [role, setRole] = useState(options[0] ?? '')
+  const myRank = roles.find((r: Role) => r.name === me.role)?.rank ?? 0
+  const options = roles.filter((r: Role) => r.rank < myRank).map((r: Role) => r.name)  // lower roles only
+  const [email, setEmail] = useState(''), [role, setRole] = useState('')
   const [ttl, setTtl] = useState('7'), [link, setLink] = useState('')
+  useEffect(() => { if (!role && options.length) setRole(options[0]) }, [options, role])
   const invite = () => post('/invitations', { email, role, ttl_days: Number(ttl) || 7 })
     .then((r) => { setLink(r.accept_url); setEmail(''); load(); toast.success('Invitation created') })
     .catch(fail)
@@ -537,7 +606,7 @@ function Invitations({ me }: any) {
             <Input className="field" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             <Select value={role} onValueChange={(v) => setRole(v ?? '')}>
               <SelectTrigger className="field"><SelectValue placeholder="role…" /></SelectTrigger>
-              <SelectContent>{options.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+              <SelectContent>{options.map((r: string) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
             </Select>
             <Input className="field" placeholder="expires (days)" value={ttl} onChange={(e) => setTtl(e.target.value)} />
             <Button onClick={invite}>Send invite</Button>

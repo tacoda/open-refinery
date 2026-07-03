@@ -132,7 +132,7 @@ def transition(session: Session, item_id: str, to: str, actor_id: str, audit: Au
         approver = session.get(User, approver_id)
         if approver is None:
             raise ValueError(f"unknown approver: {approver_id!r}")
-        if not at_least(approver.role, process.min_approver_role):
+        if not at_least(session, approver.role, process.min_approver_role):
             raise PolicyDenied(
                 f"approval requires {process.min_approver_role}+ (got {approver.role!r})")
 

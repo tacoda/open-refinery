@@ -29,7 +29,6 @@ def seed(conn: sqlite3.Connection) -> dict:
     audit = SqliteSink(conn)
     admin, admin_tok = create_user(conn, "admin@example.com", "admin", "admin")
     platform, platform_tok = create_user(conn, "platform@example.com", "platform", "platform")
-    senior, senior_tok = create_user(conn, "senior@example.com", "senior", "senior")
     dev, dev_tok = create_user(conn, "dev@example.com", "dev", "developer")
 
     web = create_repository(conn, "web-app", "git@github.com:acme/web-app.git", dev.id)
@@ -45,6 +44,7 @@ def seed(conn: sqlite3.Connection) -> dict:
         transitions=[("detect", "triage"), ("triage", "patch"), ("patch", "verify"),
                      ("verify", "close"), ("verify", "patch")],  # verify->patch feedback loop
         oversight="assisted", checks={"close": ["tests", "security-review"]},
+        min_approver_role="platform",
     )
 
     # Kanban item: free moves; entering the gated "done" step needs approval.
@@ -52,14 +52,14 @@ def seed(conn: sqlite3.Connection) -> dict:
     transition(conn, login.id, "in-progress", dev.id, audit)
     transition(conn, login.id, "review", dev.id, audit)
 
-    # Doctrine item (assisted): dev's moves need a senior's sign-off; closing needs checks.
+    # Doctrine item (assisted): dev's moves need a platform sign-off; closing needs checks.
     cve = create_work_item(conn, api.id, remediation.id, "CVE-2026-1234", dev.id)
-    transition(conn, cve.id, "triage", dev.id, audit, approver_id=senior.id)
-    transition(conn, cve.id, "patch", dev.id, audit, approver_id=senior.id)
-    transition(conn, cve.id, "verify", dev.id, audit, approver_id=senior.id)
+    transition(conn, cve.id, "triage", dev.id, audit, approver_id=platform.id)
+    transition(conn, cve.id, "patch", dev.id, audit, approver_id=platform.id)
+    transition(conn, cve.id, "verify", dev.id, audit, approver_id=platform.id)
     attest(conn, cve.id, "tests", dev.id, True, audit)
-    attest(conn, cve.id, "security-review", senior.id, True, audit)
-    transition(conn, cve.id, "close", dev.id, audit, approver_id=senior.id)
+    attest(conn, cve.id, "security-review", platform.id, True, audit)
+    transition(conn, cve.id, "close", dev.id, audit, approver_id=platform.id)
 
     # One fresh item left at the start, for a non-empty backlog.
     create_work_item(conn, api.id, kanban.id, "Rate-limit the public API", dev.id)
@@ -68,7 +68,6 @@ def seed(conn: sqlite3.Connection) -> dict:
         "users": {
             "admin": (admin, admin_tok),
             "platform": (platform, platform_tok),
-            "senior": (senior, senior_tok),
             "developer": (dev, dev_tok),
         },
         "repositories": [web, api],

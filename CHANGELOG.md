@@ -3,6 +3,45 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.0] — 2026-07-03
+
+### Changed
+- **Roles are admin-configurable data, not a hardcoded enum.** A `roles` table
+  (name + rank) is seeded on a fresh store with the minimal ladder
+  **developer < platform < admin**; admins add and re-rank more (senior, lead,
+  team leads — whatever the org needs) via `GET/POST/DELETE /roles` (a new
+  **Roles** concern, admin-gated). Rank comparisons (`at_least`, `role_rank`),
+  invitation gating, per-process approver/chain validation, and user creation
+  now resolve roles from the store. The admin role and any in-use role cannot
+  be deleted. Default per-process `min_approver_role` is now **platform**.
+
+### Added
+- **Packs** — opt-in, role-gated **starter** bundles of guidance (`Standard`s).
+  The base install seeds almost nothing (roles + the first admin); topic content
+  ships as packs: **software-general / charter** (developer), **platform-general
+  / infrastructure** (platform), **org-policy** (admin). Enable/disable via the
+  CLI (`open-refinery packs list|enable|disable`) or the dashboard **Packs** tab;
+  `GET /packs`, `POST /packs/{key}/enable|disable`, `GET /standards`. Enabling is
+  role-gated (`at_least`); reading standards is open to any authed user.
+- **Policies are authored governed harness artifacts** — a policy now has a
+  `kind` ∈ **rule / skill / command / agent** (hooks TBD). Rules keep the
+  allow/deny gate (deny-overrides); skills/commands/agents carry `content`.
+- **Strict rules** — a rule may be marked **strict** (a lower layer may not
+  override it): strict rules decide alone, deny-overrides among them. Strict's
+  **default is an admin Setting** (`policy.strict_default`, off unless set).
+
+### Note
+- Pre-1.0 schema churn: the `lead` role baked in at 0.12.6 is gone from the
+  defaults — orgs add it (or any tier) themselves. New `roles` / `pack_states` /
+  `standards` tables + `policies` columns land via migration v5. Recreate the
+  dev database if in doubt.
+- Roadmap (0.13.x, see PLAN): real target backends (Anthropic/OpenAI/MCP); the
+  **layer graph** (factory→harness→charter | platform→developer) with strict
+  precedence; **per-layer approval workflows** (accept/deny/feedback cascade);
+  **packs bundling artifacts** (e.g. a TDD pack shipping a `tdd` command/skill,
+  namespaced); the **admin governance landscape** (defined-where, overrides,
+  drift, violations). Post-1.0: **admin-managed MFA**.
+
 ## [0.12.6] — 2026-07-03
 
 ### Added

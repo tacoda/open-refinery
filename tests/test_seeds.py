@@ -14,7 +14,7 @@ def test_seed_populates_a_usable_dataset():
     conn = connect("sqlite:///:memory:")
     data = seed(conn)
 
-    assert set(data["users"]) == {"admin", "platform", "senior", "developer"}
+    assert set(data["users"]) == {"admin", "platform", "developer"}
     assert all(tok for _, tok in data["users"].values())
     assert len(list_processes(conn)) == 2
     assert len(list_work_items(conn)) == 3
