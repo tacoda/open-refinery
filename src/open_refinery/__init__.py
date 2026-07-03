@@ -4,6 +4,7 @@ from .audit import AuditSink, JsonlSink, MemorySink
 from .authz import AllowAll, AllowList, Authorizer, Unauthorized
 from .factory import Factory, UnknownRecipe
 from .provenance import Record
+from .store import SqliteSink, connect, query_events
 
 __version__ = "0.1.0"
 
@@ -18,5 +19,8 @@ __all__ = [
     "AuditSink",
     "MemorySink",
     "JsonlSink",
+    "SqliteSink",
+    "connect",
+    "query_events",
     "__version__",
 ]

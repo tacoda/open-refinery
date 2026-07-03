@@ -49,7 +49,7 @@ reaches a target.
 | Backend   | FastAPI + Python (builds on the 0.1.0 core; `uv` + `hatchling`)     |
 | Data      | SQLite default (one file, WAL); `DATABASE_URL` swaps to Postgres    |
 | Dashboard | React SPA, served by the API in production (single deploy)          |
-| Identity  | Local accounts (email/pw) + per-user API token; roles `user`/`admin`|
+| Identity  | Local accounts (email/pw) + per-user API token; roles `developer`/`platform`/`admin` |
 
 ## Domain model
 
@@ -58,7 +58,7 @@ The 0.1.0 core generalizes cleanly: a **recipe** becomes a **stage transition**,
 
 | Concept      | Meaning                                                                 |
 |--------------|-------------------------------------------------------------------------|
-| `User`       | Authenticated principal. Email, password hash, role, hashed API token.  |
+| `User`       | Authenticated principal. Email, password hash, role (`developer`/`platform`/`admin`), hashed API token. |
 | `Repository` | A code repo the factory operates on. Imported from a source-control integration; has owner + credentials ref. |
 | `Integration`| A team-configured connection to an external system via a pluggable **adapter** — source control (GitHub, GitLab), issue trackers (Jira, Linear), and more. Owns its own credentials; every call audited. Repos import from source-control integrations; work items can sync from trackers. |
 | `Process`    | A named, customizable workflow: ordered/graph of **stages** + allowed transitions + guards. Archetypes: **board** (kanban) or **doctrine** (fixed procedure). |
@@ -205,11 +205,20 @@ src/open_refinery/
   per-user **API token** (stored hashed; shown once).
 - **Every request** carries the token → resolves to a `User` → stamped on any
   resulting `Event`. No anonymous mutations.
-- **Roles**:
-  - `user` — sees and acts only on entities they own.
-  - `admin` — sees everything: all work, all repos, the full audit trail, the
-    user tied to each action, and linked context for fast accountability.
-- Ownership scoping is enforced at the query layer, not just the UI.
+- **Roles** (three levels, ascending scope):
+  - `developer` — ships work. Creates and moves work items; sees and acts only
+    on entities they own. Consumes the processes, targets, and integrations
+    that platform users configure.
+  - `platform` — runs the factory. Configures the governance surface:
+    integrations, targets, routes, quotas, processes, oversight levels and
+    gates. Sees platform-wide operational data and metrics. Does not get the
+    full personal audit trail / user management (that's admin).
+  - `admin` — sees everything: all work, all repos, all users, the complete
+    audit trail with the user tied to each action, plus user management. The
+    accountability authority.
+- Ownership scoping is enforced at the query layer, not just the UI. Roles are
+  a superset ladder: `admin` ⊇ `platform`'s config powers; `developer` is the
+  default seat.
 
 ## Observability tooling
 
