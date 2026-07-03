@@ -15,8 +15,31 @@ def _serve(args: argparse.Namespace) -> int:
 
     from .web import create_app_from_env
 
-    port = int(os.environ.get("PORT", args.port))
-    uvicorn.run(create_app_from_env(), host=args.host, port=port)
+    # precedence: --port flag > PORT env > default 8000
+    port = args.port if args.port is not None else int(os.environ.get("PORT", 8000))
+    host = args.host or os.environ.get("HOST", "0.0.0.0")
+    uvicorn.run(create_app_from_env(), host=host, port=port)
+    return 0
+
+
+def _create_admin(args: argparse.Namespace) -> int:
+    import getpass
+    import sys
+
+    from .store import DEFAULT_DATABASE_URL, connect
+    from .users import DuplicateUser, create_user
+
+    password = args.password or getpass.getpass("admin password: ")
+    conn = connect(os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL))
+    try:
+        user, token = create_user(conn, args.email, password, "admin")
+    except DuplicateUser:
+        print(f"error: a user with email {args.email!r} already exists", file=sys.stderr)
+        return 1
+
+    print(f"created admin {user.email}")
+    print(f"token: {token}")
+    print("save this token now — it is shown only once")
     return 0
 
 
@@ -39,9 +62,14 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command")
 
     serve = sub.add_parser("serve", help="run the HTTP API")
-    serve.add_argument("--host", default="0.0.0.0")
-    serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument("--host", default=None, help="bind host (or $HOST, default 0.0.0.0)")
+    serve.add_argument("--port", type=int, default=None, help="bind port (or $PORT, default 8000)")
     serve.set_defaults(func=_serve)
+
+    admin = sub.add_parser("create-admin", help="create the initial admin user")
+    admin.add_argument("--email", required=True)
+    admin.add_argument("--password", default=None, help="omit to be prompted securely")
+    admin.set_defaults(func=_create_admin)
 
     demo = sub.add_parser("demo", help="produce one artifact and print its record")
     demo.add_argument("--actor", default="demo-user")

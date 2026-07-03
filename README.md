@@ -65,8 +65,15 @@ what, from which inputs, and when.
 Needs Python 3.11+. SQLite ships with Python — no separate database to install.
 
 ```bash
-pip install open-refinery        # or: uv pip install open-refinery
-open-refinery serve              # listens on $PORT (default 8000)
+pip install open-refinery                       # or: uv pip install open-refinery
+open-refinery create-admin --email you@x.dev    # mints the first admin + token (shown once)
+open-refinery serve                             # listens on port 8000
+```
+
+Port is configurable, `--port` flag winning over `$PORT` env over the default:
+
+```bash
+open-refinery serve --port 9000    # or: PORT=9000 open-refinery serve
 ```
 
 On a VPS, background it however you like:
