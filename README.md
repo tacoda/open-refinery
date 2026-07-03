@@ -56,12 +56,12 @@ Man-Month* — is the condition under which adding effort actually adds
 throughput, whereas work requiring communication incurs overhead that a central
 agent bottleneck would impose.
 
-> Status: **0.7.0.** Adds **policy governance** (role-based allow/deny rules,
-> deny-overrides, enforced on transitions) and **content filtering** (secret/PII
-> redaction), atop targets / routing / quotas, integrations, oversight, metrics,
-> and a full audit trail — on the SQLModel data layer. Auth is email/password
-> (+ GitHub OAuth), roles developer / platform / admin. Next: the executor
-> (0.8) — where invocation authz, secrets injection, and cost attribution land.
+> Status: **0.8.0.** Adds the **executor** (`POST /execute`) — the governed call
+> site that resolves a route, authorizes the invocation by role, consumes quota,
+> injects secrets at the boundary, content-filters in/out, calls a pluggable
+> backend, audits the call, and fails over across routes. Atop policy
+> governance, targets / routing / quotas, integrations, oversight, metrics, and
+> a full audit trail on the SQLModel data layer. Next: 0.9 hardening toward 1.0.
 > See [CHANGELOG.md](CHANGELOG.md).
 
 ## Quickstart
@@ -220,6 +220,11 @@ draws on Traefik Labs' mental model:
 The deterministic-queue orchestrator — the orchestrator *is* the queue (plain
 code), not an agent, for cost, determinism, and parallelism — is inspired by
 Mike Piccolo's [Loop Engineering](https://www.linkedin.com/pulse/loop-engineering-just-software-we-have-name-mike-piccolo-yb73c/).
+
+The stance that decomposition belongs in deterministic orchestration rather than
+agent-spawned sub-agents (sub-agent delegation is a harness concern, not the
+platform's) draws on Anton Vinogradov's
+["You don't need sub-agents"](https://www.linkedin.com/pulse/you-dont-need-sub-agents-anton-vinogradov-q7tef).
 
 ## License
 

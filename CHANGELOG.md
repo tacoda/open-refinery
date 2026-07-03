@@ -3,6 +3,16 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.8.0] — 2026-07-03
+
+### Added
+- **Executor** — `POST /execute` runs the governed outbound pipeline for a
+  process/step: resolve route → role-based invoke authorization → quota →
+  secrets injection (credential decrypted at the call site, never returned) →
+  content filter (payload and response) → pluggable backend → audit
+  (`invoke` / `invoke-failed`), with **failover** across candidate routes.
+  Real model/MCP/API backends register in `EXECUTORS`; a stub ships by default.
+
 ## [0.7.0] — 2026-07-03
 
 ### Added
