@@ -3,6 +3,23 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.7] — 2026-07-03
+
+### Added
+- **Real OpenAI model backend** — a credentialed `gpt*`/`o1`/`o3`/`o4` (or
+  `provider: openai`) target makes a real **Chat Completions** call via the
+  official SDK, honoring `output_schema` through a `json_schema` response format
+  and returning completion-token `units`. Registered alongside Anthropic in
+  `MODEL_BACKENDS`; `pip install open-refinery[providers]` now pulls both SDKs.
+- **Connect by API key *or* OAuth token** — backends read the target credential
+  as `api_key`, `token`, **or `access_token`**, so a target connected via OAuth
+  (token stored in the encrypted credential) works the same as an API-key target.
+
+### Note
+- Interactive OAuth *handshake* for targets (authorize → callback → store token,
+  like the GitHub integration) and the **MCP** transport are the next slice; MCP
+  and generic API targets still use the stub.
+
 ## [0.13.6] — 2026-07-03
 
 ### Added

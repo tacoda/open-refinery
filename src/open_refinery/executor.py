@@ -73,6 +73,11 @@ def stub_backend(target, credential, payload: str) -> dict:
 DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-8"
 
 
+def _key(credential: dict) -> str | None:
+    """A target's secret, however it was connected — API key or OAuth token."""
+    return credential.get("api_key") or credential.get("token") or credential.get("access_token")
+
+
 def _provider(target, credential: dict) -> str:
     """Which model provider a target uses — explicit credential wins, else the
     model-id prefix on the endpoint."""
@@ -94,8 +99,7 @@ def anthropic_backend(target, credential: dict, payload: str) -> dict:
     except ModuleNotFoundError as exc:  # optional dependency
         raise RuntimeError("anthropic SDK not installed — `pip install open-refinery[providers]`") from exc
 
-    api_key = credential.get("api_key") or credential.get("token")
-    client = anthropic.Anthropic(api_key=api_key)
+    client = anthropic.Anthropic(api_key=_key(credential))
     model = target.endpoint or DEFAULT_ANTHROPIC_MODEL
 
     kwargs: dict = {"model": model, "max_tokens": 16000,
@@ -117,9 +121,35 @@ def anthropic_backend(target, credential: dict, payload: str) -> dict:
     return {"output": output, "units": int(units)}
 
 
-# Registered model providers. Add "openai" here when a Claude-independent backend
-# is authored; MCP/API keep the stub until their transports land.
-MODEL_BACKENDS = {"anthropic": anthropic_backend}
+def openai_backend(target, credential: dict, payload: str) -> dict:
+    """Real OpenAI Chat Completions call. Honors output_schema via a json_schema
+    response format. Returns {"output": text|dict, "units": completion_tokens}."""
+    try:
+        import openai
+    except ModuleNotFoundError as exc:  # optional dependency
+        raise RuntimeError("openai SDK not installed — `pip install open-refinery[providers]`") from exc
+
+    client = openai.OpenAI(api_key=_key(credential))
+    kwargs: dict = {"model": target.endpoint, "max_tokens": 16000,
+                    "messages": [{"role": "user", "content": payload}]}
+    if target.output_schema:
+        kwargs["response_format"] = {"type": "json_schema", "json_schema": {
+            "name": "output", "schema": target.output_schema, "strict": True}}
+
+    resp = client.chat.completions.create(**kwargs)
+    text = resp.choices[0].message.content or ""
+    if target.output_schema:
+        import json
+        output = json.loads(text)
+    else:
+        output = text
+    units = getattr(resp.usage, "completion_tokens", 0) or 0
+    return {"output": output, "units": int(units)}
+
+
+# Registered model providers, connected by API key or OAuth token. MCP/API keep
+# the stub until their transports land.
+MODEL_BACKENDS = {"anthropic": anthropic_backend, "openai": openai_backend}
 
 
 def model_backend(target, credential: dict, payload: str) -> dict:
@@ -127,7 +157,7 @@ def model_backend(target, credential: dict, payload: str) -> dict:
     no credential or no real backend (keeps a fresh install working offline)."""
     provider = _provider(target, credential)
     backend = MODEL_BACKENDS.get(provider)
-    if backend is None or not (credential.get("api_key") or credential.get("token")):
+    if backend is None or not _key(credential):
         return stub_backend(target, credential, payload)
     return backend(target, credential, payload)
 
