@@ -247,6 +247,18 @@ class Standard(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
+class Audit(SQLModel, table=True):
+    """A recorded debt-audit run for one area — health score + findings + insights."""
+    __tablename__ = "audits"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    area: str                         # factory | harness | charter
+    score: int                        # 0–100 health
+    findings: list = Field(default_factory=list, sa_column=Column(JSON))
+    insights: list = Field(default_factory=list, sa_column=Column(JSON))
+    ran_by: str = Field(foreign_key="users.id", index=True)
+    created_at: str = Field(default_factory=now_iso, index=True)
+
+
 class Claim(SQLModel, table=True):
     """A stated behavior on a repo surface (charter/harness/code), and whether an
     instruction and a gate actually back it. A claim with neither is an

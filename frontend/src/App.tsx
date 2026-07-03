@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics'
+type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
@@ -77,6 +77,7 @@ export default function App() {
                   <TabsTrigger value="packs">Packs</TabsTrigger>
                   <TabsTrigger value="proposals">Proposals</TabsTrigger>
                   <TabsTrigger value="coverage">Coverage</TabsTrigger>
+                  <TabsTrigger value="audits">Audits</TabsTrigger>
                   {canInvite && <TabsTrigger value="invitations">Invitations</TabsTrigger>}
                   {isPlatform && <TabsTrigger value="settings">Settings</TabsTrigger>}
                   {isAdmin && <TabsTrigger value="governance">Governance</TabsTrigger>}
@@ -101,6 +102,7 @@ export default function App() {
               <TabsContent value="packs"><Packs me={me} roles={roles} /></TabsContent>
               <TabsContent value="proposals"><Proposals me={me} roles={roles} isAdmin={isAdmin} /></TabsContent>
               <TabsContent value="coverage"><Coverage /></TabsContent>
+              <TabsContent value="audits"><Audits /></TabsContent>
               {canInvite && <TabsContent value="invitations"><Invitations me={me} roles={roles} /></TabsContent>}
               {isPlatform && <TabsContent value="settings"><Settings /></TabsContent>}
               {isAdmin && <TabsContent value="governance"><Governance /></TabsContent>}
@@ -547,6 +549,56 @@ function Settings() {
               </TableRow>
             ))}</TableBody>
           </Table>
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
+function Audits() {
+  const [h, setH] = useState<any>(null)
+  const { rows: hist, load: loadHist } = useList('/audits')
+  const loadHealth = () => api('/health/areas').then(setH).catch(fail)
+  useEffect(() => { loadHealth() }, [])
+  const run = () => post('/audits/run?area=all', {}).then(() => { loadHealth(); loadHist() }).catch(fail)
+  const badge = (s: number) => s >= 80 ? 'default' : s >= 50 ? 'secondary' : 'destructive'
+  const accent: any = { factory: 'accent-blue', harness: 'accent-purple', charter: 'accent-green' }
+  return (
+    <section className="page">
+      <h2 className="page-title">Debt audits & health</h2>
+      <div className="toolbar">
+        <Button onClick={run}>Run audit</Button>
+        <span className="muted">factory (this service) · harness (artifacts) · charter (repo claims)</span>
+      </div>
+      {h && (
+        <div className="metric-grid">
+          {['factory', 'harness', 'charter'].map((a) => (
+            <Card key={a} className={accent[a]}>
+              <CardHeader><CardTitle>{a} <Badge variant={badge(h[a].score)}>{h[a].score}</Badge></CardTitle></CardHeader>
+              <CardContent>
+                {h[a].insights.length === 0 && <div className="muted">healthy — no action needed</div>}
+                {h[a].insights.map((i: string, k: number) => <div key={k} className="kv-row"><span>{i}</span></div>)}
+                {h[a].findings.length > 0 && <div className="muted mono">{h[a].findings.length} finding(s)</div>}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+      <Card>
+        <CardHeader><CardTitle>Audit history</CardTitle></CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow><TableHead>When</TableHead><TableHead>Area</TableHead><TableHead>Score</TableHead><TableHead>Findings</TableHead></TableRow></TableHeader>
+            <TableBody>{hist.map((a: any) => (
+              <TableRow key={a.id}>
+                <TableCell className="mono">{a.created_at.slice(0, 19)}</TableCell>
+                <TableCell>{a.area}</TableCell>
+                <TableCell><Badge variant={badge(a.score)}>{a.score}</Badge></TableCell>
+                <TableCell className="mono">{(a.findings || []).length}</TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+          {!hist.length && <div className="muted">no audits run yet</div>}
         </CardContent>
       </Card>
     </section>

@@ -77,6 +77,7 @@ from .approval_workflows import (
     set_workflow,
 )
 from .analysis import analyze
+from .debt import audit, health, list_audits, run_audit
 from .repo_governance import (
     create_claim,
     delete_claim,
@@ -243,6 +244,10 @@ __all__ = [
     "list_claims",
     "delete_claim",
     "repo_report",
+    "audit",
+    "run_audit",
+    "list_audits",
+    "health",
     "set_workflow",
     "list_workflows",
     "propose",

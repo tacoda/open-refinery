@@ -3,6 +3,23 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.8] — 2026-07-03
+
+### Added
+- **Debt audits & health.** Run an audit per area — **factory** (rule config:
+  dead/contradiction/redundant), **harness** (artifact prompt-injection),
+  **charter** (repo coverage + imitation surfaces) — each scored **0–100** with
+  concrete **insights** ("what to try next", ordered by impact). `run_audit`
+  persists an `Audit` row so health is trackable/reportable over time.
+  `GET /health/areas` (live scores), `GET /audits` (history), `POST /audits/run`
+  (`?area=all|factory|harness|charter`). Dashboard **Audits** tab: area health
+  cards + run + history. Reuses governance analysis + repo coverage as signals.
+
+### Note
+- Next: **ingest** — populate repo `Claim`s from real sources (`.claude/` charter,
+  harness config, code signals) via the GitHub integration, triggered per repo
+  like tracker sync, so coverage/charter-health run on reality, not seeded claims.
+
 ## [0.13.7] — 2026-07-03
 
 ### Added

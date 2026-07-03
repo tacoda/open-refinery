@@ -53,6 +53,7 @@ from .approval_workflows import (
     set_workflow,
 )
 from .analysis import analyze
+from .debt import health, list_audits, run_audit
 from .governance import landscape
 from .packs import disable_pack, enable_pack, list_packs, list_standards
 from .policies import (
@@ -395,6 +396,21 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def get_governance(session: Session = Depends(get_session),
                        _: User = Depends(require("admin"))):
         return landscape(session)
+
+    # --- debt audits & health ---
+    @app.get("/health/areas")
+    def get_area_health(session: Session = Depends(get_session), _: User = Depends(current_user)):
+        return health(session)  # live factory/harness/charter scores
+
+    @app.get("/audits")
+    def get_audits(area: str | None = None, session: Session = Depends(get_session),
+                   _: User = Depends(current_user)):
+        return list_audits(session, area=area)
+
+    @app.post("/audits/run", status_code=201)
+    def run_audits(area: str = "all", session: Session = Depends(get_session),
+                   user: User = Depends(current_user)):
+        return run_audit(session, area, user.id)
 
     # --- repo-level drift & coverage ---
     @app.get("/repositories/{repo_id}/coverage")
