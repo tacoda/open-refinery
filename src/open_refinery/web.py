@@ -30,6 +30,7 @@ from .store import DEFAULT_DATABASE_URL, SqliteSink, connect, query_events
 from .users import (
     DuplicateUser,
     User,
+    authenticate,
     count_users,
     create_session,
     create_user,
@@ -90,6 +91,11 @@ class Attest(BaseModel):
 
 
 class Setup(BaseModel):
+    email: str
+    password: str
+
+
+class Credentials(BaseModel):
     email: str
     password: str
 
@@ -237,6 +243,13 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
 
     def _home(request: Request) -> str:
         return os.environ.get("APP_BASE_URL", str(request.base_url)).rstrip("/") + "/"
+
+    @app.post("/auth/login")
+    def login(body: Credentials):
+        user = authenticate(db_conn(app), body.email, body.password)
+        if user is None:
+            raise HTTPException(status_code=401, detail="invalid email or password")
+        return {"token": create_session(db_conn(app), user.id), "user": user}
 
     @app.get("/auth/providers")
     def providers():

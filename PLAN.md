@@ -205,13 +205,15 @@ src/open_refinery/
 
 ## Auth & accountability
 
-- **Two authentication paths, one identity model:**
-  - **OAuth** — interactive human accounts sign in through the dashboard via an
-    OAuth provider (Claude-Code-style login). Best UX, no password to manage.
-  - **API tokens** — programmatic/API accounts authenticate with a per-user
-    token (stored hashed, shown once). For CI, harnesses, and scripts.
-  - Local email/password (already built) remains as the offline/self-hosted
-    fallback. All three resolve to the same `User` + role.
+- **User login is by email + password, or GitHub OAuth.** Humans sign in to the
+  dashboard with their password (`POST /auth/login` → session token) or via a
+  GitHub OAuth account. API tokens are **not** for human login.
+- **API tokens** authenticate programmatic/API clients (CI, harnesses, scripts)
+  as a Bearer credential. Sessions and tokens both resolve to the same `User`.
+- **Connecting to external services** (GitHub, GitLab, Jira, Linear, model
+  providers, MCP) is a *separate* concern from user login: those connections are
+  configured in the UI via a service **API token or OAuth**, stored encrypted.
+  That lives in the integrations layer (0.6.0), not user auth.
 - **Every request** carries an OAuth session or a token → resolves to a `User`
   → stamped on any resulting `Event`. No anonymous mutations.
 - **Roles** — three roles defined by *scope of authority*, not a simple

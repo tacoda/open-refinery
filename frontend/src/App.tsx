@@ -124,30 +124,32 @@ function SetupWizard({ onToken }: { onToken: (t: string) => void }) {
 }
 
 function Login({ onToken }: { onToken: (t: string) => void }) {
-  const [val, setVal] = useState('')
+  const [email, setEmail] = useState(''), [pw, setPw] = useState('')
   const [github, setGithub] = useState(false)
   useEffect(() => {
     api('/auth/providers').then((p) => setGithub(!!p.github)).catch(() => {})
   }, [])
   async function go() {
-    setToken(val)
-    try { await api('/me'); onToken(val) }
-    catch { clearToken(); toast.error('invalid token') }
+    try {
+      const r = await post('/auth/login', { email, password: pw })
+      setToken(r.token); onToken(r.token)
+    } catch { toast.error('invalid email or password') }
   }
   return (
     <div className="login-screen">
       <div className="login-card">
         <h1 className="app-brand">open-refinery</h1>
         <p className="login-tagline">An open factory to shine light into the dark.</p>
+        <Input placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <Input placeholder="password" type="password" value={pw}
+               onChange={(e) => setPw(e.target.value)}
+               onKeyDown={(e) => e.key === 'Enter' && go()} />
+        <Button onClick={go}>Sign in</Button>
         {github && (
-          <Button onClick={() => { window.location.href = oauthLoginUrl('github') }}>
+          <Button variant="outline" onClick={() => { window.location.href = oauthLoginUrl('github') }}>
             Sign in with GitHub
           </Button>
         )}
-        <Input placeholder="API token" value={val} type="password"
-               onChange={(e) => setVal(e.target.value)}
-               onKeyDown={(e) => e.key === 'Enter' && go()} />
-        <Button variant={github ? 'outline' : 'default'} onClick={go}>Sign in with token</Button>
       </div>
     </div>
   )
