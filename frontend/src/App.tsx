@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'packs' | 'invitations' | 'settings' | 'events' | 'metrics'
+type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'packs' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
@@ -54,6 +54,7 @@ export default function App() {
   const canInvite = !!me && rank(me.role) > minRank  // has a lower role to invite
   // ponytail: Settings (org config) gated by name; backend enforces platform/admin.
   const isPlatform = !!me && ['platform', 'admin'].includes(me.role)
+  const isAdmin = !!me && me.role === 'admin'
 
   return (
     <>
@@ -76,6 +77,7 @@ export default function App() {
                   <TabsTrigger value="packs">Packs</TabsTrigger>
                   {canInvite && <TabsTrigger value="invitations">Invitations</TabsTrigger>}
                   {isPlatform && <TabsTrigger value="settings">Settings</TabsTrigger>}
+                  {isAdmin && <TabsTrigger value="governance">Governance</TabsTrigger>}
                   <TabsTrigger value="events">Audit</TabsTrigger>
                   <TabsTrigger value="metrics">Metrics</TabsTrigger>
                 </TabsList>
@@ -97,6 +99,7 @@ export default function App() {
               <TabsContent value="packs"><Packs me={me} roles={roles} /></TabsContent>
               {canInvite && <TabsContent value="invitations"><Invitations me={me} roles={roles} /></TabsContent>}
               {isPlatform && <TabsContent value="settings"><Settings /></TabsContent>}
+              {isAdmin && <TabsContent value="governance"><Governance /></TabsContent>}
               <TabsContent value="events"><Events /></TabsContent>
               <TabsContent value="metrics"><Metrics /></TabsContent>
             </Tabs>
@@ -540,6 +543,77 @@ function Settings() {
               </TableRow>
             ))}</TableBody>
           </Table>
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
+function Governance() {
+  const [g, setG] = useState<any>(null)
+  useEffect(() => { api('/governance').then(setG).catch(fail) }, [])
+  if (!g) return null
+  return (
+    <section className="page">
+      <h2 className="page-title">Governance landscape</h2>
+      <p className="muted">What is defined where, and what overrides what — across the role layers.</p>
+
+      <Card>
+        <CardHeader><CardTitle>Roles</CardTitle></CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow><TableHead>Role</TableHead><TableHead>Rank</TableHead><TableHead>Users</TableHead></TableRow></TableHeader>
+            <TableBody>{g.roles.map((r: any) => (
+              <TableRow key={r.name}>
+                <TableCell>{r.name}</TableCell><TableCell className="mono">{r.rank}</TableCell><TableCell className="mono">{r.users}</TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Rules by layer (highest authority first)</CardTitle></CardHeader>
+        <CardContent>
+          {g.layers.length === 0 && <p className="muted">No rules defined.</p>}
+          {g.layers.map((layer: any) => (
+            <div key={layer.rank}>
+              <div className="kv-row"><span className="muted">rank {layer.rank}</span></div>
+              <Table>
+                <TableHeader><TableRow><TableHead>Effect</TableHead><TableHead>Role</TableHead><TableHead>Action</TableHead><TableHead>Resource</TableHead><TableHead>Author</TableHead><TableHead>Strict</TableHead></TableRow></TableHeader>
+                <TableBody>{layer.rules.map((p: any) => (
+                  <TableRow key={p.id}>
+                    <TableCell><Badge variant={p.effect === 'deny' ? 'destructive' : 'secondary'}>{p.effect}</Badge></TableCell>
+                    <TableCell className="mono">{p.role}</TableCell>
+                    <TableCell className="mono">{p.action}</TableCell>
+                    <TableCell className="mono">{p.resource}</TableCell>
+                    <TableCell className="mono">{p.author_role}</TableCell>
+                    <TableCell>{p.strict ? <Badge>strict</Badge> : ''}</TableCell>
+                  </TableRow>
+                ))}</TableBody>
+              </Table>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Overrides — strict rules shadowing a lower layer</CardTitle></CardHeader>
+        <CardContent>
+          {g.overrides.length === 0
+            ? <p className="muted">No overrides.</p>
+            : (
+              <Table>
+                <TableHeader><TableRow><TableHead>Winner (strict)</TableHead><TableHead>Shadowed</TableHead><TableHead>On</TableHead></TableRow></TableHeader>
+                <TableBody>{g.overrides.map((o: any, i: number) => (
+                  <TableRow key={i}>
+                    <TableCell><Badge>{o.winner.author_role}</Badge> {o.winner.effect}</TableCell>
+                    <TableCell><Badge variant="outline">{o.shadowed.author_role}</Badge> {o.shadowed.effect}</TableCell>
+                    <TableCell className="mono">{o.winner.action} / {o.winner.resource}</TableCell>
+                  </TableRow>
+                ))}</TableBody>
+              </Table>
+            )}
         </CardContent>
       </Card>
     </section>

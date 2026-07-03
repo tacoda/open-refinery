@@ -44,6 +44,7 @@ from .integrations import (
 )
 from .integrations import verify as verify_integration
 from .metrics import summary
+from .governance import landscape
 from .packs import disable_pack, enable_pack, list_packs, list_standards
 from .policies import (
     PolicyDenied,
@@ -349,6 +350,12 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
                     _: User = Depends(require("admin"))):
         delete_role(session, name)
         return {"status": "deleted"}
+
+    # --- governance landscape (admin read view) ---
+    @app.get("/governance")
+    def get_governance(session: Session = Depends(get_session),
+                       _: User = Depends(require("admin"))):
+        return landscape(session)
 
     # --- packs (opt-in topic bundles; enable/disable role-gated) ---
     @app.get("/packs")

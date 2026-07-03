@@ -3,6 +3,16 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.2] — 2026-07-03
+
+### Added
+- **Admin governance landscape** (`GET /governance`, admin-gated; dashboard
+  **Governance** tab) — the read view over roles + the layer graph: the role
+  ladder with user counts, **rules grouped by layer** (author role rank, highest
+  first), and **what overrides what** (strict rules shadowing a lower-layer,
+  opposite-effect rule). Drift/violations are stubbed (empty) pending
+  enforcement-outcome logging — a later slice.
+
 ## [0.13.1] — 2026-07-03
 
 ### Added

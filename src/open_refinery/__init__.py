@@ -68,6 +68,7 @@ from .invitations import (
 )
 from .models import ApprovalRequest, Invitation, Policy, Quota, Route, Setting, Target
 from .settings import delete_setting, get_setting, list_setting_keys, set_setting
+from .governance import landscape
 from .packs import (
     disable_pack,
     enable_pack,
@@ -221,6 +222,7 @@ __all__ = [
     "enable_pack",
     "disable_pack",
     "list_standards",
+    "landscape",
     "execute",
     "EXECUTORS",
     "ExecutionError",
