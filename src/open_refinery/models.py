@@ -93,6 +93,38 @@ class Integration(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
+class Target(SQLModel, table=True):
+    __tablename__ = "targets"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    name: str
+    kind: str          # model | mcp | api
+    endpoint: str      # model id, MCP server URL, or API base URL
+    owner_id: str = Field(foreign_key="users.id", index=True)
+    secret: str = ""   # encrypted JSON credential; "" when none
+    created_at: str = Field(default_factory=now_iso)
+
+
+class Route(SQLModel, table=True):
+    __tablename__ = "routes"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    process_id: str = Field(foreign_key="processes.id", index=True)
+    step: str | None = None            # None = any step in the process
+    target_id: str = Field(foreign_key="targets.id")
+    priority: int = 0                  # higher wins
+    owner_id: str = Field(foreign_key="users.id", index=True)
+    created_at: str = Field(default_factory=now_iso)
+
+
+class Quota(SQLModel, table=True):
+    __tablename__ = "quotas"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    target_id: str = Field(foreign_key="targets.id", index=True)
+    limit: int                          # max units allowed
+    used: int = 0                       # units consumed so far
+    owner_id: str = Field(foreign_key="users.id", index=True)
+    created_at: str = Field(default_factory=now_iso)
+
+
 class ConnectState(SQLModel, table=True):
     __tablename__ = "connect_states"
     state: str = Field(primary_key=True)

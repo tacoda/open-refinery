@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'repos' | 'processes' | 'integrations' | 'events' | 'metrics'
+type View = 'work' | 'repos' | 'processes' | 'integrations' | 'targets' | 'events' | 'metrics'
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
 export default function App() {
@@ -57,6 +57,7 @@ export default function App() {
                   <TabsTrigger value="repos">Repos</TabsTrigger>
                   <TabsTrigger value="processes">Processes</TabsTrigger>
                   <TabsTrigger value="integrations">Integrations</TabsTrigger>
+                  <TabsTrigger value="targets">Targets</TabsTrigger>
                   <TabsTrigger value="events">Audit</TabsTrigger>
                   <TabsTrigger value="metrics">Metrics</TabsTrigger>
                 </TabsList>
@@ -72,6 +73,7 @@ export default function App() {
               <TabsContent value="repos"><Repos /></TabsContent>
               <TabsContent value="processes"><Processes /></TabsContent>
               <TabsContent value="integrations"><Integrations /></TabsContent>
+              <TabsContent value="targets"><Targets /></TabsContent>
               <TabsContent value="events"><Events /></TabsContent>
               <TabsContent value="metrics"><Metrics /></TabsContent>
             </Tabs>
@@ -351,6 +353,120 @@ function SyncPanel({ integ }: any) {
       </Select>
       <Button size="sm" onClick={sync}>Sync issues</Button>
     </div>
+  )
+}
+
+function Targets() {
+  const { rows: targets, load: loadT } = useList('/targets')
+  const { rows: routes, load: loadR } = useList('/routes')
+  const { rows: quotas, load: loadQ } = useList('/quotas')
+  const [procs, setProcs] = useState<any[]>([])
+  useEffect(() => { api('/processes').then(setProcs).catch(() => {}) }, [])
+
+  const [name, setName] = useState(''), [kind, setKind] = useState('model')
+  const [endpoint, setEndpoint] = useState(''), [token, setToken] = useState('')
+  const addTarget = () => post('/targets', {
+    name, kind, endpoint, credential: token ? { token } : null,
+  }).then(() => { setName(''); setEndpoint(''); setToken(''); loadT() }).catch(fail)
+  const delTarget = (id: string) => api(`/targets/${id}`, { method: 'DELETE' })
+    .then(() => { loadT(); loadR(); loadQ() }).catch(fail)
+
+  const [rProc, setRProc] = useState(''), [rTarget, setRTarget] = useState('')
+  const [rStep, setRStep] = useState(''), [rPrio, setRPrio] = useState('0')
+  const addRoute = () => post('/routes', {
+    process_id: rProc, target_id: rTarget, step: rStep || null, priority: Number(rPrio) || 0,
+  }).then(() => { setRStep(''); loadR() }).catch(fail)
+
+  const [qTarget, setQTarget] = useState(''), [qLimit, setQLimit] = useState('')
+  const addQuota = () => post('/quotas', { target_id: qTarget, limit: Number(qLimit) || 0 })
+    .then(() => { setQLimit(''); loadQ() }).catch(fail)
+
+  const targetName = (id: string) => targets.find((t) => t.id === id)?.name ?? id.slice(0, 8)
+  const procName = (id: string) => procs.find((p) => p.id === id)?.name ?? id.slice(0, 8)
+
+  return (
+    <section className="page">
+      <h2 className="page-title">Targets</h2>
+      <Card>
+        <CardHeader><CardTitle>Add a target</CardTitle></CardHeader>
+        <CardContent>
+          <div className="toolbar">
+            <Input className="field" placeholder="name" value={name} onChange={(e) => setName(e.target.value)} />
+            <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+              <SelectContent>{['model', 'mcp', 'api'].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+            </Select>
+            <Input className="field" placeholder="endpoint / model id" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} />
+            <Input className="field" placeholder="token (optional)" type="password" value={token} onChange={(e) => setToken(e.target.value)} />
+            <Button onClick={addTarget}>Add target</Button>
+          </div>
+          <Table>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Endpoint</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>{targets.map((t) => (
+              <TableRow key={t.id}>
+                <TableCell>{t.name}</TableCell>
+                <TableCell><Badge variant="secondary">{t.kind}</Badge></TableCell>
+                <TableCell className="mono">{t.endpoint}</TableCell>
+                <TableCell><Button variant="outline" size="sm" onClick={() => delTarget(t.id)}>Delete</Button></TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Routes</CardTitle></CardHeader>
+        <CardContent>
+          <div className="toolbar">
+            <Select value={rProc} onValueChange={(v) => setRProc(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue placeholder="process…" /></SelectTrigger>
+              <SelectContent>{procs.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={rTarget} onValueChange={(v) => setRTarget(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue placeholder="target…" /></SelectTrigger>
+              <SelectContent>{targets.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+            </Select>
+            <Input className="field" placeholder="step (optional)" value={rStep} onChange={(e) => setRStep(e.target.value)} />
+            <Input className="field" placeholder="priority" value={rPrio} onChange={(e) => setRPrio(e.target.value)} />
+            <Button onClick={addRoute}>Add route</Button>
+          </div>
+          <Table>
+            <TableHeader><TableRow><TableHead>Process</TableHead><TableHead>Step</TableHead><TableHead>Target</TableHead><TableHead>Priority</TableHead></TableRow></TableHeader>
+            <TableBody>{routes.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell>{procName(r.process_id)}</TableCell>
+                <TableCell>{r.step || <span className="muted">any</span>}</TableCell>
+                <TableCell>{targetName(r.target_id)}</TableCell>
+                <TableCell>{r.priority}</TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Quotas</CardTitle></CardHeader>
+        <CardContent>
+          <div className="toolbar">
+            <Select value={qTarget} onValueChange={(v) => setQTarget(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue placeholder="target…" /></SelectTrigger>
+              <SelectContent>{targets.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+            </Select>
+            <Input className="field" placeholder="limit (units)" value={qLimit} onChange={(e) => setQLimit(e.target.value)} />
+            <Button onClick={addQuota}>Add quota</Button>
+          </div>
+          <Table>
+            <TableHeader><TableRow><TableHead>Target</TableHead><TableHead>Used / Limit</TableHead></TableRow></TableHeader>
+            <TableBody>{quotas.map((q) => (
+              <TableRow key={q.id}>
+                <TableCell>{targetName(q.target_id)}</TableCell>
+                <TableCell className="mono">{q.used} / {q.limit}</TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </section>
   )
 }
 

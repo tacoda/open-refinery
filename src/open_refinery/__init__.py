@@ -36,6 +36,21 @@ from .integrations import (
     list_integrations,
     list_issues,
 )
+from .targets import (
+    QuotaExceeded,
+    consume_quota,
+    create_quota,
+    create_route,
+    create_target,
+    delete_route,
+    delete_target,
+    list_quotas,
+    list_routes,
+    list_targets,
+    resolve_target,
+    target_credential,
+)
+from .models import Quota, Route, Target
 from .migrations import run_migrations
 from .metrics import (
     activity_by_actor,
@@ -134,5 +149,20 @@ __all__ = [
     "sync_tracker",
     "find_by_external_ref",
     "import_or_get",
+    "Target",
+    "Route",
+    "Quota",
+    "QuotaExceeded",
+    "create_target",
+    "list_targets",
+    "delete_target",
+    "target_credential",
+    "create_route",
+    "list_routes",
+    "delete_route",
+    "resolve_target",
+    "create_quota",
+    "list_quotas",
+    "consume_quota",
     "__version__",
 ]

@@ -35,6 +35,17 @@ from .metrics import summary
 from .processes import create_process, list_processes
 from .repositories import DuplicateRepository, create_repository, import_or_get, list_repositories
 from .store import DEFAULT_DATABASE_URL, SqliteSink, engine_for, query_events
+from .targets import (
+    QuotaExceeded,
+    create_quota,
+    create_route,
+    create_target,
+    delete_route,
+    delete_target,
+    list_quotas,
+    list_routes,
+    list_targets,
+)
 from .users import (
     DuplicateUser,
     User,
@@ -120,6 +131,25 @@ class SyncRequest(BaseModel):
     process_id: str
 
 
+class NewTarget(BaseModel):
+    name: str
+    kind: str
+    endpoint: str
+    credential: dict[str, str] | None = None
+
+
+class NewRoute(BaseModel):
+    process_id: str
+    target_id: str
+    step: str | None = None
+    priority: int = 0
+
+
+class NewQuota(BaseModel):
+    target_id: str
+    limit: int
+
+
 # --- app ------------------------------------------------------------------
 
 def create_app(session: Session | None = None, database_url: str = DEFAULT_DATABASE_URL) -> FastAPI:
@@ -168,6 +198,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         (ApprovalRequired, 409),
         (AttestationMissing, 409),
         (AttestationFailed, 409),
+        (QuotaExceeded, 429),
         (UnknownWorkItem, 404),
         (ValueError, 400),
     ):
@@ -325,6 +356,48 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
                          user: User = Depends(current_user)):
         return sync_tracker(session, integ_id, body.repo_id, body.process_id,
                             user.id, SqliteSink(session))
+
+    # --- targets, routing, quotas (Platform layer) ---
+    @app.post("/targets", status_code=201)
+    def add_target(body: NewTarget, session: Session = Depends(get_session),
+                   user: User = Depends(current_user)):
+        return create_target(session, body.name, body.kind, body.endpoint, user.id,
+                            credential=body.credential)
+
+    @app.get("/targets")
+    def get_targets(session: Session = Depends(get_session), user: User = Depends(current_user)):
+        return list_targets(session, owner_id=owner_scope(user))
+
+    @app.delete("/targets/{target_id}")
+    def remove_target(target_id: str, session: Session = Depends(get_session),
+                      _: User = Depends(current_user)):
+        delete_target(session, target_id)
+        return {"status": "deleted"}
+
+    @app.post("/routes", status_code=201)
+    def add_route(body: NewRoute, session: Session = Depends(get_session),
+                  user: User = Depends(current_user)):
+        return create_route(session, body.process_id, body.target_id, user.id,
+                           step=body.step, priority=body.priority)
+
+    @app.get("/routes")
+    def get_routes(session: Session = Depends(get_session), user: User = Depends(current_user)):
+        return list_routes(session, owner_id=owner_scope(user))
+
+    @app.delete("/routes/{route_id}")
+    def remove_route(route_id: str, session: Session = Depends(get_session),
+                     _: User = Depends(current_user)):
+        delete_route(session, route_id)
+        return {"status": "deleted"}
+
+    @app.post("/quotas", status_code=201)
+    def add_quota(body: NewQuota, session: Session = Depends(get_session),
+                  user: User = Depends(current_user)):
+        return create_quota(session, body.target_id, body.limit, user.id)
+
+    @app.get("/quotas")
+    def get_quotas(session: Session = Depends(get_session), user: User = Depends(current_user)):
+        return list_quotas(session, owner_id=owner_scope(user))
 
     # --- auth ---
     def _redirect_uri(request: Request) -> str:

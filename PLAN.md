@@ -42,6 +42,45 @@ The **process/work-item** model (below) is how a harness *ships work* through
 the platform; the platform pillars are what govern each unit of that work as it
 reaches a target.
 
+## Concern ownership: platform vs harness
+
+The boundary that defines scope. **Platform concerns** (out-of-process,
+fleet-wide) are open-refinery's job; **harness concerns** (in-process,
+task-specific) belong to the calling agent/app and are explicit non-goals.
+(Framing from Traefik's harness-vs-platform mental model — see README credits.)
+
+### Platform concerns — owned by open-refinery
+
+| Concern | Why platform-owned | Status |
+|---------|--------------------|--------|
+| Identity of the calling actor | Consistent across harnesses; required for audit | ✅ users + API tokens / sessions; every event actor-stamped |
+| Authorization to invoke a tool/target | **Role-based** (RBAC), enforced across agents; cannot be self-asserted | ◐ role + ownership authz today; role-gated per-target/tool invocation is 0.7 (policy) |
+| Secrets injection into calls | Secrets must not enter harness process memory | ◐ encrypted credential store for targets/integrations; call-site injection lands with the executor (0.8) |
+| Rate limits & concurrency caps | Multi-tenant fairness, provider quotas | ◐ usage quotas (0.6); rate/concurrency windows are a quota extension |
+| Per-policy model routing (cost, region, compliance) | Org-wide policy, not per-task | ◐ routes by process/step/priority (0.6); policy-driven routing is 0.7 |
+| Failover when a provider degrades | Transparent to the harness; consistent SLOs | ○ routes carry priority; failover selection is planned |
+| Content filtering & DLP on prompts/responses | Regulatory / data-protection consistency | ○ roadmap (0.7 content filter) |
+| Audit trail of every model & tool call | Single source of truth for compliance | ✅ append-only event store, subject-linked; extends to target calls with the executor |
+| Traffic-graph observability & correlation | Cross-agent visibility | ◐ metrics + audit feed; cross-agent graph is roadmap |
+| Cost attribution by team/product | Enforced at the call site, not self-reported | ○ quotas track usage; cost + team attribution needs teams + the executor |
+
+Legend: ✅ implemented · ◐ partial / in progress · ○ planned.
+
+### Harness concerns — NOT open-refinery (non-goals)
+
+These belong to the harness (pds, pyness, any agent app). open-refinery does not
+implement them; it governs the *calls* a harness makes, not its internal loop.
+
+| Concern | Why harness-owned |
+|---------|-------------------|
+| Tool selection for a task | Task-specific; depends on prompt + intermediate state |
+| Per-task model selection (capability fit) | Depends on sub-task semantics |
+| Sub-agent delegation logic | Internal to one agent's planning |
+| Context-window compression | Intra-loop performance optimization |
+| Self-verification of model output | Task correctness within a single agent |
+| Eval & tracing of agent reasoning | Reasoning is internal (harness-native observability) |
+| Session persistence & checkpointing | Internal to the agent lifecycle |
+
 ## Locked decisions
 
 | Area      | Choice                                                              |
@@ -294,7 +333,7 @@ engine, oversight, metrics, and the dashboard all landed in it).
 | 0.3.0 ✅ | Full app: FastAPI + auth (email/password, API tokens, **GitHub OAuth**, roles, ownership scoping, first-run wizard); **process engine** (steps + feedback loops, board/doctrine); **oversight** L0–L4 + approvals + attestations; **metrics** read-model; audit API; **React/shadcn dashboard** (bundled in the wheel); seeds. `pip install` + `serve`. |
 | 0.4.0 ✅ | **Integrations**: adapter framework + GitHub & GitLab (import repos) and Jira & Linear (**work-item sync**, deduped by external ref); UI token *or* OAuth connection (per-provider gated), **encrypted credential store**, disconnect, idempotent import. Dashboard integrations + sync view. |
 | 0.5.0 ✅ | **Data-layer ORM — SQLModel** (SQLAlchemy + Pydantic): entities are SQLModel table models; modules use per-request `Session`s; `connect()` returns a Session, `engine_for()` backs the web layer. Migration runner + audit event store kept. Portable toward other backends (Postgres, …). |
-| 0.6.0   | Targets + routing + quotas: model/MCP/API targets, route rules, budgets, cost tracking, rate limits — all UI-managed. |
+| 0.6.0 ◐ | Targets + routing + quotas: model/MCP/API targets (encrypted creds), route rules (process/step/priority resolution), usage quotas enforced pre-call — all UI-managed. Remaining: rate/concurrency windows, failover, cost attribution (with the executor). |
 | 0.7.0   | Governance policy layer + content filtering over transitions/targets. |
 | 0.8.0   | Hardening: token rotation, secret-handling review, RBAC edge cases, retention/residency; more OAuth providers; LangGraph stage executors. |
 | 1.0.0   | Deployable release: `pip install open-refinery && open-refinery serve` self-host (`SECRET_KEY` only), full docs. |
