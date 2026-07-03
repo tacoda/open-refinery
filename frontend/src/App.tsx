@@ -203,8 +203,9 @@ function Processes() {
   const [name, setName] = useState(''), [arch, setArch] = useState('board')
   const [stages, setStages] = useState('todo, doing, done')
   const [oversight, setOversight] = useState('dark'), [gates, setGates] = useState('')
+  const [minApprover, setMinApprover] = useState('senior')
   const add = () => post('/processes', {
-    name, archetype: arch, oversight,
+    name, archetype: arch, oversight, min_approver_role: minApprover,
     stages: stages.split(',').map((s) => s.trim()).filter(Boolean),
     gates: gates.split(',').map((s) => s.trim()).filter(Boolean),
   }).then(() => { setName(''); load() }).catch(fail)
@@ -224,6 +225,11 @@ function Processes() {
             <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
         </Select>
         <Input className="field" placeholder="gated steps (comma)" value={gates} onChange={(e) => setGates(e.target.value)} />
+        <Select value={minApprover} onValueChange={(v) => setMinApprover(v ?? '')}>
+          <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+          <SelectContent>{['developer', 'senior', 'platform', 'admin'].map((r) =>
+            <SelectItem key={r} value={r}>approver: {r}+</SelectItem>)}</SelectContent>
+        </Select>
         <Button onClick={add}>Add process</Button>
       </div>
       <Card><CardContent>

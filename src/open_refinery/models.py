@@ -58,6 +58,7 @@ class Process(SQLModel, table=True):
     owner_id: str = Field(foreign_key="users.id", index=True)
     initial: str
     oversight: str = "dark"
+    min_approver_role: str = "senior"  # min role to approve a gated move (risk profile)
     stages: list = Field(default_factory=list, sa_column=Column(JSON))
     transitions: list = Field(default_factory=list, sa_column=Column(JSON))  # [[from, to], ...]
     gates: list = Field(default_factory=list, sa_column=Column(JSON))

@@ -3,6 +3,22 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.9.0] — 2026-07-03
+
+### Added
+- **`senior` role** — a four-role authority ladder (developer < senior <
+  platform < admin). Seniors perform escalated operations and approve
+  developers' risky (gated) moves.
+- **Configurable per-process risk profile** — a process's `min_approver_role`
+  (with oversight level, gated steps, and required checks) sets how much
+  oversight it demands and who may approve; nothing is hardcoded, all UI-managed.
+- **API token rotation** — `POST /me/token/rotate` (old token invalidated).
+
+### Note
+- Seeds are opt-in and load *example* data only (now including a `senior` user);
+  a fresh instance is always empty until setup. Pre-1.0 schema churn accepted;
+  the schema freezes at 1.0.
+
 ## [0.8.0] — 2026-07-03
 
 ### Added

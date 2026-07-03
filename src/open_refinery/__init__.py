@@ -84,16 +84,19 @@ from .work_items import (
     transition,
 )
 from .users import (
+    ROLE_RANK,
     ROLES,
     DuplicateUser,
     User,
+    at_least,
     authenticate,
     create_user,
+    role_rank,
     rotate_token,
     user_by_token,
 )
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 __all__ = [
     "Factory",
@@ -111,6 +114,9 @@ __all__ = [
     "query_events",
     "User",
     "ROLES",
+    "ROLE_RANK",
+    "role_rank",
+    "at_least",
     "DuplicateUser",
     "create_user",
     "authenticate",

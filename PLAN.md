@@ -255,19 +255,23 @@ src/open_refinery/
   That lives in the integrations layer (0.6.0), not user auth.
 - **Every request** carries an OAuth session or a token → resolves to a `User`
   → stamped on any resulting `Event`. No anonymous mutations.
-- **Roles** — three roles defined by *scope of authority*, not a simple
-  permission ladder:
+- **Roles** — four roles on an authority ladder (`developer` < `senior` <
+  `platform` < `admin`), defined by *scope of authority*:
   - `developer` — **drives work and sets repository (project) standards.**
-    Creates and moves work items; owns and tunes the standards for their own
-    repos (the inner layer of the cascade). Sees and acts on what they own.
-    (Repository = project = the git repo; see the domain model.)
-  - `platform` — **defines policy and standards for teams/organizations.** Sets
-    the org/team-wide policy and standards that projects inherit (the outer
-    layer), and configures the governance surface: integrations, targets,
-    routes, quotas, processes, oversight levels and gates.
+    Creates and moves work items; owns and tunes standards for their own repos.
+    The most risk-restricted seat: risky (gated) moves need sign-off from a
+    higher role. Sees and acts on what they own.
+  - `senior` — **performs escalated operations and approves developers' risky
+    moves.** The default approver for gated transitions (a process's
+    `min_approver_role`, configurable). Otherwise scoped like a developer.
+  - `platform` — **defines policy and standards for teams/organizations** and
+    configures the governance surface (integrations, targets, routes, quotas,
+    processes, oversight, policies). Approves platform/devops-level changes.
   - `admin` — **audits everything.** Full read across all work, repos, users,
-    and the complete audit trail with the user tied to each action; user
-    management. The accountability and observability authority.
+    and the complete audit trail; user management. Accountability authority.
+- **Risk profile is per-process and UI-configurable**: oversight level (L0–L4),
+  gated steps, required checks, and **`min_approver_role`** together define how
+  much oversight a process demands and who may approve — not hardcoded.
 - **Standards cascade** (mirrors the pds charter): `platform` (org/team) ▸
   `developer` (project) — outer sets the floor, inner refines within it; a
   project can tighten but not escape org policy.
@@ -336,7 +340,10 @@ engine, oversight, metrics, and the dashboard all landed in it).
 | 0.6.0 ◐ | Targets + routing + quotas: model/MCP/API targets (encrypted creds), route rules (process/step/priority resolution), usage quotas enforced pre-call — all UI-managed. Remaining: rate/concurrency windows, failover, cost attribution (with the executor). |
 | 0.7.0 ◐ | Governance policy layer (role-based allow/deny rules, deny-overrides, enforced on transitions) + content filtering (secret/PII redaction). Remaining: policy at the target-invocation seam (with the executor), DLP config. |
 | 0.8.0 ✅ | **Executor** — the governed call site (`POST /execute`): resolve route → **role-based invoke authorization** → **quota** → **secrets injection** (decrypt + hand to backend, never returned) → **content filter** in/out → pluggable backend → audit (`invoke`/`invoke-failed`), with **failover** across routes. Ships a stub backend; real model/MCP/API backends register in `EXECUTORS`. |
-| 0.9.0 ◐ | Hardening toward 1.0: **API token rotation** (`POST /me/token/rotate`); secret-handling review; RBAC edge cases; retention/residency; more OAuth providers; rate/concurrency windows; real target backends; cost attribution by team. **Goal: land every entity so the schema is stable before 1.0.** |
+| 0.9.0 ◐ | Hardening: **`senior` role** (four-role ladder) with a **configurable per-process risk profile** (oversight + gates + checks + `min_approver_role`); **API token rotation**; seeds confirmed opt-in. |
+| 0.10.0  | **Async approval queue** — request→approve-later with a pending-approvals view, and **chained approvals** (e.g. a developer's platform/devops change needs a senior sign-off, *then* a platform sign-off). |
+| 0.11.0  | **Structured output in the executor** — a step/target may declare a schema; the executor requests structured (JSON) output from the model, validates it, and persists it structured (see `.claude/rules/structured-output.md`). Plus real target backends (Anthropic / OpenAI / MCP). |
+| 0.12.0  | Rate/concurrency windows on quotas; retention/purge & residency; cost attribution by team; more OAuth providers; secret-handling & RBAC review. |
 | 1.0.0   | Deployable release: `pip install open-refinery && open-refinery serve` self-host (`SECRET_KEY` only), full docs. **Schema frozen** — post-1.0 changes are additive-only (via the migration runner), no restructures. |
 
 **Schema stability.** All core entities land before 1.0 so the schema is stable

@@ -102,6 +102,7 @@ class NewProcess(BaseModel):
     oversight: str = "dark"
     gates: list[str] | None = None
     checks: dict[str, list[str]] | None = None
+    min_approver_role: str = "senior"
 
 
 class NewWorkItem(BaseModel):
@@ -293,6 +294,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
             session, body.name, body.archetype, body.stages, user.id,
             transitions=body.transitions, initial=body.initial,
             oversight=body.oversight, gates=body.gates, checks=body.checks,
+            min_approver_role=body.min_approver_role,
         )
 
     @app.get("/processes")

@@ -16,8 +16,20 @@ from sqlmodel import Session, select
 
 from .models import User, UserSession
 
-ROLES = ("developer", "platform", "admin")
+ROLES = ("developer", "senior", "platform", "admin")
+# Authority ladder: developer drives work; senior performs escalated ops and
+# approves developers' risky moves; platform sets org policy; admin audits all.
+ROLE_RANK = {"developer": 1, "senior": 2, "platform": 3, "admin": 4}
+MIN_APPROVER_ROLE = "senior"  # approvals of gated moves need senior or higher
 _PBKDF2_ROUNDS = 600_000
+
+
+def role_rank(role: str) -> int:
+    return ROLE_RANK.get(role, 0)
+
+
+def at_least(role: str, minimum: str) -> bool:
+    return role_rank(role) >= role_rank(minimum)
 
 
 class DuplicateUser(Exception):

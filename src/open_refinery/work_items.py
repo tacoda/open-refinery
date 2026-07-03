@@ -15,9 +15,11 @@ from .audit import AuditSink
 from .integrations import TRACKER_KINDS, get_integration, list_issues
 from .models import Process, Repository, User, WorkItem
 from .oversight import requires_approval
+from .policies import PolicyDenied
 from .policies import enforce as enforce_policy
 from .processes import get_process
 from .provenance import Record
+from .users import at_least
 
 
 class InvalidTransition(Exception):
@@ -104,8 +106,13 @@ def transition(session: Session, item_id: str, to: str, actor_id: str, audit: Au
             raise ApprovalRequired(
                 f"moving into {to!r} needs approval "
                 f"(process {process.name!r} is at oversight {process.oversight!r})")
-        if session.get(User, approver_id) is None:
+        approver = session.get(User, approver_id)
+        if approver is None:
             raise ValueError(f"unknown approver: {approver_id!r}")
+        # escalated: a risky move needs sign-off at the process's configured level
+        if not at_least(approver.role, process.min_approver_role):
+            raise PolicyDenied(
+                f"approval requires {process.min_approver_role}+ (got {approver.role!r})")
 
     item.current_stage = to
     session.add(item)

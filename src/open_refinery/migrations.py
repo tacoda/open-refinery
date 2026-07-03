@@ -20,6 +20,8 @@ import sqlite3
 MIGRATIONS: list[str] = [
     # v1 (0.4.0): synced work items carry an external tracker reference
     "ALTER TABLE work_items ADD COLUMN external_ref TEXT;",
+    # v2 (0.9.0): per-process risk profile — min role to approve a gated move
+    "ALTER TABLE processes ADD COLUMN min_approver_role TEXT NOT NULL DEFAULT 'senior';",
 ]
 
 

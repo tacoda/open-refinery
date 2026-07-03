@@ -56,13 +56,12 @@ Man-Month* — is the condition under which adding effort actually adds
 throughput, whereas work requiring communication incurs overhead that a central
 agent bottleneck would impose.
 
-> Status: **0.8.0.** Adds the **executor** (`POST /execute`) — the governed call
-> site that resolves a route, authorizes the invocation by role, consumes quota,
-> injects secrets at the boundary, content-filters in/out, calls a pluggable
-> backend, audits the call, and fails over across routes. Atop policy
-> governance, targets / routing / quotas, integrations, oversight, metrics, and
-> a full audit trail on the SQLModel data layer. Next: 0.9 hardening toward 1.0.
-> See [CHANGELOG.md](CHANGELOG.md).
+> Status: **0.9.0.** Hardening toward 1.0: a four-role ladder (developer <
+> **senior** < platform < admin) with a **configurable per-process risk profile**
+> (oversight, gated steps, required checks, min approver role), and API token
+> rotation — atop the executor, policy governance, targets / routing / quotas,
+> integrations, oversight, metrics, and a full audit trail. Auth is
+> email/password (+ GitHub OAuth). See [CHANGELOG.md](CHANGELOG.md).
 
 ## Quickstart
 
