@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'invitations' | 'events' | 'metrics'
+type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'invitations' | 'settings' | 'events' | 'metrics'
 const RANK: Record<string, number> = { developer: 1, senior: 2, platform: 3, admin: 4 }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
@@ -66,6 +66,7 @@ export default function App() {
                   <TabsTrigger value="targets">Targets</TabsTrigger>
                   <TabsTrigger value="policies">Policies</TabsTrigger>
                   {RANK[me.role] >= RANK.senior && <TabsTrigger value="invitations">Invitations</TabsTrigger>}
+                  {RANK[me.role] >= RANK.platform && <TabsTrigger value="settings">Settings</TabsTrigger>}
                   <TabsTrigger value="events">Audit</TabsTrigger>
                   <TabsTrigger value="metrics">Metrics</TabsTrigger>
                 </TabsList>
@@ -85,6 +86,7 @@ export default function App() {
               <TabsContent value="targets"><Targets /></TabsContent>
               <TabsContent value="policies"><Policies /></TabsContent>
               {RANK[me.role] >= RANK.senior && <TabsContent value="invitations"><Invitations me={me} /></TabsContent>}
+              {RANK[me.role] >= RANK.platform && <TabsContent value="settings"><Settings /></TabsContent>}
               <TabsContent value="events"><Events /></TabsContent>
               <TabsContent value="metrics"><Metrics /></TabsContent>
             </Tabs>
@@ -466,6 +468,49 @@ function Policies() {
               <div className="kv-row"><span className="muted">hits</span><span>{scan.hits.map((h: string) => <Badge key={h} variant="secondary">{h}</Badge>)}</span></div>
             </div>
           )}
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
+const SETTING_HINTS = [
+  'github.client_id', 'github.client_secret',
+  'gitlab.client_id', 'gitlab.client_secret',
+]
+
+function Settings() {
+  const [keys, setKeys] = useState<string[]>([])
+  const load = () => api('/settings').then((r) => setKeys(r.keys)).catch(fail)
+  useEffect(() => { load() }, [])
+  const [key, setKey] = useState(''), [value, setValue] = useState('')
+  const save = () => api('/settings', { method: 'PUT', body: JSON.stringify({ key, value }) })
+    .then(() => { setValue(''); load(); toast.success('saved') }).catch(fail)
+  const del = (k: string) => api(`/settings/${encodeURIComponent(k)}`, { method: 'DELETE' })
+    .then(load).catch(fail)
+  return (
+    <section className="page">
+      <h2 className="page-title">Settings</h2>
+      <Card>
+        <CardHeader><CardTitle>Configuration (stored encrypted; values never shown)</CardTitle></CardHeader>
+        <CardContent>
+          <div className="toolbar">
+            <Input className="field" placeholder="key (e.g. github.client_id)" value={key}
+                   list="setting-hints" onChange={(e) => setKey(e.target.value)} />
+            <datalist id="setting-hints">{SETTING_HINTS.map((h) => <option key={h} value={h} />)}</datalist>
+            <Input className="field" placeholder="value" type="password" value={value}
+                   onChange={(e) => setValue(e.target.value)} />
+            <Button onClick={save}>Save</Button>
+          </div>
+          <Table>
+            <TableHeader><TableRow><TableHead>Configured key</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>{keys.map((k) => (
+              <TableRow key={k}>
+                <TableCell className="mono">{k}</TableCell>
+                <TableCell><Button variant="outline" size="sm" onClick={() => del(k)}>Delete</Button></TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
         </CardContent>
       </Card>
     </section>

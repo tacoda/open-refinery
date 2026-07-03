@@ -151,6 +151,14 @@ class Invitation(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
+class Setting(SQLModel, table=True):
+    __tablename__ = "settings"
+    key: str = Field(primary_key=True)   # e.g. "github.client_id"
+    value: str                            # encrypted at rest
+    updated_by: str = Field(foreign_key="users.id")
+    updated_at: str = Field(default_factory=now_iso)
+
+
 class ConnectState(SQLModel, table=True):
     __tablename__ = "connect_states"
     state: str = Field(primary_key=True)

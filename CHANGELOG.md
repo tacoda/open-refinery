@@ -3,6 +3,16 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.12.5] — 2026-07-03
+
+### Changed
+- **Config lives in the database, not the environment.** OAuth provider client
+  id/secret are stored in an encrypted `Setting` store and resolved from there
+  (environment variables remain a fallback). Managed in the UI by platform/admin
+  via a new **Settings** tab and `/settings` API (values are encrypted at rest
+  and never returned — only keys). **Only `SECRET_KEY` is now required in the
+  environment.**
+
 ## [0.12.0] — 2026-07-03
 
 ### Added

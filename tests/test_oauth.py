@@ -48,7 +48,7 @@ def test_callback_rejects_state_mismatch(ctx):
 
 def test_callback_known_email_issues_session(ctx, monkeypatch):
     conn, client, user = ctx
-    monkeypatch.setattr(oauth, "exchange_code", lambda kind, code, uri: "gh-token")
+    monkeypatch.setattr(oauth, "exchange_code", lambda kind, code, uri, cid, sec: "gh-token")
     monkeypatch.setattr(oauth, "primary_email", lambda tok: "dev@x.dev")
     client.cookies.set("or_oauth_state", "s1")
     r = client.get("/auth/github/callback?code=abc&state=s1")
@@ -67,7 +67,7 @@ def test_connect_oauth_flow_creates_integration(ctx, monkeypatch):
 
     conn, client, user = ctx
     sess = create_session(conn, user.id)
-    monkeypatch.setattr(oauth, "exchange_code", lambda kind, code, uri: "svc-token")
+    monkeypatch.setattr(oauth, "exchange_code", lambda kind, code, uri, cid, sec: "svc-token")
     monkeypatch.setitem(integrations.ADAPTERS["github"], "verify", lambda tok: {"account": "acme"})
 
     start = client.post("/integrations/github/oauth/start",
@@ -82,7 +82,7 @@ def test_connect_oauth_flow_creates_integration(ctx, monkeypatch):
 
 def test_callback_unknown_email_denied(ctx, monkeypatch):
     _, client, _ = ctx
-    monkeypatch.setattr(oauth, "exchange_code", lambda kind, code, uri: "gh-token")
+    monkeypatch.setattr(oauth, "exchange_code", lambda kind, code, uri, cid, sec: "gh-token")
     monkeypatch.setattr(oauth, "primary_email", lambda tok: "stranger@x.dev")
     client.cookies.set("or_oauth_state", "s1")
     r = client.get("/auth/github/callback?code=abc&state=s1")

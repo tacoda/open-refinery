@@ -1,15 +1,15 @@
 """OAuth — a small provider registry for sign-in and service connections.
 
-Each provider is gated independently on its client-id/secret env vars: the
-button only appears when that provider is configured. GitHub also backs user
-login; the same exchange powers connecting any provider's service account.
+The registry holds each provider's endpoints/scopes and the env var names used as
+a *fallback* for its client id/secret. Credentials themselves are resolved by the
+caller (from DB settings first, then env) and passed in — these functions read no
+environment directly, so config can live in the database (see settings.py).
 Stdlib only.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import urllib.parse
 import urllib.request
 
@@ -33,19 +33,14 @@ PROVIDERS: dict[str, dict] = {
 }
 
 
-def is_enabled(kind: str = "github") -> bool:
-    p = PROVIDERS.get(kind)
-    return bool(p and os.environ.get(p["id_env"]) and os.environ.get(p["secret_env"]))
+def is_enabled(creds: dict | None) -> bool:
+    return bool(creds and creds.get("client_id") and creds.get("client_secret"))
 
 
-def enabled_providers() -> dict[str, bool]:
-    return {kind: is_enabled(kind) for kind in PROVIDERS}
-
-
-def authorize_url(kind: str, state: str, redirect_uri: str, scope: str) -> str:
+def authorize_url(kind: str, state: str, redirect_uri: str, scope: str, client_id: str) -> str:
     p = PROVIDERS[kind]
     params = urllib.parse.urlencode({
-        "client_id": os.environ[p["id_env"]],
+        "client_id": client_id,
         "redirect_uri": redirect_uri,
         "scope": scope,
         "state": state,
@@ -54,12 +49,13 @@ def authorize_url(kind: str, state: str, redirect_uri: str, scope: str) -> str:
     return f"{p['authorize']}?{params}"
 
 
-def exchange_code(kind: str, code: str, redirect_uri: str) -> str:
+def exchange_code(kind: str, code: str, redirect_uri: str,
+                  client_id: str, client_secret: str) -> str:
     """Trade an authorization code for an access token."""
     p = PROVIDERS[kind]
     fields = {
-        "client_id": os.environ[p["id_env"]],
-        "client_secret": os.environ[p["secret_env"]],
+        "client_id": client_id,
+        "client_secret": client_secret,
         "code": code,
         "redirect_uri": redirect_uri,
     }

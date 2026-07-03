@@ -53,6 +53,7 @@ from .policies import (
 )
 from .processes import create_process, list_processes
 from .repositories import DuplicateRepository, create_repository, import_or_get, list_repositories
+from .settings import delete_setting, get_setting, list_setting_keys, set_setting
 from .store import DEFAULT_DATABASE_URL, SqliteSink, engine_for, query_events
 from .targets import (
     QuotaExceeded,
@@ -141,6 +142,11 @@ class NewInvitation(BaseModel):
 class AcceptInvite(BaseModel):
     token: str
     password: str
+
+
+class SettingBody(BaseModel):
+    key: str
+    value: str
 
 
 class Attest(BaseModel):
@@ -265,6 +271,15 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
             exc,
             lambda _req, e, code=code: JSONResponse({"detail": str(e)}, status_code=code),
         )
+
+    def provider_creds(session: Session, kind: str) -> dict | None:
+        """OAuth client creds: DB settings first, then env fallback."""
+        p = oauth.PROVIDERS.get(kind)
+        if not p:
+            return None
+        cid = get_setting(session, f"{kind}.client_id") or os.environ.get(p["id_env"])
+        csec = get_setting(session, f"{kind}.client_secret") or os.environ.get(p["secret_env"])
+        return {"client_id": cid, "client_secret": csec} if cid and csec else None
 
     def _base(request: Request) -> str:
         return os.environ.get("APP_BASE_URL", str(request.base_url)).rstrip("/")
@@ -448,11 +463,14 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     @app.post("/integrations/{kind}/oauth/start")
     def connect_start(kind: str, request: Request, session: Session = Depends(get_session),
                       user: User = Depends(current_user)):
-        if not oauth.is_enabled(kind):
+        creds = provider_creds(session, kind)
+        if not oauth.is_enabled(creds):
             raise HTTPException(status_code=404, detail=f"{kind} oauth not configured")
         state = create_connect_state(session, user.id, kind)
         scope = oauth.PROVIDERS[kind]["connect_scope"]
-        return {"authorize_url": oauth.authorize_url(kind, state, _connect_redirect(request, kind), scope)}
+        url = oauth.authorize_url(kind, state, _connect_redirect(request, kind), scope,
+                                  creds["client_id"])
+        return {"authorize_url": url}
 
     @app.get("/integrations/{kind}/oauth/callback")
     def connect_callback(kind: str, request: Request, code: str = "", state: str = "",
@@ -460,7 +478,9 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         user_id = pop_connect_state(session, state)
         if user_id is None:
             return RedirectResponse(_home(request) + "#integration_error=state")
-        token = oauth.exchange_code(kind, code, _connect_redirect(request, kind))
+        creds = provider_creds(session, kind)
+        token = oauth.exchange_code(kind, code, _connect_redirect(request, kind),
+                                    creds["client_id"], creds["client_secret"])
         create_integration(session, kind, {"token": token}, user_id)
         return RedirectResponse(_home(request) + f"#connected={kind}")
 
@@ -567,27 +587,31 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         return {"token": create_session(session, user.id), "user": user}
 
     @app.get("/auth/providers")
-    def providers():
-        return oauth.enabled_providers()
+    def providers(session: Session = Depends(get_session)):
+        return {kind: oauth.is_enabled(provider_creds(session, kind)) for kind in oauth.PROVIDERS}
 
     @app.get("/auth/github/login")
-    def github_login(request: Request):
-        if not oauth.is_enabled("github"):
+    def github_login(request: Request, session: Session = Depends(get_session)):
+        creds = provider_creds(session, "github")
+        if not oauth.is_enabled(creds):
             raise HTTPException(status_code=404, detail="github oauth not configured")
         state = secrets.token_urlsafe(16)
         scope = oauth.PROVIDERS["github"]["login_scope"]
-        resp = RedirectResponse(oauth.authorize_url("github", state, _redirect_uri(request), scope))
+        resp = RedirectResponse(
+            oauth.authorize_url("github", state, _redirect_uri(request), scope, creds["client_id"]))
         resp.set_cookie("or_oauth_state", state, httponly=True, max_age=600, samesite="lax")
         return resp
 
     @app.get("/auth/github/callback")
     def github_callback(request: Request, code: str = "", state: str = "",
                         session: Session = Depends(get_session)):
-        if not oauth.is_enabled("github"):
+        creds = provider_creds(session, "github")
+        if not oauth.is_enabled(creds):
             raise HTTPException(status_code=404, detail="github oauth not configured")
         if not state or state != request.cookies.get("or_oauth_state"):
             raise HTTPException(status_code=400, detail="oauth state mismatch")
-        access = oauth.exchange_code("github", code, _redirect_uri(request))
+        access = oauth.exchange_code("github", code, _redirect_uri(request),
+                                     creds["client_id"], creds["client_secret"])
         email = oauth.primary_email(access)
         user = user_by_email(session, email) if email else None
         if user is None:
@@ -596,6 +620,24 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         resp = RedirectResponse(f"{_home(request)}#token={token}")
         resp.delete_cookie("or_oauth_state")
         return resp
+
+    # --- settings (encrypted config in the DB; admin/platform) ---
+    @app.get("/settings")
+    def get_settings(session: Session = Depends(get_session),
+                     _: User = Depends(require("platform", "admin"))):
+        return {"keys": list_setting_keys(session)}  # values never returned
+
+    @app.put("/settings")
+    def put_setting(body: SettingBody, session: Session = Depends(get_session),
+                    user: User = Depends(require("platform", "admin"))):
+        set_setting(session, body.key, body.value, user.id)
+        return {"status": "saved", "key": body.key}
+
+    @app.delete("/settings/{key}")
+    def remove_setting(key: str, session: Session = Depends(get_session),
+                       _: User = Depends(require("platform", "admin"))):
+        delete_setting(session, key)
+        return {"status": "deleted"}
 
     # Serve the built dashboard last so API routes always match first.
     if (_STATIC / "index.html").exists():

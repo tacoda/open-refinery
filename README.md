@@ -56,13 +56,13 @@ Man-Month* — is the condition under which adding effort actually adds
 throughput, whereas work requiring communication incurs overhead that a central
 agent bottleneck would impose.
 
-> Status: **0.12.0.** Adds **role-gated user invitations** — invite a lower role
-> by email with an expiring link; the invitee sets their own password to join
-> (email is a swappable port). Atop structured output, the async approval queue +
-> chained approvals, the four-role ladder + configurable risk profile, the
-> executor, policy governance, targets / routing / quotas, integrations,
-> oversight, metrics, and a full audit trail. Self-hosted API docs at
-> `/api-docs`. See [CHANGELOG.md](https://github.com/tacoda/open-refinery/blob/main/CHANGELOG.md).
+> Status: **0.12.5.** Configuration lives in the **database, not the env** — OAuth
+> provider creds are UI-managed (platform/admin) and encrypted at rest, so **only
+> `SECRET_KEY` is required in the environment**. Atop role-gated invitations,
+> structured output, the async approval queue + chained approvals, the four-role
+> ladder + configurable risk profile, the executor, policy governance, targets /
+> routing / quotas, integrations, oversight, metrics, and a full audit trail.
+> Self-hosted API docs at `/api-docs`. See [CHANGELOG.md](https://github.com/tacoda/open-refinery/blob/main/CHANGELOG.md).
 
 ## Quickstart
 

@@ -66,7 +66,8 @@ from .invitations import (
     list_invitations,
     revoke_invitation,
 )
-from .models import ApprovalRequest, Invitation, Policy, Quota, Route, Target
+from .models import ApprovalRequest, Invitation, Policy, Quota, Route, Setting, Target
+from .settings import delete_setting, get_setting, list_setting_keys, set_setting
 from .policies import (
     PolicyDenied,
     create_policy,
@@ -112,7 +113,7 @@ from .users import (
     user_by_token,
 )
 
-__version__ = "0.12.0"
+__version__ = "0.12.5"
 
 __all__ = [
     "Factory",
@@ -227,5 +228,10 @@ __all__ = [
     "MemorySender",
     "send_email",
     "set_sender",
+    "Setting",
+    "get_setting",
+    "set_setting",
+    "list_setting_keys",
+    "delete_setting",
     "__version__",
 ]
