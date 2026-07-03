@@ -192,7 +192,10 @@ make dist               # build UI + wheel (the wheel bundles the SPA)
 
 The build step is release-time only; end users never need bun/node.
 
-See [PLAN.md](PLAN.md), [CONTRIBUTING.md](CONTRIBUTING.md), and
+For a full fresh-VPS walkthrough — install, background the server, create the
+admin, ports, and HTTPS/TLS on a public host — see [USER_GUIDE.md](USER_GUIDE.md).
+
+See also [PLAN.md](PLAN.md), [CONTRIBUTING.md](CONTRIBUTING.md), and
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Credits

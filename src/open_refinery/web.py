@@ -28,6 +28,7 @@ from .integrations import (
     create_integration,
     delete_integration,
     list_integrations,
+    list_issues,
     list_remote_repos,
     pop_connect_state,
 )
@@ -58,6 +59,7 @@ from .work_items import (
     UnknownWorkItem,
     create_work_item,
     list_work_items,
+    sync_tracker,
     transition,
 )
 
@@ -116,7 +118,12 @@ class Credentials(BaseModel):
 
 class NewIntegration(BaseModel):
     kind: str
-    token: str
+    credential: dict[str, str]  # {token} for github/gitlab/linear; {site,email,token} for jira
+
+
+class SyncRequest(BaseModel):
+    repo_id: str
+    process_id: str
 
 
 # --- app ------------------------------------------------------------------
@@ -262,7 +269,7 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
     # --- integrations (external services) ---
     @app.post("/integrations", status_code=201)
     def add_integration(body: NewIntegration, user: User = Depends(current_user)):
-        return create_integration(db_conn(app), body.kind, body.token, user.id)
+        return create_integration(db_conn(app), body.kind, body.credential, user.id)
 
     @app.get("/integrations")
     def get_integrations(user: User = Depends(current_user)):
@@ -295,7 +302,7 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
         if user_id is None:
             return RedirectResponse(_home(request) + "#integration_error=state")
         token = oauth.exchange_code(kind, code, _connect_redirect(request, kind))
-        create_integration(db_conn(app), kind, token, user_id)
+        create_integration(db_conn(app), kind, {"token": token}, user_id)
         return RedirectResponse(_home(request) + f"#connected={kind}")
 
     @app.post("/integrations/{integ_id}/verify")
@@ -305,6 +312,15 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
     @app.get("/integrations/{integ_id}/repos")
     def integration_repos(integ_id: str, _: User = Depends(current_user)):
         return list_remote_repos(db_conn(app), integ_id)
+
+    @app.get("/integrations/{integ_id}/issues")
+    def integration_issues(integ_id: str, _: User = Depends(current_user)):
+        return list_issues(db_conn(app), integ_id)
+
+    @app.post("/integrations/{integ_id}/sync")
+    def sync_integration(integ_id: str, body: SyncRequest, user: User = Depends(current_user)):
+        return sync_tracker(db_conn(app), integ_id, body.repo_id, body.process_id,
+                            user.id, SqliteSink(db_conn(app)))
 
     # --- OAuth (GitHub) ---
     def _redirect_uri(request: Request) -> str:

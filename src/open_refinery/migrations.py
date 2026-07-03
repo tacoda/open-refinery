@@ -15,9 +15,12 @@ from __future__ import annotations
 
 import sqlite3
 
-# Append-only list of incremental schema changes. Empty at 0.2.0: the current
-# schema is the baseline. The runner exists so future changes reach live DBs.
-MIGRATIONS: list[str] = []
+# Append-only list of incremental schema changes. The current register_schema
+# reflects the latest shape (for fresh DBs); each entry evolves an existing DB.
+MIGRATIONS: list[str] = [
+    # v1 (0.4.0): synced work items carry an external tracker reference
+    "ALTER TABLE work_items ADD COLUMN external_ref TEXT;",
+]
 
 
 def _version(conn: sqlite3.Connection) -> int:

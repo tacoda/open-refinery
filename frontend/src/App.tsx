@@ -243,14 +243,20 @@ function Processes() {
 
 function Integrations() {
   const { rows, load } = useList('/integrations')
-  const [kind, setKind] = useState('github'), [token, setToken] = useState('')
+  const [kind, setKind] = useState('github')
+  const [token, setToken] = useState(''), [site, setSite] = useState(''), [email, setEmail] = useState('')
   const [providers, setProviders] = useState<Record<string, boolean>>({})
   useEffect(() => { api('/auth/providers').then(setProviders).catch(() => {}) }, [])
-  const connectToken = () => post('/integrations', { kind, token })
-    .then(() => { setToken(''); load(); toast.success('Connected') }).catch(fail)
+  const isJira = kind === 'jira'
+  const connectToken = () => {
+    const credential = isJira ? { site, email, token } : { token }
+    post('/integrations', { kind, credential })
+      .then(() => { setToken(''); setSite(''); setEmail(''); load(); toast.success('Connected') })
+      .catch(fail)
+  }
   const connectOAuth = () => post(`/integrations/${kind}/oauth/start`, {})
     .then((r) => { window.location.href = r.authorize_url }).catch(fail)
-  const KINDS = [['github', 'GitHub'], ['gitlab', 'GitLab']]
+  const KINDS = [['github', 'GitHub'], ['gitlab', 'GitLab'], ['linear', 'Linear'], ['jira', 'Jira']]
   return (
     <section className="page">
       <h2 className="page-title">Integrations</h2>
@@ -263,6 +269,10 @@ function Integrations() {
               <SelectContent>{KINDS.map(([v, label]) =>
                 <SelectItem key={v} value={v}>{label}</SelectItem>)}</SelectContent>
             </Select>
+            {isJira && <Input className="field" placeholder="site (acme.atlassian.net)"
+                              value={site} onChange={(e) => setSite(e.target.value)} />}
+            {isJira && <Input className="field" placeholder="email"
+                              value={email} onChange={(e) => setEmail(e.target.value)} />}
             <Input className="field" placeholder="access token" type="password" value={token}
                    onChange={(e) => setToken(e.target.value)} />
             <Button onClick={connectToken}>Connect with token</Button>
@@ -279,8 +289,11 @@ function Integrations() {
   )
 }
 
+const TRACKERS = ['jira', 'linear']
+
 function IntegrationCard({ integ, onChange }: any) {
   const [repos, setRepos] = useState<any[] | null>(null)
+  const tracker = TRACKERS.includes(integ.kind)
   const verify = () => api(`/integrations/${integ.id}/verify`, { method: 'POST' })
     .then((r) => toast.success(`Connected as ${r.account}`)).catch(fail)
   const browse = () => api(`/integrations/${integ.id}/repos`).then(setRepos).catch(fail)
@@ -297,9 +310,10 @@ function IntegrationCard({ integ, onChange }: any) {
         </div>
         <div className="work-actions">
           <Button variant="outline" size="sm" onClick={verify}>Verify</Button>
-          <Button variant="secondary" size="sm" onClick={browse}>Browse repos</Button>
+          {!tracker && <Button variant="secondary" size="sm" onClick={browse}>Browse repos</Button>}
           <Button variant="outline" size="sm" onClick={remove}>Disconnect</Button>
         </div>
+        {tracker && <SyncPanel integ={integ} />}
         {repos && (
           <Table>
             <TableBody>{repos.map((r) => (
@@ -313,6 +327,30 @@ function IntegrationCard({ integ, onChange }: any) {
         )}
       </CardContent>
     </Card>
+  )
+}
+
+function SyncPanel({ integ }: any) {
+  const [repos, setRepos] = useState<any[]>([]), [procs, setProcs] = useState<any[]>([])
+  const [repo, setRepo] = useState(''), [proc, setProc] = useState('')
+  useEffect(() => {
+    api('/repositories').then(setRepos).catch(() => {})
+    api('/processes').then(setProcs).catch(() => {})
+  }, [])
+  const sync = () => post(`/integrations/${integ.id}/sync`, { repo_id: repo, process_id: proc })
+    .then((r) => toast.success(`Synced: ${r.created} new, ${r.skipped} skipped`)).catch(fail)
+  return (
+    <div className="work-actions">
+      <Select value={repo} onValueChange={(v) => setRepo(v ?? '')}>
+        <SelectTrigger className="field"><SelectValue placeholder="into repo…" /></SelectTrigger>
+        <SelectContent>{repos.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
+      </Select>
+      <Select value={proc} onValueChange={(v) => setProc(v ?? '')}>
+        <SelectTrigger className="field"><SelectValue placeholder="using process…" /></SelectTrigger>
+        <SelectContent>{procs.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+      </Select>
+      <Button size="sm" onClick={sync}>Sync issues</Button>
+    </div>
   )
 }
 

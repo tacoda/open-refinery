@@ -29,20 +29,21 @@ def setup():
     return conn, ian
 
 
-def test_create_labels_by_account_and_stores_token_encrypted():
+def test_create_labels_by_account_and_stores_credential_encrypted():
     conn, ian = setup()
-    integ = create_integration(conn, "github", "gho_tok", ian.id)
+    integ = create_integration(conn, "github", {"token": "gho_tok"}, ian.id)
     assert integ.kind == "github" and integ.account == "acme"
-    assert not hasattr(integ, "token")  # no token on the dataclass
+    assert not hasattr(integ, "token")  # no credential on the dataclass
     secret = conn.execute("SELECT secret FROM integrations WHERE id=?", (integ.id,)).fetchone()["secret"]
-    assert secret != "gho_tok" and decrypt(secret) == "gho_tok"
+    assert "gho_tok" not in secret  # encrypted at rest
+    assert decrypt(secret) == '{"token": "gho_tok"}'
 
 
 def test_list_scopes_by_owner():
     conn, ian = setup()
     mal, _ = create_user(conn, "mal@x.dev", "pw", "developer")
-    create_integration(conn, "github", "t1", ian.id)
-    create_integration(conn, "github", "t2", mal.id)
+    create_integration(conn, "github", {"token": "t1"}, ian.id)
+    create_integration(conn, "github", {"token": "t2"}, mal.id)
     assert len(list_integrations(conn)) == 2
     assert len(list_integrations(conn, owner_id=ian.id)) == 1
 
@@ -50,38 +51,44 @@ def test_list_scopes_by_owner():
 def test_unknown_kind_rejected():
     conn, ian = setup()
     with pytest.raises(ValueError):
-        create_integration(conn, "bitbucket", "t", ian.id)
+        create_integration(conn, "bitbucket", {"token": "t"}, ian.id)
 
 
-def test_verify_and_repos_use_decrypted_token(monkeypatch):
+def test_verify_and_repos_use_decrypted_credential(monkeypatch):
     conn, ian = setup()
-    integ = create_integration(conn, "github", "gho_tok", ian.id)
+    integ = create_integration(conn, "github", {"token": "gho_tok"}, ian.id)
     seen = {}
-    def fake_verify(tok):
-        seen["tok"] = tok
+    def fake_verify(cred):
+        seen["cred"] = cred
         return {"account": "acme"}
     monkeypatch.setitem(integrations.ADAPTERS["github"], "verify", fake_verify)
     monkeypatch.setitem(integrations.ADAPTERS["github"], "list_repos",
-                        lambda tok: [{"name": "web", "full_name": "acme/web",
-                                      "ssh_url": "git@x:acme/web.git", "private": False}])
+                        lambda cred: [{"name": "web", "full_name": "acme/web",
+                                       "ssh_url": "git@x:acme/web.git", "private": False}])
     assert integrations.verify(conn, integ.id) == {"account": "acme"}
-    assert seen["tok"] == "gho_tok"  # decrypted token handed to the adapter
+    assert seen["cred"] == {"token": "gho_tok"}  # decrypted credential handed to the adapter
     assert integrations.list_remote_repos(conn, integ.id)[0]["full_name"] == "acme/web"
 
 
 def test_delete_integration():
     conn, ian = setup()
-    integ = create_integration(conn, "github", "gho_tok", ian.id)
+    integ = create_integration(conn, "github", {"token": "gho_tok"}, ian.id)
     assert len(list_integrations(conn)) == 1
     integrations.delete_integration(conn, integ.id)
     assert list_integrations(conn) == []
 
 
-def test_gitlab_kind_supported(monkeypatch):
+def test_jira_credential_is_multi_field(monkeypatch):
     conn, ian = setup()
-    monkeypatch.setitem(integrations.ADAPTERS["gitlab"], "verify", lambda t: {"account": "gl-user"})
-    integ = create_integration(conn, "gitlab", "glpat", ian.id)
-    assert integ.kind == "gitlab" and integ.account == "gl-user"
+    seen = {}
+    def fake(cred):
+        seen["cred"] = cred
+        return {"account": "Jira User"}
+    monkeypatch.setitem(integrations.ADAPTERS["jira"], "verify", fake)
+    integ = create_integration(conn, "jira",
+                               {"site": "acme.atlassian.net", "email": "a@x.dev", "token": "jtok"}, ian.id)
+    assert integ.kind == "jira" and integ.account == "Jira User"
+    assert seen["cred"]["site"] == "acme.atlassian.net"
 
 
 def test_connect_state_is_one_time():

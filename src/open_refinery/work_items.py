@@ -21,6 +21,7 @@ from .attestations import (
     unmet_checks,
 )
 from .audit import AuditSink
+from .integrations import TRACKER_KINDS, get_integration, list_issues
 from .oversight import requires_approval
 from .processes import get_process
 from .provenance import Record
@@ -35,7 +36,8 @@ register_schema(
         title         TEXT NOT NULL,
         current_stage TEXT NOT NULL,
         owner_id      TEXT NOT NULL REFERENCES users(id),
-        created_at    TEXT NOT NULL
+        created_at    TEXT NOT NULL,
+        external_ref  TEXT
     );
     CREATE INDEX IF NOT EXISTS ix_work_items_owner ON work_items(owner_id);
     CREATE INDEX IF NOT EXISTS ix_work_items_repo ON work_items(repo_id);
@@ -64,6 +66,7 @@ class WorkItem:
     current_stage: str
     owner_id: str
     created_at: str
+    external_ref: str | None = None  # e.g. "linear:ENG-123" for synced items
 
 
 def _row_to_item(row: sqlite3.Row) -> WorkItem:
@@ -75,6 +78,7 @@ def _row_to_item(row: sqlite3.Row) -> WorkItem:
         current_stage=row["current_stage"],
         owner_id=row["owner_id"],
         created_at=row["created_at"],
+        external_ref=row["external_ref"],
     )
 
 
@@ -88,6 +92,8 @@ def create_work_item(
     process_id: str,
     title: str,
     owner_id: str,
+    *,
+    external_ref: str | None = None,
 ) -> WorkItem:
     if not _exists(conn, "repositories", repo_id):
         raise ValueError(f"unknown repository: {repo_id!r}")
@@ -105,15 +111,24 @@ def create_work_item(
         current_stage=process.initial,  # every item starts at the process's initial step
         owner_id=owner_id,
         created_at=datetime.now(timezone.utc).isoformat(),
+        external_ref=external_ref,
     )
     conn.execute(
         "INSERT INTO work_items "
-        "(id, repo_id, process_id, title, current_stage, owner_id, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (item.id, repo_id, process_id, title, item.current_stage, owner_id, item.created_at),
+        "(id, repo_id, process_id, title, current_stage, owner_id, created_at, external_ref) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (item.id, repo_id, process_id, title, item.current_stage, owner_id,
+         item.created_at, external_ref),
     )
     conn.commit()
     return item
+
+
+def find_by_external_ref(conn: sqlite3.Connection, external_ref: str) -> WorkItem | None:
+    row = conn.execute(
+        "SELECT * FROM work_items WHERE external_ref = ?", (external_ref,)
+    ).fetchone()
+    return _row_to_item(row) if row else None
 
 
 def get_work_item(conn: sqlite3.Connection, item_id: str) -> WorkItem | None:
@@ -211,3 +226,40 @@ def transition(
             )
         )
     return WorkItem(**{**item.__dict__, "current_stage": to})
+
+
+def sync_tracker(
+    conn: sqlite3.Connection,
+    integ_id: str,
+    repo_id: str,
+    process_id: str,
+    actor_id: str,
+    audit: AuditSink,
+) -> dict:
+    """Import a tracker integration's issues as work items, deduped by external ref.
+
+    Each new item starts at the process's initial step, is owned by the syncing
+    actor, and records a `sync` audit event. Re-syncing skips already-imported
+    issues, so it is safe to run repeatedly.
+    """
+    integ = get_integration(conn, integ_id)
+    if integ is None:
+        raise ValueError(f"unknown integration: {integ_id!r}")
+    if integ.kind not in TRACKER_KINDS:
+        raise ValueError(f"{integ.kind} is not a work-item tracker")
+
+    created, skipped = 0, 0
+    for issue in list_issues(conn, integ_id):
+        ref = f"{integ.kind}:{issue['key']}"
+        if find_by_external_ref(conn, ref):
+            skipped += 1
+            continue
+        item = create_work_item(
+            conn, repo_id, process_id, issue["title"], actor_id, external_ref=ref
+        )
+        audit.write(Record.of(
+            recipe="sync", actor=actor_id, owner=actor_id,
+            inputs={"integration": integ_id, "key": issue["key"]}, output=ref, subject=item.id,
+        ))
+        created += 1
+    return {"created": created, "skipped": skipped}

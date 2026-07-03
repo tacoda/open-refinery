@@ -292,14 +292,21 @@ engine, oversight, metrics, and the dashboard all landed in it).
 | 0.1.0 ✅ | Core factory: authorize → produce → record → audit → log. |
 | 0.2.0 ✅ | Persistence (SQLite; Postgres seam), **versioned migrations** (`PRAGMA user_version` + append-only list), durable SQL event store. Entities: `User`, `Repository`, `Process`, `WorkItem`. |
 | 0.3.0 ✅ | Full app: FastAPI + auth (email/password, API tokens, **GitHub OAuth**, roles, ownership scoping, first-run wizard); **process engine** (steps + feedback loops, board/doctrine); **oversight** L0–L4 + approvals + attestations; **metrics** read-model; audit API; **React/shadcn dashboard** (bundled in the wheel); seeds. `pip install` + `serve`. |
-| 0.4.0   | **Integrations** (in progress): adapter framework + GitHub (import repos), then GitLab / Jira / Linear; UI token/OAuth connection, **encrypted credential store**, sync. Dashboard integrations view. |
-| 0.5.0   | Targets + routing + quotas: model/MCP/API targets, route rules, budgets, cost tracking, rate limits — all UI-managed. |
-| 0.6.0   | Governance policy layer + content filtering over transitions/targets. |
-| 0.7.0   | Hardening: token rotation, secret-handling review, RBAC edge cases, retention/residency; more OAuth providers; LangGraph stage executors. |
+| 0.4.0 ✅ | **Integrations**: adapter framework + GitHub & GitLab (import repos) and Jira & Linear (**work-item sync**, deduped by external ref); UI token *or* OAuth connection (per-provider gated), **encrypted credential store**, disconnect, idempotent import. Dashboard integrations + sync view. |
+| 0.5.0   | **Data-layer ORM**: introduce a lightweight ORM / repository abstraction over the raw `sqlite3` access so entities aren't tied to hand-written SQL — one backend today (SQLite), room for **other data sources** (Postgres, etc.) later. Keep migrations working; port modules incrementally behind the abstraction. |
+| 0.6.0   | Targets + routing + quotas: model/MCP/API targets, route rules, budgets, cost tracking, rate limits — all UI-managed. |
+| 0.7.0   | Governance policy layer + content filtering over transitions/targets. |
+| 0.8.0   | Hardening: token rotation, secret-handling review, RBAC edge cases, retention/residency; more OAuth providers; LangGraph stage executors. |
 | 1.0.0   | Deployable release: `pip install open-refinery && open-refinery serve` self-host (`SECRET_KEY` only), full docs. |
 
 ## Open questions
 
+- **Data-layer ORM (0.5.0)**: today each module owns hand-written `sqlite3` SQL
+  behind `store.register_schema`. Introduce an ORM / repository abstraction so
+  entities aren't SQL-coupled and other data sources can slot in later. Open:
+  which — SQLAlchemy Core (portable, heavier), a thin custom repository layer
+  (stays lean, ponytail), or `sqlmodel`/peewee? Must preserve the migration
+  system and let modules port incrementally. Decide before starting 0.5.0.
 - **Teams**: ownership is per-user in 0.x. Do we need team ownership (shared
   visibility) before 1.0, or defer? Affects the scoping model.
 - **Repo actions**: what does a stage *do* to a repo — run a command, open a

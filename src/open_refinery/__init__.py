@@ -27,11 +27,14 @@ from .attestations import (
     attestations_for,
 )
 from .integrations import (
+    SOURCE_KINDS,
+    TRACKER_KINDS,
     Integration,
     create_integration,
     delete_integration,
     get_integration,
     list_integrations,
+    list_issues,
 )
 from .migrations import run_migrations
 from .metrics import (
@@ -49,8 +52,10 @@ from .work_items import (
     UnknownWorkItem,
     WorkItem,
     create_work_item,
+    find_by_external_ref,
     get_work_item,
     list_work_items,
+    sync_tracker,
     transition,
 )
 from .users import (
@@ -123,6 +128,11 @@ __all__ = [
     "delete_integration",
     "get_integration",
     "list_integrations",
+    "list_issues",
+    "SOURCE_KINDS",
+    "TRACKER_KINDS",
+    "sync_tracker",
+    "find_by_external_ref",
     "import_or_get",
     "__version__",
 ]
