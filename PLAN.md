@@ -293,7 +293,7 @@ engine, oversight, metrics, and the dashboard all landed in it).
 | 0.2.0 ✅ | Persistence (SQLite; Postgres seam), **versioned migrations** (`PRAGMA user_version` + append-only list), durable SQL event store. Entities: `User`, `Repository`, `Process`, `WorkItem`. |
 | 0.3.0 ✅ | Full app: FastAPI + auth (email/password, API tokens, **GitHub OAuth**, roles, ownership scoping, first-run wizard); **process engine** (steps + feedback loops, board/doctrine); **oversight** L0–L4 + approvals + attestations; **metrics** read-model; audit API; **React/shadcn dashboard** (bundled in the wheel); seeds. `pip install` + `serve`. |
 | 0.4.0 ✅ | **Integrations**: adapter framework + GitHub & GitLab (import repos) and Jira & Linear (**work-item sync**, deduped by external ref); UI token *or* OAuth connection (per-provider gated), **encrypted credential store**, disconnect, idempotent import. Dashboard integrations + sync view. |
-| 0.5.0   | **Data-layer ORM**: introduce a lightweight ORM / repository abstraction over the raw `sqlite3` access so entities aren't tied to hand-written SQL — one backend today (SQLite), room for **other data sources** (Postgres, etc.) later. Keep migrations working; port modules incrementally behind the abstraction. |
+| 0.5.0   | **Data-layer ORM — SQLModel** (SQLAlchemy + Pydantic): express entities as SQLModel table models instead of hand-written `sqlite3` SQL, so they're well-typed, validated, and portable to **other data sources** (Postgres, …) later. Pydantic (already used for API bodies) becomes the shared type layer for entities and schemas. `connect()` returns a Session; keep the migration runner; port modules together (shared connection + in-memory tests make it all-or-nothing). |
 | 0.6.0   | Targets + routing + quotas: model/MCP/API targets, route rules, budgets, cost tracking, rate limits — all UI-managed. |
 | 0.7.0   | Governance policy layer + content filtering over transitions/targets. |
 | 0.8.0   | Hardening: token rotation, secret-handling review, RBAC edge cases, retention/residency; more OAuth providers; LangGraph stage executors. |
@@ -301,12 +301,21 @@ engine, oversight, metrics, and the dashboard all landed in it).
 
 ## Open questions
 
-- **Data-layer ORM (0.5.0)**: today each module owns hand-written `sqlite3` SQL
-  behind `store.register_schema`. Introduce an ORM / repository abstraction so
-  entities aren't SQL-coupled and other data sources can slot in later. Open:
-  which — SQLAlchemy Core (portable, heavier), a thin custom repository layer
-  (stays lean, ponytail), or `sqlmodel`/peewee? Must preserve the migration
-  system and let modules port incrementally. Decide before starting 0.5.0.
+- **Data-layer ORM (0.5.0) — SQLModel + Pydantic** (decided). Replace the
+  hand-written `sqlite3` SQL behind `store.register_schema` with SQLModel table
+  models. Known design points from a spike:
+  - `connect()` returns a `Session`; the shared-connection design + in-memory
+    tests mean modules port **together**, not incrementally.
+  - Web needs a **session per request** (SQLAlchemy Session isn't thread-safe);
+    the app holds the engine, a dependency yields a Session.
+  - Tests that compare returned rows by value (`==`) rely on the session
+    **identity map** returning the same instance — keep one session per test.
+  - `Process` structure (stages/transitions/gates/checks) → **JSON columns**;
+    `can_transition`/`required_checks` become model methods.
+  - Metrics aggregations (GROUP BY, MIN/MAX) → SQLAlchemy `func`/raw `text` via
+    the session. `Record` stays the provenance value object; the SQL sink writes
+    `Event` models. Keep the `PRAGMA user_version` migration runner (run on the
+    engine's raw DBAPI connection).
 - **Teams**: ownership is per-user in 0.x. Do we need team ownership (shared
   visibility) before 1.0, or defer? Affects the scoping model.
 - **Repo actions**: what does a stage *do* to a repo — run a command, open a
