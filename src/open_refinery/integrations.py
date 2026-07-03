@@ -25,12 +25,19 @@ register_schema(
     CREATE TABLE IF NOT EXISTS integrations (
         id         TEXT PRIMARY KEY,
         kind       TEXT NOT NULL,
-        name       TEXT NOT NULL,
+        account    TEXT NOT NULL,
         owner_id   TEXT NOT NULL REFERENCES users(id),
         secret     TEXT NOT NULL,
         created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS ix_integrations_owner ON integrations(owner_id);
+    -- short-lived state binding an OAuth connect flow back to the logged-in user
+    CREATE TABLE IF NOT EXISTS connect_states (
+        state      TEXT PRIMARY KEY,
+        user_id    TEXT NOT NULL REFERENCES users(id),
+        kind       TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );
     """
 )
 
@@ -39,13 +46,13 @@ register_schema(
 class Integration:
     id: str
     kind: str
-    name: str
+    account: str  # the connected external account (e.g. GitHub login)
     owner_id: str
     created_at: str
 
 
 def _row(row: sqlite3.Row) -> Integration:
-    return Integration(id=row["id"], kind=row["kind"], name=row["name"],
+    return Integration(id=row["id"], kind=row["kind"], account=row["account"],
                        owner_id=row["owner_id"], created_at=row["created_at"])
 
 
@@ -79,24 +86,47 @@ ADAPTERS = {
 # --- service layer --------------------------------------------------------
 
 def create_integration(
-    conn: sqlite3.Connection, kind: str, name: str, token: str, owner_id: str
+    conn: sqlite3.Connection, kind: str, token: str, owner_id: str
 ) -> Integration:
+    """Verify the token to label the integration by its account, then store it."""
     if kind not in KINDS:
         raise ValueError(f"unknown integration kind: {kind!r} (expected {KINDS})")
     if conn.execute("SELECT 1 FROM users WHERE id = ?", (owner_id,)).fetchone() is None:
         raise ValueError(f"unknown owner: {owner_id!r}")
 
+    account = ADAPTERS[kind]["verify"](token)["account"]  # validates the token too
     integ = Integration(
-        id=uuid.uuid4().hex, kind=kind, name=name, owner_id=owner_id,
+        id=uuid.uuid4().hex, kind=kind, account=account, owner_id=owner_id,
         created_at=datetime.now(timezone.utc).isoformat(),
     )
     conn.execute(
-        "INSERT INTO integrations (id, kind, name, owner_id, secret, created_at) "
+        "INSERT INTO integrations (id, kind, account, owner_id, secret, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?)",
-        (integ.id, kind, name, owner_id, encrypt(token), integ.created_at),
+        (integ.id, kind, account, owner_id, encrypt(token), integ.created_at),
     )
     conn.commit()
     return integ
+
+
+def create_connect_state(conn: sqlite3.Connection, user_id: str, kind: str) -> str:
+    """Mint a state token binding an OAuth connect flow to the logged-in user."""
+    state = uuid.uuid4().hex
+    conn.execute(
+        "INSERT INTO connect_states (state, user_id, kind, created_at) VALUES (?, ?, ?, ?)",
+        (state, user_id, kind, datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    return state
+
+
+def pop_connect_state(conn: sqlite3.Connection, state: str) -> str | None:
+    """Return the user_id for a connect state and consume it (one-time use)."""
+    row = conn.execute("SELECT user_id FROM connect_states WHERE state = ?", (state,)).fetchone()
+    if row is None:
+        return None
+    conn.execute("DELETE FROM connect_states WHERE state = ?", (state,))
+    conn.commit()
+    return row["user_id"]
 
 
 def get_integration(conn: sqlite3.Connection, integ_id: str) -> Integration | None:

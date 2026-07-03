@@ -25,10 +25,15 @@ export default function App() {
   useEffect(() => {
     const h = new URLSearchParams(window.location.hash.slice(1))
     const t = h.get('token'), e = h.get('oauth_error')
+    const connected = h.get('connected'), connErr = h.get('integration_error')
     if (t) { setToken(t); setTok(t); history.replaceState(null, '', '/') }
     else if (e) {
       toast.error(e === 'no-account' ? 'No account for that GitHub email — ask an admin.' : e)
       history.replaceState(null, '', '/')
+    } else if (connected) {
+      toast.success(`Connected ${connected}`); history.replaceState(null, '', '/')
+    } else if (connErr) {
+      toast.error('Connection failed'); history.replaceState(null, '', '/')
     }
   }, [])
 
@@ -238,22 +243,33 @@ function Processes() {
 
 function Integrations() {
   const { rows, load } = useList('/integrations')
-  const [kind, setKind] = useState('github'), [name, setName] = useState(''), [token, setToken] = useState('')
-  const add = () => post('/integrations', { kind, name, token })
-    .then(() => { setName(''); setToken(''); load() }).catch(fail)
+  const [kind, setKind] = useState('github'), [token, setToken] = useState('')
+  const [github, setGithub] = useState(false)
+  useEffect(() => { api('/auth/providers').then((p) => setGithub(!!p.github)).catch(() => {}) }, [])
+  const connectToken = () => post('/integrations', { kind, token })
+    .then(() => { setToken(''); load(); toast.success('Connected') }).catch(fail)
+  const connectOAuth = () => post('/integrations/github/oauth/start', {})
+    .then((r) => { window.location.href = r.authorize_url }).catch(fail)
   return (
     <section className="page">
       <h2 className="page-title">Integrations</h2>
-      <div className="toolbar">
-        <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
-          <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-          <SelectContent><SelectItem value="github">GitHub</SelectItem></SelectContent>
-        </Select>
-        <Input className="field" placeholder="name" value={name} onChange={(e) => setName(e.target.value)} />
-        <Input className="field" placeholder="access token" type="password" value={token}
-               onChange={(e) => setToken(e.target.value)} />
-        <Button onClick={add}>Connect</Button>
-      </div>
+      <Card>
+        <CardHeader><CardTitle>Connect a service</CardTitle></CardHeader>
+        <CardContent>
+          <div className="toolbar">
+            <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="github">GitHub</SelectItem></SelectContent>
+            </Select>
+            <Input className="field" placeholder="access token" type="password" value={token}
+                   onChange={(e) => setToken(e.target.value)} />
+            <Button onClick={connectToken}>Connect with token</Button>
+            {github && kind === 'github' && (
+              <Button variant="outline" onClick={connectOAuth}>Connect with GitHub OAuth</Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
       <div className="work-list">
         {rows.map((i) => <IntegrationCard key={i.id} integ={i} />)}
       </div>
@@ -272,7 +288,7 @@ function IntegrationCard({ integ }: any) {
     <Card>
       <CardContent>
         <div className="work-head">
-          <span className="work-title">{integ.name}</span>
+          <span className="work-title">{integ.account}</span>
           <Badge variant="secondary">{integ.kind}</Badge>
         </div>
         <div className="work-actions">

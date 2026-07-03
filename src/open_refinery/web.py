@@ -24,9 +24,11 @@ _STATIC = Path(__file__).parent / "static"
 
 from .attestations import AttestationFailed, AttestationMissing, attest
 from .integrations import (
+    create_connect_state,
     create_integration,
     list_integrations,
     list_remote_repos,
+    pop_connect_state,
 )
 from .integrations import verify as verify_integration
 from .metrics import summary
@@ -108,7 +110,6 @@ class Credentials(BaseModel):
 
 class NewIntegration(BaseModel):
     kind: str
-    name: str
     token: str
 
 
@@ -251,11 +252,35 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
     # --- integrations (external services) ---
     @app.post("/integrations", status_code=201)
     def add_integration(body: NewIntegration, user: User = Depends(current_user)):
-        return create_integration(db_conn(app), body.kind, body.name, body.token, user.id)
+        return create_integration(db_conn(app), body.kind, body.token, user.id)
 
     @app.get("/integrations")
     def get_integrations(user: User = Depends(current_user)):
         return list_integrations(db_conn(app), owner_id=owner_scope(user))
+
+    # Connect a service via OAuth (GitHub). The SPA is authenticated, so we bind
+    # the flow to the user with a one-time state; the callback (no auth header)
+    # resolves the user from that state.
+    def _connect_redirect(request: Request) -> str:
+        base = os.environ.get("APP_BASE_URL", str(request.base_url)).rstrip("/")
+        return f"{base}/integrations/github/oauth/callback"
+
+    @app.post("/integrations/github/oauth/start")
+    def github_connect_start(request: Request, user: User = Depends(current_user)):
+        if not oauth.is_enabled():
+            raise HTTPException(status_code=404, detail="github oauth not configured")
+        state = create_connect_state(db_conn(app), user.id, "github")
+        url = oauth.authorize_url(state, _connect_redirect(request), scope="repo read:user")
+        return {"authorize_url": url}
+
+    @app.get("/integrations/github/oauth/callback")
+    def github_connect_callback(request: Request, code: str = "", state: str = ""):
+        user_id = pop_connect_state(db_conn(app), state)
+        if user_id is None:
+            return RedirectResponse(_home(request) + "#integration_error=state")
+        token = oauth.exchange_code(code, _connect_redirect(request))
+        create_integration(db_conn(app), "github", token, user_id)
+        return RedirectResponse(_home(request) + "#connected=github")
 
     @app.post("/integrations/{integ_id}/verify")
     def check_integration(integ_id: str, _: User = Depends(current_user)):

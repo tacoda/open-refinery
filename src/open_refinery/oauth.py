@@ -23,11 +23,11 @@ def is_enabled() -> bool:
     return bool(os.environ.get("GITHUB_CLIENT_ID") and os.environ.get("GITHUB_CLIENT_SECRET"))
 
 
-def authorize_url(state: str, redirect_uri: str) -> str:
+def authorize_url(state: str, redirect_uri: str, scope: str = _SCOPE) -> str:
     params = urllib.parse.urlencode({
         "client_id": os.environ["GITHUB_CLIENT_ID"],
         "redirect_uri": redirect_uri,
-        "scope": _SCOPE,
+        "scope": scope,
         "state": state,
     })
     return f"{_AUTHORIZE}?{params}"
