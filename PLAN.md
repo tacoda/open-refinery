@@ -244,6 +244,11 @@ The point of "open": make finding events and metrics easy.
 
 ## Deployment & config (minimal setup)
 
+**Happy path to adoption:** spin up a VPS → install deps → set a minimal set of
+environment variables → `open-refinery serve`. After that, *all* management —
+users, accounts, repos, processes, integrations, everything — happens in the web
+UI. The CLI only seeds the first admin.
+
 **Config is data, not env.** Environment variables only bootstrap the process;
 *everything else* — users, integrations, targets, processes, routes, quotas,
 oversight levels — is managed in the web UI and stored in the database. A
@@ -315,7 +320,10 @@ API + SPA. Ships as a PyPI release — no container or orchestration required.
 
 ## Non-goals (for now)
 
-- Multi-tenant hosted SaaS (this is self-hosted single-tenant).
+- **Multi-tenancy / multi-org.** One install serves exactly one organization by
+  design — self-hosted, single-tenant. There is no org/tenant entity; users,
+  repos, and processes all live in the one company that runs the instance. The
+  standards cascade (platform ▸ developer) is *within* that single org.
 - Building a CI system — open-refinery orchestrates *processes*, it is not a
   build runner.
 - Speculative process archetypes beyond board + doctrine until asked.

@@ -13,6 +13,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from .attestations import AttestationFailed, AttestationMissing, attest
 from .processes import create_process, list_processes
 from .repositories import DuplicateRepository, create_repository, list_repositories
 from .store import DEFAULT_DATABASE_URL, SqliteSink, connect, query_events
@@ -50,6 +51,7 @@ class NewProcess(BaseModel):
     initial: str | None = None
     oversight: str = "dark"
     gates: list[str] | None = None
+    checks: dict[str, list[str]] | None = None
 
 
 class NewWorkItem(BaseModel):
@@ -61,6 +63,11 @@ class NewWorkItem(BaseModel):
 class Move(BaseModel):
     to: str
     approve: bool = False  # current user signs off, if the process requires it
+
+
+class Attest(BaseModel):
+    check: str
+    passed: bool = True
 
 
 # --- app ------------------------------------------------------------------
@@ -98,6 +105,8 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
         (DuplicateRepository, 409),
         (InvalidTransition, 409),
         (ApprovalRequired, 409),
+        (AttestationMissing, 409),
+        (AttestationFailed, 409),
         (UnknownWorkItem, 404),
         (ValueError, 400),
     ):
@@ -133,7 +142,7 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
         return create_process(
             db_conn(app), body.name, body.archetype, body.stages, user.id,
             transitions=body.transitions, initial=body.initial,
-            oversight=body.oversight, gates=body.gates,
+            oversight=body.oversight, gates=body.gates, checks=body.checks,
         )
 
     @app.get("/processes")
@@ -147,6 +156,11 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
     @app.get("/work-items")
     def get_work_items(user: User = Depends(current_user), repo_id: str | None = None):
         return list_work_items(db_conn(app), owner_id=owner_scope(user), repo_id=repo_id)
+
+    @app.post("/work-items/{item_id}/attest", status_code=201)
+    def add_attestation(item_id: str, body: Attest, user: User = Depends(current_user)):
+        attest(db_conn(app), item_id, body.check, user.id, body.passed, SqliteSink(db_conn(app)))
+        return {"status": "recorded"}
 
     @app.post("/work-items/{item_id}/transition")
     def move(item_id: str, body: Move, user: User = Depends(current_user)):

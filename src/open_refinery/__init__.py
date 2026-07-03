@@ -19,6 +19,12 @@ from .processes import (
     list_processes,
 )
 from .store import SqliteSink, connect, query_events
+from .attestations import (
+    AttestationFailed,
+    AttestationMissing,
+    attest,
+    attestations_for,
+)
 from .oversight import LEVELS, requires_approval
 from .work_items import (
     ApprovalRequired,
@@ -83,5 +89,9 @@ __all__ = [
     "transition",
     "LEVELS",
     "requires_approval",
+    "attest",
+    "attestations_for",
+    "AttestationMissing",
+    "AttestationFailed",
     "__version__",
 ]

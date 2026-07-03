@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from .oversight import LEVELS
@@ -46,9 +46,13 @@ class Process:
     created_at: str
     oversight: str = "dark"           # autonomy level; see oversight.LEVELS
     gates: frozenset[str] = frozenset()  # steps that need approval under supervised
+    checks: dict[str, tuple[str, ...]] = field(default_factory=dict)  # step -> required checks
 
     def can_transition(self, frm: str, to: str) -> bool:
         return (frm, to) in self.transitions
+
+    def required_checks(self, to: str) -> tuple[str, ...]:
+        return self.checks.get(to, ())
 
 
 def _derive_transitions(archetype: str, stages: tuple[str, ...]) -> frozenset[tuple[str, str]]:
@@ -69,6 +73,7 @@ def create_process(
     initial: str | None = None,
     oversight: str = "dark",
     gates: list[str] | None = None,
+    checks: dict[str, list[str]] | None = None,
 ) -> Process:
     if archetype not in ARCHETYPES:
         raise ValueError(f"unknown archetype: {archetype!r} (expected {ARCHETYPES})")
@@ -86,6 +91,11 @@ def create_process(
     unknown_gates = gates_f - set(stages_t)
     if unknown_gates:
         raise ValueError(f"gates reference unknown steps: {sorted(unknown_gates)}")
+
+    checks_d = {step: tuple(names) for step, names in (checks or {}).items()}
+    unknown_check_steps = set(checks_d) - set(stages_t)
+    if unknown_check_steps:
+        raise ValueError(f"checks reference unknown steps: {sorted(unknown_check_steps)}")
 
     trans = (
         frozenset(map(tuple, transitions))
@@ -110,6 +120,7 @@ def create_process(
         created_at=datetime.now(timezone.utc).isoformat(),
         oversight=oversight,
         gates=gates_f,
+        checks=checks_d,
     )
     conn.execute(
         "INSERT INTO processes (id, name, archetype, owner_id, definition, created_at) "
@@ -126,6 +137,7 @@ def create_process(
                     "initial": initial,
                     "oversight": oversight,
                     "gates": sorted(gates_f),
+                    "checks": {s: list(n) for s, n in checks_d.items()},
                 }
             ),
             process.created_at,
@@ -148,6 +160,7 @@ def _row_to_process(row: sqlite3.Row) -> Process:
         created_at=row["created_at"],
         oversight=d.get("oversight", "dark"),
         gates=frozenset(d.get("gates", ())),
+        checks={s: tuple(n) for s, n in d.get("checks", {}).items()},
     )
 
 

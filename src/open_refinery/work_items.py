@@ -14,6 +14,12 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from .attestations import (
+    AttestationFailed,
+    AttestationMissing,
+    attestations_for,
+    unmet_checks,
+)
 from .audit import AuditSink
 from .oversight import requires_approval
 from .processes import get_process
@@ -159,6 +165,16 @@ def transition(
     frm = item.current_stage
     if not process.can_transition(frm, to):
         raise InvalidTransition(f"{frm!r} -> {to!r} not allowed by process {process.name!r}")
+
+    # quality gate: required checks must be attested and passing to enter the step.
+    # Enforced at every oversight level — checks gate the move, oversight gates who signs off.
+    required = process.required_checks(to)
+    if required:
+        missing, failed = unmet_checks(attestations_for(conn, item_id), required)
+        if missing:
+            raise AttestationMissing(f"entering {to!r} needs checks attested: {missing}")
+        if failed:
+            raise AttestationFailed(f"entering {to!r} blocked by failed checks: {failed}")
 
     needs_approval = requires_approval(process.oversight, to, process.gates)
     if needs_approval:
