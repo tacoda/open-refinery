@@ -60,14 +60,26 @@ factory = Factory(audit=JsonlSink("audit.jsonl"))
 Each production appends one JSON line — a replayable record of who produced
 what, from which inputs, and when.
 
+## Docker
+
+```bash
+cp .env.example .env    # set SECRET_KEY
+make build              # build the image
+make up                 # start (detached); make logs / make down
+```
+
 ## Development
 
 ```bash
-uv sync --extra dev
-uv run pytest
+make install            # uv sync --extra dev
+make test               # uv run pytest
+make help               # list all tasks
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+`make` targets: `install build up down logs shell test run clean dist publish`.
+
+See [PLAN.md](PLAN.md), [CONTRIBUTING.md](CONTRIBUTING.md), and
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## License
 
