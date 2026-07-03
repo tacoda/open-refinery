@@ -44,6 +44,14 @@ from .integrations import (
 )
 from .integrations import verify as verify_integration
 from .metrics import summary
+from .approval_workflows import (
+    list_proposals,
+    list_workflows,
+    propose,
+    resubmit,
+    review,
+    set_workflow,
+)
 from .governance import landscape
 from .packs import disable_pack, enable_pack, list_packs, list_standards
 from .policies import (
@@ -216,6 +224,27 @@ class NewPolicy(BaseModel):
     content: str = ""
 
 
+class WorkflowBody(BaseModel):
+    layer: str
+    chain: list[str]
+
+
+class ProposeChange(BaseModel):
+    target_kind: str
+    action: str
+    payload: dict
+    layer: str
+
+
+class ReviewBody(BaseModel):
+    decision: str          # accept | deny | feedback
+    note: str = ""
+
+
+class ResubmitBody(BaseModel):
+    payload: dict | None = None
+
+
 class ScanRequest(BaseModel):
     text: str
 
@@ -356,6 +385,36 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def get_governance(session: Session = Depends(get_session),
                        _: User = Depends(require("admin"))):
         return landscape(session)
+
+    # --- per-layer approval workflows (govern changes to governance) ---
+    @app.get("/approval-workflows")
+    def get_workflows(session: Session = Depends(get_session), _: User = Depends(current_user)):
+        return list_workflows(session)
+
+    @app.post("/approval-workflows", status_code=201)
+    def put_workflow(body: WorkflowBody, session: Session = Depends(get_session),
+                     user: User = Depends(require("admin"))):
+        return set_workflow(session, body.layer, body.chain, user.id)
+
+    @app.post("/proposals", status_code=201)
+    def add_proposal(body: ProposeChange, session: Session = Depends(get_session),
+                     user: User = Depends(current_user)):
+        return propose(session, body.target_kind, body.action, body.payload, body.layer, user.id)
+
+    @app.get("/proposals")
+    def get_proposals(status: str | None = None, session: Session = Depends(get_session),
+                      _: User = Depends(current_user)):
+        return list_proposals(session, status=status)
+
+    @app.post("/proposals/{proposal_id}/review")
+    def review_proposal(proposal_id: str, body: ReviewBody,
+                        session: Session = Depends(get_session), user: User = Depends(current_user)):
+        return review(session, proposal_id, user.id, body.decision, SqliteSink(session), note=body.note)
+
+    @app.post("/proposals/{proposal_id}/resubmit")
+    def resubmit_proposal(proposal_id: str, body: ResubmitBody,
+                          session: Session = Depends(get_session), user: User = Depends(current_user)):
+        return resubmit(session, proposal_id, user.id, payload=body.payload)
 
     # --- packs (opt-in topic bundles; enable/disable role-gated) ---
     @app.get("/packs")

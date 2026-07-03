@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'packs' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics'
+type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
@@ -75,6 +75,7 @@ export default function App() {
                   <TabsTrigger value="targets">Targets</TabsTrigger>
                   <TabsTrigger value="policies">Policies</TabsTrigger>
                   <TabsTrigger value="packs">Packs</TabsTrigger>
+                  <TabsTrigger value="proposals">Proposals</TabsTrigger>
                   {canInvite && <TabsTrigger value="invitations">Invitations</TabsTrigger>}
                   {isPlatform && <TabsTrigger value="settings">Settings</TabsTrigger>}
                   {isAdmin && <TabsTrigger value="governance">Governance</TabsTrigger>}
@@ -97,6 +98,7 @@ export default function App() {
               <TabsContent value="targets"><Targets /></TabsContent>
               <TabsContent value="policies"><Policies /></TabsContent>
               <TabsContent value="packs"><Packs me={me} roles={roles} /></TabsContent>
+              <TabsContent value="proposals"><Proposals me={me} roles={roles} isAdmin={isAdmin} /></TabsContent>
               {canInvite && <TabsContent value="invitations"><Invitations me={me} roles={roles} /></TabsContent>}
               {isPlatform && <TabsContent value="settings"><Settings /></TabsContent>}
               {isAdmin && <TabsContent value="governance"><Governance /></TabsContent>}
@@ -540,6 +542,113 @@ function Settings() {
               <TableRow key={k}>
                 <TableCell className="mono">{k}</TableCell>
                 <TableCell><Button variant="outline" size="sm" onClick={() => del(k)}>Delete</Button></TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
+function Proposals({ me, roles, isAdmin }: any) {
+  const { rows, load } = useList('/proposals')
+  const { rows: wfRows, load: loadWf } = useList('/approval-workflows')
+  const rank = (r: string) => roles.find((x: Role) => x.name === r)?.rank ?? 0
+  const roleNames = roles.map((r: Role) => r.name)
+
+  // admin: configure a layer's approval chain
+  const [wfLayer, setWfLayer] = useState(''), [wfChain, setWfChain] = useState('')
+  useEffect(() => { if (!wfLayer && roleNames.length) setWfLayer(roleNames[0]) }, [roleNames, wfLayer])
+  const saveWf = () => post('/approval-workflows', {
+    layer: wfLayer, chain: wfChain.split(',').map((s) => s.trim()).filter(Boolean),
+  }).then(() => { setWfChain(''); loadWf() }).catch(fail)
+
+  // propose a policy-create change
+  const [layer, setLayer] = useState(''), [effect, setEffect] = useState('deny')
+  const [pAction, setPAction] = useState('invoke'), [resource, setResource] = useState('*')
+  const [strict, setStrict] = useState(false)
+  useEffect(() => { if (!layer && roleNames.length) setLayer(roleNames[0]) }, [roleNames, layer])
+  const propose = () => post('/proposals', {
+    target_kind: 'policy', action: 'create', layer,
+    payload: { effect, action: pAction, resource, strict, kind: 'rule' },
+  }).then(load).catch(fail)
+
+  const act = (p: any, decision: string) =>
+    post(`/proposals/${p.id}/review`, { decision, note: '' }).then(load).catch(fail)
+  const resub = (p: any) => post(`/proposals/${p.id}/resubmit`, {}).then(load).catch(fail)
+  const canReview = (p: any) => p.status === 'pending' && rank(me.role) >= rank(p.chain[p.current])
+
+  return (
+    <section className="page">
+      <h2 className="page-title">Change proposals</h2>
+      <p className="muted">Propose a governance change; it walks the layer's approval chain (accept / deny / feedback).</p>
+
+      {isAdmin && (
+        <Card>
+          <CardHeader><CardTitle>Approval workflow per layer (admin)</CardTitle></CardHeader>
+          <CardContent>
+            <div className="toolbar">
+              <Select value={wfLayer} onValueChange={(v) => setWfLayer(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue placeholder="layer…" /></SelectTrigger>
+                <SelectContent>{roleNames.map((r: string) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+              </Select>
+              <Input className="field" placeholder="chain: roles comma-sep (e.g. platform, admin)" value={wfChain} onChange={(e) => setWfChain(e.target.value)} />
+              <Button onClick={saveWf}>Save workflow</Button>
+            </div>
+            <Table>
+              <TableHeader><TableRow><TableHead>Layer</TableHead><TableHead>Chain</TableHead></TableRow></TableHeader>
+              <TableBody>{wfRows.map((w: any) => (
+                <TableRow key={w.layer}><TableCell>{w.layer}</TableCell><TableCell className="mono">{(w.chain || []).join(' → ')}</TableCell></TableRow>
+              ))}</TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader><CardTitle>Propose a policy rule</CardTitle></CardHeader>
+        <CardContent>
+          <div className="toolbar">
+            <Select value={layer} onValueChange={(v) => setLayer(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue placeholder="layer…" /></SelectTrigger>
+              <SelectContent>{roleNames.map((r: string) => <SelectItem key={r} value={r}>layer: {r}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={effect} onValueChange={(v) => setEffect(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+              <SelectContent>{['deny', 'allow'].map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
+            </Select>
+            <Input className="field" placeholder="action" value={pAction} onChange={(e) => setPAction(e.target.value)} />
+            <Input className="field" placeholder="resource" value={resource} onChange={(e) => setResource(e.target.value)} />
+            <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <input type="checkbox" checked={strict} onChange={(e) => setStrict(e.target.checked)} /> strict
+            </label>
+            <Button onClick={propose}>Propose</Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>Change</TableHead><TableHead>Layer</TableHead><TableHead>Chain</TableHead>
+              <TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>{rows.map((p: any) => (
+              <TableRow key={p.id}>
+                <TableCell className="mono">{p.target_kind}/{p.action} · {p.payload?.effect} {p.payload?.action}/{p.payload?.resource}{p.payload?.strict ? ' (strict)' : ''}</TableCell>
+                <TableCell>{p.layer}</TableCell>
+                <TableCell className="mono">{(p.chain || []).map((r: string, i: number) => i === p.current && p.status === 'pending' ? `[${r}]` : r).join(' → ')}</TableCell>
+                <TableCell><Badge variant={p.status === 'denied' ? 'destructive' : p.status === 'accepted' ? 'default' : 'secondary'}>{p.status}</Badge></TableCell>
+                <TableCell>
+                  {canReview(p) && <span style={{ display: 'flex', gap: '0.3rem' }}>
+                    <Button size="sm" onClick={() => act(p, 'accept')}>Accept</Button>
+                    <Button size="sm" variant="outline" onClick={() => act(p, 'feedback')}>Feedback</Button>
+                    <Button size="sm" variant="outline" onClick={() => act(p, 'deny')}>Deny</Button>
+                  </span>}
+                  {p.status === 'revising' && p.proposed_by === me.id &&
+                    <Button size="sm" onClick={() => resub(p)}>Resubmit</Button>}
+                </TableCell>
               </TableRow>
             ))}</TableBody>
           </Table>

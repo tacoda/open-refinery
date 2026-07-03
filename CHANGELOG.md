@@ -3,6 +3,26 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.3] — 2026-07-03
+
+### Added
+- **Per-layer approval workflows** — govern changes *to* governance. Admins
+  configure, per role **layer**, the ordered approval chain
+  (`GET/POST /approval-workflows`, admin). A **change proposal**
+  (`POST /proposals`) walks that chain with three outcomes at each step —
+  **accept** (advance; applies the change on the last slot), **deny** (stop),
+  **feedback** (send back to the proposer to **revise & resubmit**). Separation
+  of duties: a distinct signer per slot, each at or above the slot's role.
+  `POST /proposals/{id}/review`, `/resubmit`, `GET /proposals`. First supported
+  change is **policy-create** (authored at the proposer's layer, so it inherits
+  the right strict-precedence rank); the applier registry is extensible.
+  Dashboard **Proposals** tab (propose, review, resubmit; admin workflow config).
+
+### Note
+- Roadmap: **governance analysis** — flag rules that never fire (dead),
+  contradictions, likely prompt injection, and **drift**, per role level with
+  metrics + insights (feeds the landscape's stubbed `violations`).
+
 ## [0.13.2] — 2026-07-03
 
 ### Added

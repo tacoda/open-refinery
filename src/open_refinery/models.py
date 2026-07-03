@@ -201,6 +201,32 @@ class ApprovalRequest(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
+class ApprovalWorkflow(SQLModel, table=True):
+    """Admin-configured approval chain for governance changes at a role layer."""
+    __tablename__ = "approval_workflows"
+    layer: str = Field(primary_key=True)     # role name the change targets
+    chain: list = Field(default_factory=list, sa_column=Column(JSON))  # ordered roles
+    updated_by: str = Field(foreign_key="users.id")
+    updated_at: str = Field(default_factory=now_iso)
+
+
+class ChangeProposal(SQLModel, table=True):
+    """A proposed governance change walking a layer's approval workflow."""
+    __tablename__ = "change_proposals"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    target_kind: str                          # what to change (e.g. "policy")
+    action: str                               # create | update | delete
+    payload: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    layer: str                                # role layer → selects the workflow
+    proposed_by: str = Field(foreign_key="users.id", index=True)
+    chain: list = Field(default_factory=list, sa_column=Column(JSON))   # resolved ordered roles
+    decisions: list = Field(default_factory=list, sa_column=Column(JSON))  # [{role,user_id,decision,note,at}]
+    current: int = 0                          # next chain slot awaiting a decision
+    status: str = Field(default="pending", index=True)  # pending|accepted|denied|revising
+    applied_ref: str | None = None            # id of the object created/changed on accept
+    created_at: str = Field(default_factory=now_iso)
+
+
 class PackState(SQLModel, table=True):
     __tablename__ = "pack_states"
     key: str = Field(primary_key=True)      # pack catalog key

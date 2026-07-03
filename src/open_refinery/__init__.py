@@ -68,6 +68,14 @@ from .invitations import (
 )
 from .models import ApprovalRequest, Invitation, Policy, Quota, Route, Setting, Target
 from .settings import delete_setting, get_setting, list_setting_keys, set_setting
+from .approval_workflows import (
+    list_proposals,
+    list_workflows,
+    propose,
+    resubmit,
+    review,
+    set_workflow,
+)
 from .governance import landscape
 from .packs import (
     disable_pack,
@@ -223,6 +231,12 @@ __all__ = [
     "disable_pack",
     "list_standards",
     "landscape",
+    "set_workflow",
+    "list_workflows",
+    "propose",
+    "review",
+    "resubmit",
+    "list_proposals",
     "execute",
     "EXECUTORS",
     "ExecutionError",
