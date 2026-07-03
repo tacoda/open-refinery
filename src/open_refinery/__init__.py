@@ -4,6 +4,13 @@ from .audit import AuditSink, JsonlSink, MemorySink
 from .authz import AllowAll, AllowList, Authorizer, Unauthorized
 from .factory import Factory, UnknownRecipe
 from .provenance import Record
+from .repositories import (
+    DuplicateRepository,
+    Repository,
+    create_repository,
+    get_repository,
+    list_repositories,
+)
 from .store import SqliteSink, connect, query_events
 from .users import (
     ROLES,
@@ -38,5 +45,10 @@ __all__ = [
     "authenticate",
     "user_by_token",
     "rotate_token",
+    "Repository",
+    "DuplicateRepository",
+    "create_repository",
+    "get_repository",
+    "list_repositories",
     "__version__",
 ]
