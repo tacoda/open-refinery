@@ -59,7 +59,7 @@ The 0.1.0 core generalizes cleanly: a **recipe** becomes a **stage transition**,
 | Concept      | Meaning                                                                 |
 |--------------|-------------------------------------------------------------------------|
 | `User`       | Authenticated principal. Email, password hash, role (`developer`/`platform`/`admin`), hashed API token. |
-| `Repository` | A code repo the factory operates on. Imported from a source-control integration; has owner + credentials ref. |
+| `Repository` | **The atomic unit** the factory operates on ("project" is a synonym). One git repo = one `Repository`, regardless of code architecture: a monorepo is one repo; N services in N repos are N repos; microservices don't change the unit. Imported from a source-control integration; has owner + credentials ref. |
 | `Integration`| A team-configured connection to an external system via a pluggable **adapter** — source control (GitHub, GitLab), issue trackers (Jira, Linear), and more. Owns its own credentials; every call audited. Repos import from source-control integrations; work items can sync from trackers. |
 | `Process`    | A named, customizable workflow: ordered/graph of **stages** + allowed transitions + guards. Archetypes: **board** (kanban) or **doctrine** (fixed procedure). |
 | `Stage`      | A node in a process (e.g. `triage`, `patch`, `verify`, `done`).         |
@@ -207,9 +207,10 @@ src/open_refinery/
   resulting `Event`. No anonymous mutations.
 - **Roles** — three roles defined by *scope of authority*, not a simple
   permission ladder:
-  - `developer` — **drives work and sets project standards.** Creates and moves
-    work items; owns and tunes the standards for their own projects (the inner
-    layer of the cascade). Sees and acts on what they own.
+  - `developer` — **drives work and sets repository (project) standards.**
+    Creates and moves work items; owns and tunes the standards for their own
+    repos (the inner layer of the cascade). Sees and acts on what they own.
+    (Repository = project = the git repo; see the domain model.)
   - `platform` — **defines policy and standards for teams/organizations.** Sets
     the org/team-wide policy and standards that projects inherit (the outer
     layer), and configures the governance surface: integrations, targets,

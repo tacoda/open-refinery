@@ -14,20 +14,30 @@ from .provenance import Record
 
 DEFAULT_DATABASE_URL = "sqlite:///open-refinery.db"
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS events (
-    artifact_id   TEXT PRIMARY KEY,
-    recipe        TEXT NOT NULL,
-    actor         TEXT NOT NULL,
-    owner         TEXT NOT NULL,
-    input_digest  TEXT NOT NULL,
-    output_digest TEXT NOT NULL,
-    created_at    TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS ix_events_actor ON events(actor);
-CREATE INDEX IF NOT EXISTS ix_events_recipe ON events(recipe);
-CREATE INDEX IF NOT EXISTS ix_events_created_at ON events(created_at);
-"""
+# Modules register their DDL here so connect() applies every table's schema.
+# ponytail: a plain list, not a migration framework — good until schemas need
+# versioned upgrades, then reach for one.
+_SCHEMAS: list[str] = [
+    """
+    CREATE TABLE IF NOT EXISTS events (
+        artifact_id   TEXT PRIMARY KEY,
+        recipe        TEXT NOT NULL,
+        actor         TEXT NOT NULL,
+        owner         TEXT NOT NULL,
+        input_digest  TEXT NOT NULL,
+        output_digest TEXT NOT NULL,
+        created_at    TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS ix_events_actor ON events(actor);
+    CREATE INDEX IF NOT EXISTS ix_events_recipe ON events(recipe);
+    CREATE INDEX IF NOT EXISTS ix_events_created_at ON events(created_at);
+    """
+]
+
+
+def register_schema(ddl: str) -> None:
+    """Register a module's table DDL so connect() applies it."""
+    _SCHEMAS.append(ddl)
 
 
 def _sqlite_path(database_url: str) -> str:
@@ -46,7 +56,9 @@ def connect(database_url: str = DEFAULT_DATABASE_URL) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
-    conn.executescript(_SCHEMA)
+    conn.execute("PRAGMA foreign_keys=ON")
+    for ddl in _SCHEMAS:
+        conn.executescript(ddl)
     return conn
 
 

@@ -5,6 +5,15 @@ from .authz import AllowAll, AllowList, Authorizer, Unauthorized
 from .factory import Factory, UnknownRecipe
 from .provenance import Record
 from .store import SqliteSink, connect, query_events
+from .users import (
+    ROLES,
+    DuplicateUser,
+    User,
+    authenticate,
+    create_user,
+    rotate_token,
+    user_by_token,
+)
 
 __version__ = "0.1.0"
 
@@ -22,5 +31,12 @@ __all__ = [
     "SqliteSink",
     "connect",
     "query_events",
+    "User",
+    "ROLES",
+    "DuplicateUser",
+    "create_user",
+    "authenticate",
+    "user_by_token",
+    "rotate_token",
     "__version__",
 ]
