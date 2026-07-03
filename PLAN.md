@@ -205,20 +205,22 @@ src/open_refinery/
   per-user **API token** (stored hashed; shown once).
 - **Every request** carries the token → resolves to a `User` → stamped on any
   resulting `Event`. No anonymous mutations.
-- **Roles** (three levels, ascending scope):
-  - `developer` — ships work. Creates and moves work items; sees and acts only
-    on entities they own. Consumes the processes, targets, and integrations
-    that platform users configure.
-  - `platform` — runs the factory. Configures the governance surface:
-    integrations, targets, routes, quotas, processes, oversight levels and
-    gates. Sees platform-wide operational data and metrics. Does not get the
-    full personal audit trail / user management (that's admin).
-  - `admin` — sees everything: all work, all repos, all users, the complete
-    audit trail with the user tied to each action, plus user management. The
-    accountability authority.
-- Ownership scoping is enforced at the query layer, not just the UI. Roles are
-  a superset ladder: `admin` ⊇ `platform`'s config powers; `developer` is the
-  default seat.
+- **Roles** — three roles defined by *scope of authority*, not a simple
+  permission ladder:
+  - `developer` — **drives work and sets project standards.** Creates and moves
+    work items; owns and tunes the standards for their own projects (the inner
+    layer of the cascade). Sees and acts on what they own.
+  - `platform` — **defines policy and standards for teams/organizations.** Sets
+    the org/team-wide policy and standards that projects inherit (the outer
+    layer), and configures the governance surface: integrations, targets,
+    routes, quotas, processes, oversight levels and gates.
+  - `admin` — **audits everything.** Full read across all work, repos, users,
+    and the complete audit trail with the user tied to each action; user
+    management. The accountability and observability authority.
+- **Standards cascade** (mirrors the pds charter): `platform` (org/team) ▸
+  `developer` (project) — outer sets the floor, inner refines within it; a
+  project can tighten but not escape org policy.
+- Ownership scoping is enforced at the query layer, not just the UI.
 
 ## Observability tooling
 
