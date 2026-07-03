@@ -1,101 +1,92 @@
-"""Durable event store — persists and queries the audit trail.
+"""Database engine, sessions, and the durable audit sink — SQLModel over SQLite.
 
-The 0.1.0 core records events to a `MemorySink`. This backs them with SQLite so
-the audit trail survives restarts and is queryable. `DATABASE_URL` selects the
-store; only SQLite is wired today.
+`connect()` builds an engine, creates tables from the SQLModel metadata, runs
+pending migrations, and returns a `Session`. `engine_for()` exposes the engine
+for the web layer's per-request sessions. Only SQLite is wired today; the ORM
+keeps other backends within reach.
 """
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
+from sqlalchemy.engine import Engine
+from sqlalchemy.pool import StaticPool
+from sqlmodel import Session, SQLModel, create_engine, select
+
+from . import models  # noqa: F401 — import registers tables in SQLModel.metadata
+from .audit import AuditSink, MemorySink  # noqa: F401 — re-exported for convenience
+from .models import Event
 from .provenance import Record
 
 DEFAULT_DATABASE_URL = "sqlite:///open-refinery.db"
 
-# Modules register their DDL here so connect() applies every table's schema.
-# ponytail: a plain list, not a migration framework — good until schemas need
-# versioned upgrades, then reach for one.
-_SCHEMAS: list[str] = [
-    """
-    CREATE TABLE IF NOT EXISTS events (
-        artifact_id   TEXT PRIMARY KEY,
-        recipe        TEXT NOT NULL,
-        actor         TEXT NOT NULL,
-        owner         TEXT NOT NULL,
-        input_digest  TEXT NOT NULL,
-        output_digest TEXT NOT NULL,
-        subject       TEXT,
-        created_at    TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS ix_events_actor ON events(actor);
-    CREATE INDEX IF NOT EXISTS ix_events_recipe ON events(recipe);
-    CREATE INDEX IF NOT EXISTS ix_events_subject ON events(subject);
-    CREATE INDEX IF NOT EXISTS ix_events_created_at ON events(created_at);
-    """
-]
 
-
-def register_schema(ddl: str) -> None:
-    """Register a module's table DDL so connect() applies it."""
-    _SCHEMAS.append(ddl)
-
-
-def _sqlite_path(database_url: str) -> str:
-    # ponytail: sqlite only for now; Postgres joins at this seam when needed.
+def _sqlite_path(database_url: str) -> str | None:
     prefix = "sqlite:///"
-    if not database_url.startswith(prefix):
+    return database_url[len(prefix):] if database_url.startswith(prefix) else None
+
+
+def engine_for(database_url: str = DEFAULT_DATABASE_URL) -> Engine:
+    """Build an engine and ensure its schema + migrations are applied."""
+    if not database_url.startswith("sqlite"):
         raise ValueError(f"unsupported DATABASE_URL: {database_url!r} (sqlite only)")
-    return database_url[len(prefix):]  # sqlite:///rel, sqlite:////abs, sqlite:///:memory:
-
-
-def connect(
-    database_url: str = DEFAULT_DATABASE_URL, *, check_same_thread: bool = True
-) -> sqlite3.Connection:
-    """Open the store, applying the schema idempotently."""
     path = _sqlite_path(database_url)
-    if path != ":memory:":
+    if path and path != ":memory:":
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, check_same_thread=check_same_thread)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
+    kwargs: dict = {"connect_args": {"check_same_thread": False}}
+    if path == ":memory:":  # keep one shared in-memory DB across sessions
+        kwargs["poolclass"] = StaticPool
+    engine = create_engine(database_url, **kwargs)
+    _init_schema(engine)
+    return engine
 
-    # A brand-new DB gets the latest schema from register_schema and is stamped
-    # to the newest version; an existing DB is evolved by pending migrations.
+
+def _init_schema(engine: Engine) -> None:
     from .migrations import run_migrations, stamp_latest
 
-    fresh = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='events'"
-    ).fetchone() is None
-    for ddl in _SCHEMAS:
-        conn.executescript(ddl)
-    if fresh:
-        stamp_latest(conn)
-    else:
-        run_migrations(conn)
-    return conn
+    raw = engine.raw_connection()
+    try:
+        fresh = raw.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='events'"
+        ).fetchone() is None
+    finally:
+        raw.close()
+
+    SQLModel.metadata.create_all(engine)
+
+    raw = engine.raw_connection()
+    try:
+        raw.execute("PRAGMA foreign_keys=ON")
+        stamp_latest(raw) if fresh else run_migrations(raw)
+    finally:
+        raw.close()
 
 
-class SqliteSink:
-    """Durable `AuditSink` — one row per production event."""
+def connect(database_url: str = DEFAULT_DATABASE_URL, *, check_same_thread: bool = True) -> Session:
+    """Open the store (schema + migrations applied) and return a Session."""
+    return Session(engine_for(database_url))
 
-    def __init__(self, conn: sqlite3.Connection) -> None:
-        self._conn = conn
+
+# --- durable audit sink ---------------------------------------------------
+
+class SqlSink:
+    """Durable AuditSink — persists each event via the session."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
 
     def write(self, record: Record) -> None:
-        self._conn.execute(
-            "INSERT INTO events "
-            "(artifact_id, recipe, actor, owner, input_digest, output_digest, subject, created_at) "
-            "VALUES (:artifact_id, :recipe, :actor, :owner, :input_digest, :output_digest, :subject, :created_at)",
-            record.to_dict(),
-        )
-        self._conn.commit()
+        self._session.add(Event(**record.to_dict()))
+        self._session.commit()
+
+
+# Backwards-compatible alias — the SQL-backed sink used to be SqliteSink.
+SqliteSink = SqlSink
 
 
 def query_events(
-    conn: sqlite3.Connection,
+    session: Session,
     *,
     actor: str | None = None,
     recipe: str | None = None,
@@ -104,24 +95,20 @@ def query_events(
     since: str | None = None,
     until: str | None = None,
     limit: int = 100,
-) -> list[Record]:
+) -> list[Event]:
     """Query the audit trail, newest first. Filters combine with AND."""
-    clauses: list[str] = []
-    params: dict[str, object] = {}
-    for col, val in (("actor", actor), ("recipe", recipe), ("owner", owner), ("subject", subject)):
-        if val is not None:
-            clauses.append(f"{col} = :{col}")
-            params[col] = val
+    stmt = select(Event)
+    if actor is not None:
+        stmt = stmt.where(Event.actor == actor)
+    if recipe is not None:
+        stmt = stmt.where(Event.recipe == recipe)
+    if owner is not None:
+        stmt = stmt.where(Event.owner == owner)
+    if subject is not None:
+        stmt = stmt.where(Event.subject == subject)
     if since is not None:
-        clauses.append("created_at >= :since")
-        params["since"] = since
+        stmt = stmt.where(Event.created_at >= since)
     if until is not None:
-        clauses.append("created_at <= :until")
-        params["until"] = until
-
-    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-    params["limit"] = limit
-    rows = conn.execute(
-        f"SELECT * FROM events{where} ORDER BY created_at DESC LIMIT :limit", params
-    )
-    return [Record(**dict(row)) for row in rows]
+        stmt = stmt.where(Event.created_at <= until)
+    stmt = stmt.order_by(Event.created_at.desc()).limit(limit)
+    return list(session.exec(stmt))

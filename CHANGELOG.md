@@ -3,6 +3,19 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [Unreleased]
+
+### Changed
+- **Data layer ported to SQLModel** (SQLAlchemy + Pydantic). Entities are now
+  typed table models; modules use per-request `Session`s instead of hand-written
+  `sqlite3` SQL. Keeps the migration runner and the audit event store; opens the
+  door to other backends (Postgres, …).
+
+### Note
+- Pre-0.5 databases are **not migrated** across this change (the `processes`
+  table was restructured). Recreate the database. Breaking schema churn is
+  accepted before 1.0.0; structural migrations begin at 1.0.
+
 ## [0.4.0] — 2026-07-03
 
 ### Added

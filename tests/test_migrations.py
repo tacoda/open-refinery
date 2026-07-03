@@ -1,12 +1,15 @@
 import sqlite3
 
+from sqlalchemy import text
+
 from open_refinery import connect, run_migrations
 from open_refinery.migrations import MIGRATIONS
 
 
 def test_fresh_db_is_stamped_to_latest():
-    conn = connect("sqlite:///:memory:")
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
+    session = connect("sqlite:///:memory:")
+    version = session.exec(text("PRAGMA user_version")).one()[0]
+    assert version == len(MIGRATIONS)
 
 
 def test_run_migrations_applies_in_order_and_is_idempotent():

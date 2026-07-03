@@ -1,8 +1,8 @@
-"""Users, authentication, and API tokens.
+"""Users, authentication, sessions, and API tokens.
 
-Accountability starts here: every actor is a `User` with a role and a personal
-API token. Passwords are salted + PBKDF2-hashed; tokens are stored hashed and
-shown once. Stdlib crypto only — no external dependency.
+Every actor is a `User` with a role and a personal API token. Passwords are
+salted + PBKDF2-hashed; tokens (API and OAuth/password session) are stored
+hashed. Stdlib crypto only.
 """
 
 from __future__ import annotations
@@ -10,54 +10,18 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
-import sqlite3
-import uuid
-from dataclasses import dataclass
-from datetime import datetime, timezone
 
-from .store import register_schema
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, select
+
+from .models import User, UserSession
 
 ROLES = ("developer", "platform", "admin")
 _PBKDF2_ROUNDS = 600_000
 
-register_schema(
-    """
-    CREATE TABLE IF NOT EXISTS users (
-        id         TEXT PRIMARY KEY,
-        email      TEXT NOT NULL UNIQUE,
-        role       TEXT NOT NULL,
-        pw_salt    TEXT NOT NULL,
-        pw_hash    TEXT NOT NULL,
-        token_hash TEXT NOT NULL UNIQUE,
-        created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS ix_users_token ON users(token_hash);
-    """
-)
-
-register_schema(
-    """
-    CREATE TABLE IF NOT EXISTS sessions (
-        token_hash TEXT PRIMARY KEY,
-        user_id    TEXT NOT NULL REFERENCES users(id),
-        created_at TEXT NOT NULL
-    );
-    """
-)
-
 
 class DuplicateUser(Exception):
     """Raised when an email is already registered."""
-
-
-@dataclass(frozen=True)
-class User:
-    """A principal. Secrets (password/token hashes) stay in the store."""
-
-    id: str
-    email: str
-    role: str
-    created_at: str
 
 
 def _hash_pw(password: str, salt: bytes | None = None) -> tuple[str, str]:
@@ -75,90 +39,60 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def _row_to_user(row: sqlite3.Row) -> User:
-    return User(id=row["id"], email=row["email"], role=row["role"], created_at=row["created_at"])
-
-
-def create_user(
-    conn: sqlite3.Connection, email: str, password: str, role: str
-) -> tuple[User, str]:
-    """Create a user, returning the user and their **plaintext token (shown once)**."""
+def create_user(session: Session, email: str, password: str, role: str) -> tuple[User, str]:
+    """Create a user, returning the user and their plaintext token (shown once)."""
     if role not in ROLES:
         raise ValueError(f"unknown role: {role!r} (expected one of {ROLES})")
-
     salt_hex, hash_hex = _hash_pw(password)
     token = secrets.token_urlsafe(32)
-    user = User(
-        id=uuid.uuid4().hex,
-        email=email,
-        role=role,
-        created_at=datetime.now(timezone.utc).isoformat(),
-    )
+    user = User(email=email, role=role, pw_salt=salt_hex, pw_hash=hash_hex,
+                token_hash=_hash_token(token))
+    session.add(user)
     try:
-        conn.execute(
-            "INSERT INTO users (id, email, role, pw_salt, pw_hash, token_hash, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (user.id, email, role, salt_hex, hash_hex, _hash_token(token), user.created_at),
-        )
-        conn.commit()
-    except sqlite3.IntegrityError as exc:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
         raise DuplicateUser(email) from exc
+    session.refresh(user)
     return user, token
 
 
-def authenticate(conn: sqlite3.Connection, email: str, password: str) -> User | None:
-    """Return the user if email + password match, else None."""
-    row = conn.execute(
-        "SELECT * FROM users WHERE email = ?", (email,)
-    ).fetchone()
-    if row is None or not _verify_pw(password, row["pw_salt"], row["pw_hash"]):
+def authenticate(session: Session, email: str, password: str) -> User | None:
+    user = session.exec(select(User).where(User.email == email)).first()
+    if user is None or not _verify_pw(password, user.pw_salt, user.pw_hash):
         return None
-    return _row_to_user(row)
+    return user
 
 
-def user_by_token(conn: sqlite3.Connection, token: str) -> User | None:
-    """Resolve a bearer token to its user, else None."""
-    row = conn.execute(
-        "SELECT * FROM users WHERE token_hash = ?", (_hash_token(token),)
-    ).fetchone()
-    return _row_to_user(row) if row else None
+def user_by_token(session: Session, token: str) -> User | None:
+    return session.exec(select(User).where(User.token_hash == _hash_token(token))).first()
 
 
-def user_by_email(conn: sqlite3.Connection, email: str) -> User | None:
-    row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-    return _row_to_user(row) if row else None
+def user_by_email(session: Session, email: str) -> User | None:
+    return session.exec(select(User).where(User.email == email)).first()
 
 
-def count_users(conn: sqlite3.Connection) -> int:
-    return conn.execute("SELECT COUNT(*) n FROM users").fetchone()["n"]
+def count_users(session: Session) -> int:
+    return len(session.exec(select(User.id)).all())
 
 
-def create_session(conn: sqlite3.Connection, user_id: str) -> str:
-    """Issue a session token (e.g. after OAuth login). Returns the plaintext token."""
+def rotate_token(session: Session, user_id: str) -> str:
     token = secrets.token_urlsafe(32)
-    conn.execute(
-        "INSERT INTO sessions (token_hash, user_id, created_at) VALUES (?, ?, ?)",
-        (_hash_token(token), user_id, datetime.now(timezone.utc).isoformat()),
-    )
-    conn.commit()
+    user = session.get(User, user_id)
+    user.token_hash = _hash_token(token)
+    session.add(user)
+    session.commit()
     return token
 
 
-def session_user(conn: sqlite3.Connection, token: str) -> User | None:
-    """Resolve a session token to its user, else None."""
-    row = conn.execute(
-        "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id "
-        "WHERE s.token_hash = ?",
-        (_hash_token(token),),
-    ).fetchone()
-    return _row_to_user(row) if row else None
-
-
-def rotate_token(conn: sqlite3.Connection, user_id: str) -> str:
-    """Issue a fresh token for a user, invalidating the old one. Returns plaintext."""
+def create_session(session: Session, user_id: str) -> str:
+    """Issue a session token (after OAuth or password login). Returns plaintext."""
     token = secrets.token_urlsafe(32)
-    conn.execute(
-        "UPDATE users SET token_hash = ? WHERE id = ?", (_hash_token(token), user_id)
-    )
-    conn.commit()
+    session.add(UserSession(token_hash=_hash_token(token), user_id=user_id))
+    session.commit()
     return token
+
+
+def session_user(session: Session, token: str) -> User | None:
+    row = session.get(UserSession, _hash_token(token))
+    return session.get(User, row.user_id) if row else None

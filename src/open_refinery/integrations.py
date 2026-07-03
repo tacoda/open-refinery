@@ -1,7 +1,7 @@
 """Integrations — connections to external services.
 
-A team connects a service in the UI; its **credential** (a small dict — a token,
-or site/email/token for Jira) is encrypted at rest and used by a per-kind
+A team connects a service in the UI; its **credential** (a dict — a token, or
+site/email/token for Jira) is encrypted at rest and used by a per-kind
 **adapter**. Source hosts (GitHub, GitLab) list repositories; trackers (Jira,
 Linear) list issues to sync as work items. Credentials are never returned.
 """
@@ -10,53 +10,17 @@ from __future__ import annotations
 
 import base64
 import json
-import sqlite3
 import urllib.request
 import uuid
-from dataclasses import dataclass
-from datetime import datetime, timezone
+
+from sqlmodel import Session, select
 
 from .crypto import decrypt, encrypt
-from .store import register_schema
+from .models import ConnectState, Integration, User
 
 SOURCE_KINDS = ("github", "gitlab")   # list_repos
 TRACKER_KINDS = ("jira", "linear")    # list_issues
 KINDS = SOURCE_KINDS + TRACKER_KINDS
-
-register_schema(
-    """
-    CREATE TABLE IF NOT EXISTS integrations (
-        id         TEXT PRIMARY KEY,
-        kind       TEXT NOT NULL,
-        account    TEXT NOT NULL,
-        owner_id   TEXT NOT NULL REFERENCES users(id),
-        secret     TEXT NOT NULL,
-        created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS ix_integrations_owner ON integrations(owner_id);
-    -- short-lived state binding an OAuth connect flow back to the logged-in user
-    CREATE TABLE IF NOT EXISTS connect_states (
-        state      TEXT PRIMARY KEY,
-        user_id    TEXT NOT NULL REFERENCES users(id),
-        kind       TEXT NOT NULL,
-        created_at TEXT NOT NULL
-    );
-    """
-)
-
-
-@dataclass(frozen=True)
-class Integration:
-    id: str
-    kind: str
-    account: str  # the connected external account (e.g. GitHub login)
-    owner_id: str
-    created_at: str
-
-
-def _row(row: sqlite3.Row) -> Integration:
-    return Integration(id=row["id"], kind=row["kind"], account=row["account"],
-                       owner_id=row["owner_id"], created_at=row["created_at"])
 
 
 def _get_json(url: str, headers: dict, data: bytes | None = None):
@@ -146,97 +110,83 @@ ADAPTERS = {
 
 # --- service layer --------------------------------------------------------
 
-def create_integration(
-    conn: sqlite3.Connection, kind: str, credential: dict, owner_id: str
-) -> Integration:
+def create_integration(session: Session, kind: str, credential: dict, owner_id: str) -> Integration:
     """Verify the credential (labelling by account), then store it encrypted."""
     if kind not in KINDS:
         raise ValueError(f"unknown integration kind: {kind!r} (expected {KINDS})")
-    if conn.execute("SELECT 1 FROM users WHERE id = ?", (owner_id,)).fetchone() is None:
+    if session.get(User, owner_id) is None:
         raise ValueError(f"unknown owner: {owner_id!r}")
 
     account = ADAPTERS[kind]["verify"](credential)["account"]  # validates too
-    integ = Integration(
-        id=uuid.uuid4().hex, kind=kind, account=account, owner_id=owner_id,
-        created_at=datetime.now(timezone.utc).isoformat(),
-    )
-    conn.execute(
-        "INSERT INTO integrations (id, kind, account, owner_id, secret, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (integ.id, kind, account, owner_id, encrypt(json.dumps(credential)), integ.created_at),
-    )
-    conn.commit()
+    integ = Integration(kind=kind, account=account, owner_id=owner_id,
+                        secret=encrypt(json.dumps(credential)))
+    session.add(integ)
+    session.commit()
+    session.refresh(integ)
     return integ
 
 
-def create_connect_state(conn: sqlite3.Connection, user_id: str, kind: str) -> str:
+def create_connect_state(session: Session, user_id: str, kind: str) -> str:
     """Mint a state token binding an OAuth connect flow to the logged-in user."""
-    state = uuid.uuid4().hex
-    conn.execute(
-        "INSERT INTO connect_states (state, user_id, kind, created_at) VALUES (?, ?, ?, ?)",
-        (state, user_id, kind, datetime.now(timezone.utc).isoformat()),
-    )
-    conn.commit()
-    return state
+    row = ConnectState(state=uuid.uuid4().hex, user_id=user_id, kind=kind)
+    session.add(row)
+    session.commit()
+    return row.state
 
 
-def pop_connect_state(conn: sqlite3.Connection, state: str) -> str | None:
+def pop_connect_state(session: Session, state: str) -> str | None:
     """Return the user_id for a connect state and consume it (one-time use)."""
-    row = conn.execute("SELECT user_id FROM connect_states WHERE state = ?", (state,)).fetchone()
+    row = session.get(ConnectState, state)
     if row is None:
         return None
-    conn.execute("DELETE FROM connect_states WHERE state = ?", (state,))
-    conn.commit()
-    return row["user_id"]
+    user_id = row.user_id
+    session.delete(row)
+    session.commit()
+    return user_id
 
 
-def get_integration(conn: sqlite3.Connection, integ_id: str) -> Integration | None:
-    row = conn.execute("SELECT * FROM integrations WHERE id = ?", (integ_id,)).fetchone()
-    return _row(row) if row else None
+def get_integration(session: Session, integ_id: str) -> Integration | None:
+    return session.get(Integration, integ_id)
 
 
-def list_integrations(
-    conn: sqlite3.Connection, *, owner_id: str | None = None
-) -> list[Integration]:
-    if owner_id is None:
-        rows = conn.execute("SELECT * FROM integrations ORDER BY created_at DESC")
-    else:
-        rows = conn.execute(
-            "SELECT * FROM integrations WHERE owner_id = ? ORDER BY created_at DESC",
-            (owner_id,),
-        )
-    return [_row(r) for r in rows]
+def list_integrations(session: Session, *, owner_id: str | None = None) -> list[Integration]:
+    stmt = select(Integration)
+    if owner_id is not None:
+        stmt = stmt.where(Integration.owner_id == owner_id)
+    return list(session.exec(stmt.order_by(Integration.created_at.desc())))
 
 
-def delete_integration(conn: sqlite3.Connection, integ_id: str) -> None:
-    conn.execute("DELETE FROM integrations WHERE id = ?", (integ_id,))
-    conn.commit()
+def delete_integration(session: Session, integ_id: str) -> None:
+    integ = session.get(Integration, integ_id)
+    if integ is not None:
+        session.delete(integ)
+        session.commit()
 
 
-def _credential(conn: sqlite3.Connection, integ_id: str) -> dict:
-    row = conn.execute("SELECT secret FROM integrations WHERE id = ?", (integ_id,)).fetchone()
-    if row is None:
+def _credential(session: Session, integ_id: str) -> dict:
+    integ = session.get(Integration, integ_id)
+    if integ is None:
         raise ValueError(f"unknown integration: {integ_id!r}")
-    return json.loads(decrypt(row["secret"]))
+    return json.loads(decrypt(integ.secret))
 
 
-def _adapter_call(conn: sqlite3.Connection, integ_id: str, op: str):
-    integ = get_integration(conn, integ_id)
+def _adapter_call(session: Session, integ_id: str, op: str):
+    integ = get_integration(session, integ_id)
     if integ is None:
         raise ValueError(f"unknown integration: {integ_id!r}")
     fn = ADAPTERS[integ.kind].get(op)
     if fn is None:
         raise ValueError(f"{integ.kind} does not support {op}")
-    return fn(_credential(conn, integ_id))
+    return fn(_credential(session, integ_id))
 
 
-def verify(conn: sqlite3.Connection, integ_id: str) -> dict:
-    return _adapter_call(conn, integ_id, "verify")
+def verify(session: Session, integ_id: str) -> dict:
+    return _adapter_call(session, integ_id, "verify")
 
 
-def list_remote_repos(conn: sqlite3.Connection, integ_id: str) -> list[dict]:
-    return _adapter_call(conn, integ_id, "list_repos")
+def list_remote_repos(session: Session, integ_id: str) -> list[dict]:
+    return _adapter_call(session, integ_id, "list_repos")
 
 
-def list_issues(conn: sqlite3.Connection, integ_id: str) -> list[dict]:
-    return _adapter_call(conn, integ_id, "list_issues")
+def list_issues(session: Session, integ_id: str) -> list[dict]:
+    return _adapter_call(session, integ_id, "list_issues")

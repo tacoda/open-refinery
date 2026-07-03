@@ -1,48 +1,22 @@
 """Work items and the transition loop — the core of the factory.
 
 A `WorkItem` belongs to a repository and a process, sits at one step, and is
-owned by a user. Shipping work = transitioning it between steps. Every
-transition is a governed production: it checks the process allows the move,
-records an `Event` (subject = the work item), and returns the moved item. The
-item's history is `query_events(conn, subject=item.id)`.
+owned by a user. Shipping work = transitioning it between steps; every
+transition is a governed production (validate → oversight → apply → audit).
+Tracker issues are synced in as work items.
 """
 
 from __future__ import annotations
 
-import sqlite3
-import uuid
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from sqlmodel import Session, select
 
-from .attestations import (
-    AttestationFailed,
-    AttestationMissing,
-    attestations_for,
-    unmet_checks,
-)
+from .attestations import AttestationFailed, AttestationMissing, attestations_for, unmet_checks
 from .audit import AuditSink
 from .integrations import TRACKER_KINDS, get_integration, list_issues
+from .models import Process, Repository, User, WorkItem
 from .oversight import requires_approval
 from .processes import get_process
 from .provenance import Record
-from .store import register_schema
-
-register_schema(
-    """
-    CREATE TABLE IF NOT EXISTS work_items (
-        id            TEXT PRIMARY KEY,
-        repo_id       TEXT NOT NULL REFERENCES repositories(id),
-        process_id    TEXT NOT NULL REFERENCES processes(id),
-        title         TEXT NOT NULL,
-        current_stage TEXT NOT NULL,
-        owner_id      TEXT NOT NULL REFERENCES users(id),
-        created_at    TEXT NOT NULL,
-        external_ref  TEXT
-    );
-    CREATE INDEX IF NOT EXISTS ix_work_items_owner ON work_items(owner_id);
-    CREATE INDEX IF NOT EXISTS ix_work_items_repo ON work_items(repo_id);
-    """
-)
 
 
 class InvalidTransition(Exception):
@@ -57,206 +31,113 @@ class UnknownWorkItem(KeyError):
     """Raised when a work item id does not exist."""
 
 
-@dataclass(frozen=True)
-class WorkItem:
-    id: str
-    repo_id: str
-    process_id: str
-    title: str
-    current_stage: str
-    owner_id: str
-    created_at: str
-    external_ref: str | None = None  # e.g. "linear:ENG-123" for synced items
-
-
-def _row_to_item(row: sqlite3.Row) -> WorkItem:
-    return WorkItem(
-        id=row["id"],
-        repo_id=row["repo_id"],
-        process_id=row["process_id"],
-        title=row["title"],
-        current_stage=row["current_stage"],
-        owner_id=row["owner_id"],
-        created_at=row["created_at"],
-        external_ref=row["external_ref"],
-    )
-
-
-def _exists(conn: sqlite3.Connection, table: str, id_: str) -> bool:
-    return conn.execute(f"SELECT 1 FROM {table} WHERE id = ?", (id_,)).fetchone() is not None
-
-
-def create_work_item(
-    conn: sqlite3.Connection,
-    repo_id: str,
-    process_id: str,
-    title: str,
-    owner_id: str,
-    *,
-    external_ref: str | None = None,
-) -> WorkItem:
-    if not _exists(conn, "repositories", repo_id):
+def create_work_item(session: Session, repo_id: str, process_id: str, title: str,
+                     owner_id: str, *, external_ref: str | None = None) -> WorkItem:
+    if session.get(Repository, repo_id) is None:
         raise ValueError(f"unknown repository: {repo_id!r}")
-    if not _exists(conn, "users", owner_id):
+    if session.get(User, owner_id) is None:
         raise ValueError(f"unknown owner: {owner_id!r}")
-    process = get_process(conn, process_id)
+    process = session.get(Process, process_id)
     if process is None:
         raise ValueError(f"unknown process: {process_id!r}")
 
-    item = WorkItem(
-        id=uuid.uuid4().hex,
-        repo_id=repo_id,
-        process_id=process_id,
-        title=title,
-        current_stage=process.initial,  # every item starts at the process's initial step
-        owner_id=owner_id,
-        created_at=datetime.now(timezone.utc).isoformat(),
-        external_ref=external_ref,
-    )
-    conn.execute(
-        "INSERT INTO work_items "
-        "(id, repo_id, process_id, title, current_stage, owner_id, created_at, external_ref) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (item.id, repo_id, process_id, title, item.current_stage, owner_id,
-         item.created_at, external_ref),
-    )
-    conn.commit()
+    item = WorkItem(repo_id=repo_id, process_id=process_id, title=title,
+                    current_stage=process.initial, owner_id=owner_id, external_ref=external_ref)
+    session.add(item)
+    session.commit()
+    session.refresh(item)
     return item
 
 
-def find_by_external_ref(conn: sqlite3.Connection, external_ref: str) -> WorkItem | None:
-    row = conn.execute(
-        "SELECT * FROM work_items WHERE external_ref = ?", (external_ref,)
-    ).fetchone()
-    return _row_to_item(row) if row else None
+def get_work_item(session: Session, item_id: str) -> WorkItem | None:
+    return session.get(WorkItem, item_id)
 
 
-def get_work_item(conn: sqlite3.Connection, item_id: str) -> WorkItem | None:
-    row = conn.execute("SELECT * FROM work_items WHERE id = ?", (item_id,)).fetchone()
-    return _row_to_item(row) if row else None
+def find_by_external_ref(session: Session, external_ref: str) -> WorkItem | None:
+    return session.exec(select(WorkItem).where(WorkItem.external_ref == external_ref)).first()
 
 
-def list_work_items(
-    conn: sqlite3.Connection, *, owner_id: str | None = None, repo_id: str | None = None
-) -> list[WorkItem]:
-    clauses, params = [], []
+def list_work_items(session: Session, *, owner_id: str | None = None,
+                    repo_id: str | None = None) -> list[WorkItem]:
+    stmt = select(WorkItem)
     if owner_id is not None:
-        clauses.append("owner_id = ?")
-        params.append(owner_id)
+        stmt = stmt.where(WorkItem.owner_id == owner_id)
     if repo_id is not None:
-        clauses.append("repo_id = ?")
-        params.append(repo_id)
-    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-    rows = conn.execute(
-        f"SELECT * FROM work_items{where} ORDER BY created_at DESC", params
-    )
-    return [_row_to_item(row) for row in rows]
+        stmt = stmt.where(WorkItem.repo_id == repo_id)
+    return list(session.exec(stmt.order_by(WorkItem.created_at.desc())))
 
 
-def transition(
-    conn: sqlite3.Connection,
-    item_id: str,
-    to: str,
-    actor_id: str,
-    audit: AuditSink,
-    *,
-    approver_id: str | None = None,
-) -> WorkItem:
+def transition(session: Session, item_id: str, to: str, actor_id: str, audit: AuditSink,
+               *, approver_id: str | None = None) -> WorkItem:
     """Move a work item to a new step, recording the governed transition event.
 
-    Order is load-bearing: validate the move, enforce oversight, apply, then
-    audit — nothing is recorded unless the transition was allowed and applied.
-    If the process's oversight level requires approval, an `approver_id` must be
-    supplied or `ApprovalRequired` is raised; the approval is itself audited.
+    Validate the move, enforce required checks and oversight, apply, then audit —
+    nothing is recorded unless the transition was allowed and applied.
     """
-    item = get_work_item(conn, item_id)
+    item = get_work_item(session, item_id)
     if item is None:
         raise UnknownWorkItem(item_id)
-    if not _exists(conn, "users", actor_id):
+    if session.get(User, actor_id) is None:
         raise ValueError(f"unknown actor: {actor_id!r}")
 
-    process = get_process(conn, item.process_id)
-    assert process is not None  # FK guarantees the process exists
+    process = get_process(session, item.process_id)
     frm = item.current_stage
     if not process.can_transition(frm, to):
         raise InvalidTransition(f"{frm!r} -> {to!r} not allowed by process {process.name!r}")
 
-    # quality gate: required checks must be attested and passing to enter the step.
-    # Enforced at every oversight level — checks gate the move, oversight gates who signs off.
     required = process.required_checks(to)
     if required:
-        missing, failed = unmet_checks(attestations_for(conn, item_id), required)
+        missing, failed = unmet_checks(attestations_for(session, item_id), required)
         if missing:
             raise AttestationMissing(f"entering {to!r} needs checks attested: {missing}")
         if failed:
             raise AttestationFailed(f"entering {to!r} blocked by failed checks: {failed}")
 
-    needs_approval = requires_approval(process.oversight, to, process.gates)
+    needs_approval = requires_approval(process.oversight, to, set(process.gates))
     if needs_approval:
         if approver_id is None:
             raise ApprovalRequired(
                 f"moving into {to!r} needs approval "
-                f"(process {process.name!r} is at oversight {process.oversight!r})"
-            )
-        if not _exists(conn, "users", approver_id):
+                f"(process {process.name!r} is at oversight {process.oversight!r})")
+        if session.get(User, approver_id) is None:
             raise ValueError(f"unknown approver: {approver_id!r}")
 
-    conn.execute("UPDATE work_items SET current_stage = ? WHERE id = ?", (to, item_id))
-    conn.commit()
+    item.current_stage = to
+    session.add(item)
+    session.commit()
 
-    audit.write(
-        Record.of(
-            recipe="transition",
-            actor=actor_id,
-            owner=item.owner_id,
-            inputs={"from": frm, "process": item.process_id, "repo": item.repo_id},
-            output=to,
-            subject=item_id,
-        )
-    )
+    audit.write(Record.of(
+        recipe="transition", actor=actor_id, owner=item.owner_id,
+        inputs={"from": frm, "process": item.process_id, "repo": item.repo_id},
+        output=to, subject=item_id,
+    ))
     if needs_approval:  # record the sign-off as its own audit event
-        audit.write(
-            Record.of(
-                recipe="approval",
-                actor=approver_id,
-                owner=item.owner_id,
-                inputs={"to": to, "moved_by": actor_id, "oversight": process.oversight},
-                output="approved",
-                subject=item_id,
-            )
-        )
-    return WorkItem(**{**item.__dict__, "current_stage": to})
+        audit.write(Record.of(
+            recipe="approval", actor=approver_id, owner=item.owner_id,
+            inputs={"to": to, "moved_by": actor_id, "oversight": process.oversight},
+            output="approved", subject=item_id,
+        ))
+    session.refresh(item)  # reload after commit so all attributes serialize
+    return item
 
 
-def sync_tracker(
-    conn: sqlite3.Connection,
-    integ_id: str,
-    repo_id: str,
-    process_id: str,
-    actor_id: str,
-    audit: AuditSink,
-) -> dict:
-    """Import a tracker integration's issues as work items, deduped by external ref.
-
-    Each new item starts at the process's initial step, is owned by the syncing
-    actor, and records a `sync` audit event. Re-syncing skips already-imported
-    issues, so it is safe to run repeatedly.
-    """
-    integ = get_integration(conn, integ_id)
+def sync_tracker(session: Session, integ_id: str, repo_id: str, process_id: str,
+                 actor_id: str, audit: AuditSink) -> dict:
+    """Import a tracker integration's issues as work items, deduped by external ref."""
+    integ = get_integration(session, integ_id)
     if integ is None:
         raise ValueError(f"unknown integration: {integ_id!r}")
     if integ.kind not in TRACKER_KINDS:
         raise ValueError(f"{integ.kind} is not a work-item tracker")
 
     created, skipped = 0, 0
-    for issue in list_issues(conn, integ_id):
+    for issue in list_issues(session, integ_id):
         ref = f"{integ.kind}:{issue['key']}"
-        if find_by_external_ref(conn, ref):
+        if find_by_external_ref(session, ref):
             skipped += 1
             continue
-        item = create_work_item(
-            conn, repo_id, process_id, issue["title"], actor_id, external_ref=ref
-        )
+        item = create_work_item(session, repo_id, process_id, issue["title"], actor_id,
+                                external_ref=ref)
         audit.write(Record.of(
             recipe="sync", actor=actor_id, owner=actor_id,
             inputs={"integration": integ_id, "key": issue["key"]}, output=ref, subject=item.id,

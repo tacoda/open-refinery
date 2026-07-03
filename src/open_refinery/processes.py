@@ -1,75 +1,35 @@
 """Processes — declarative workflows work items move through.
 
-A `Process` is a set of stages plus the transitions allowed between them, owned
-by a user. Two archetypes ship: **board** (kanban — free movement between any
-stages) and **doctrine** (a fixed forward procedure). The definition is data;
-guards and stage actions attach later.
+A `Process` is a series of steps connected by transitions (a directed graph, so
+feedback loops are first-class), owned by a user. Archetypes: **board** (free
+movement) and **doctrine** (forward-linear). Structure lives in JSON columns.
 """
 
 from __future__ import annotations
 
-import json
-import sqlite3
-import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from sqlmodel import Session, select
 
+from .models import Process, User
 from .oversight import LEVELS
-from .store import register_schema
 
 ARCHETYPES = ("board", "doctrine")
 
-register_schema(
-    """
-    CREATE TABLE IF NOT EXISTS processes (
-        id         TEXT PRIMARY KEY,
-        name       TEXT NOT NULL,
-        archetype  TEXT NOT NULL,
-        owner_id   TEXT NOT NULL REFERENCES users(id),
-        definition TEXT NOT NULL,
-        created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS ix_processes_owner ON processes(owner_id);
-    """
-)
 
-
-@dataclass(frozen=True)
-class Process:
-    id: str
-    name: str
-    archetype: str
-    owner_id: str
-    stages: tuple[str, ...]
-    transitions: frozenset[tuple[str, str]]
-    initial: str
-    created_at: str
-    oversight: str = "dark"           # autonomy level; see oversight.LEVELS
-    gates: frozenset[str] = frozenset()  # steps that need approval under supervised
-    checks: dict[str, tuple[str, ...]] = field(default_factory=dict)  # step -> required checks
-
-    def can_transition(self, frm: str, to: str) -> bool:
-        return (frm, to) in self.transitions
-
-    def required_checks(self, to: str) -> tuple[str, ...]:
-        return self.checks.get(to, ())
-
-
-def _derive_transitions(archetype: str, stages: tuple[str, ...]) -> frozenset[tuple[str, str]]:
+def _derive_transitions(archetype: str, stages: list[str]) -> list[list[str]]:
     if archetype == "doctrine":  # strict forward procedure
-        return frozenset(zip(stages, stages[1:]))
+        return [[a, b] for a, b in zip(stages, stages[1:])]
     # board (kanban): free movement between any two distinct stages
-    return frozenset((a, b) for a in stages for b in stages if a != b)
+    return [[a, b] for a in stages for b in stages if a != b]
 
 
 def create_process(
-    conn: sqlite3.Connection,
+    session: Session,
     name: str,
     archetype: str,
     stages: list[str],
     owner_id: str,
     *,
-    transitions: list[tuple[str, str]] | None = None,
+    transitions: list | None = None,
     initial: str | None = None,
     oversight: str = "dark",
     gates: list[str] | None = None,
@@ -82,101 +42,43 @@ def create_process(
     if not stages:
         raise ValueError("a process needs at least one stage")
 
-    stages_t = tuple(stages)
-    initial = initial or stages_t[0]
-    if initial not in stages_t:
+    stages = list(stages)
+    initial = initial or stages[0]
+    if initial not in stages:
         raise ValueError(f"initial stage {initial!r} not in stages")
 
-    gates_f = frozenset(gates or ())
-    unknown_gates = gates_f - set(stages_t)
-    if unknown_gates:
-        raise ValueError(f"gates reference unknown steps: {sorted(unknown_gates)}")
+    gates = list(gates or ())
+    if set(gates) - set(stages):
+        raise ValueError(f"gates reference unknown steps: {sorted(set(gates) - set(stages))}")
 
-    checks_d = {step: tuple(names) for step, names in (checks or {}).items()}
-    unknown_check_steps = set(checks_d) - set(stages_t)
-    if unknown_check_steps:
-        raise ValueError(f"checks reference unknown steps: {sorted(unknown_check_steps)}")
+    checks = {step: list(names) for step, names in (checks or {}).items()}
+    if set(checks) - set(stages):
+        raise ValueError(f"checks reference unknown steps: {sorted(set(checks) - set(stages))}")
 
-    trans = (
-        frozenset(map(tuple, transitions))
-        if transitions is not None
-        else _derive_transitions(archetype, stages_t)
-    )
+    trans = ([list(t) for t in transitions] if transitions is not None
+             else _derive_transitions(archetype, stages))
     for frm, to in trans:
-        if frm not in stages_t or to not in stages_t:
+        if frm not in stages or to not in stages:
             raise ValueError(f"transition ({frm!r}, {to!r}) references an unknown stage")
 
-    if conn.execute("SELECT 1 FROM users WHERE id = ?", (owner_id,)).fetchone() is None:
+    if session.get(User, owner_id) is None:
         raise ValueError(f"unknown owner: {owner_id!r}")
 
-    process = Process(
-        id=uuid.uuid4().hex,
-        name=name,
-        archetype=archetype,
-        owner_id=owner_id,
-        stages=stages_t,
-        transitions=trans,
-        initial=initial,
-        created_at=datetime.now(timezone.utc).isoformat(),
-        oversight=oversight,
-        gates=gates_f,
-        checks=checks_d,
-    )
-    conn.execute(
-        "INSERT INTO processes (id, name, archetype, owner_id, definition, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (
-            process.id,
-            name,
-            archetype,
-            owner_id,
-            json.dumps(
-                {
-                    "stages": list(stages_t),
-                    "transitions": sorted(map(list, trans)),
-                    "initial": initial,
-                    "oversight": oversight,
-                    "gates": sorted(gates_f),
-                    "checks": {s: list(n) for s, n in checks_d.items()},
-                }
-            ),
-            process.created_at,
-        ),
-    )
-    conn.commit()
+    process = Process(name=name, archetype=archetype, owner_id=owner_id, initial=initial,
+                      oversight=oversight, stages=stages, transitions=trans,
+                      gates=gates, checks=checks)
+    session.add(process)
+    session.commit()
+    session.refresh(process)
     return process
 
 
-def _row_to_process(row: sqlite3.Row) -> Process:
-    d = json.loads(row["definition"])
-    return Process(
-        id=row["id"],
-        name=row["name"],
-        archetype=row["archetype"],
-        owner_id=row["owner_id"],
-        stages=tuple(d["stages"]),
-        transitions=frozenset(tuple(t) for t in d["transitions"]),
-        initial=d["initial"],
-        created_at=row["created_at"],
-        oversight=d.get("oversight", "dark"),
-        gates=frozenset(d.get("gates", ())),
-        checks={s: tuple(n) for s, n in d.get("checks", {}).items()},
-    )
+def get_process(session: Session, process_id: str) -> Process | None:
+    return session.get(Process, process_id)
 
 
-def get_process(conn: sqlite3.Connection, process_id: str) -> Process | None:
-    row = conn.execute("SELECT * FROM processes WHERE id = ?", (process_id,)).fetchone()
-    return _row_to_process(row) if row else None
-
-
-def list_processes(
-    conn: sqlite3.Connection, *, owner_id: str | None = None
-) -> list[Process]:
-    if owner_id is None:
-        rows = conn.execute("SELECT * FROM processes ORDER BY created_at DESC")
-    else:
-        rows = conn.execute(
-            "SELECT * FROM processes WHERE owner_id = ? ORDER BY created_at DESC",
-            (owner_id,),
-        )
-    return [_row_to_process(row) for row in rows]
+def list_processes(session: Session, *, owner_id: str | None = None) -> list[Process]:
+    stmt = select(Process)
+    if owner_id is not None:
+        stmt = stmt.where(Process.owner_id == owner_id)
+    return list(session.exec(stmt.order_by(Process.created_at.desc())))

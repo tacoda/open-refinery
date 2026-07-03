@@ -33,8 +33,8 @@ def test_create_labels_by_account_and_stores_credential_encrypted():
     conn, ian = setup()
     integ = create_integration(conn, "github", {"token": "gho_tok"}, ian.id)
     assert integ.kind == "github" and integ.account == "acme"
-    assert not hasattr(integ, "token")  # no credential on the dataclass
-    secret = conn.execute("SELECT secret FROM integrations WHERE id=?", (integ.id,)).fetchone()["secret"]
+    from open_refinery.models import Integration as IntegrationModel
+    secret = conn.get(IntegrationModel, integ.id).secret
     assert "gho_tok" not in secret  # encrypted at rest
     assert decrypt(secret) == '{"token": "gho_tok"}'
 
