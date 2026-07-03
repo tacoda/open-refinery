@@ -3,6 +3,18 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.12.6] — 2026-07-03
+
+### Added
+- **`lead` role** — five-role ladder (developer < senior < **lead** < platform <
+  admin). Concerns: developer ⊂ senior (repo work); senior at repo level (may
+  suggest team-layer changes); lead approves/applies those and may suggest
+  infrastructure changes; platform approves those and owns policy; admin audits.
+
+### Note
+- Roadmap: **cascading suggestions** — a proposal escalates up the role chain,
+  each level able to accept / deny / send feedback (revise & resubmit).
+
 ## [0.12.5] — 2026-07-03
 
 ### Changed

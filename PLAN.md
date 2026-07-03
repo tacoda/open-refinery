@@ -298,20 +298,31 @@ src/open_refinery/
   That lives in the integrations layer (0.6.0), not user auth.
 - **Every request** carries an OAuth session or a token → resolves to a `User`
   → stamped on any resulting `Event`. No anonymous mutations.
-- **Roles** — four roles on an authority ladder (`developer` < `senior` <
-  `platform` < `admin`), defined by *scope of authority*:
-  - `developer` — **drives work and sets repository (project) standards.**
-    Creates and moves work items; owns and tunes standards for their own repos.
-    The most risk-restricted seat: risky (gated) moves need sign-off from a
-    higher role. Sees and acts on what they own.
-  - `senior` — **performs escalated operations and approves developers' risky
-    moves.** The default approver for gated transitions (a process's
-    `min_approver_role`, configurable). Otherwise scoped like a developer.
-  - `platform` — **defines policy and standards for teams/organizations** and
-    configures the governance surface (integrations, targets, routes, quotas,
-    processes, oversight, policies). Approves platform/devops-level changes.
-  - `admin` — **audits everything.** Full read across all work, repos, users,
-    and the complete audit trail; user management. Accountability authority.
+- **Roles** — five roles on an authority ladder (`developer` < `senior` <
+  `lead` < `platform` < `admin`). Each has its own concerns, and each **suggests
+  changes at the next layer up** that the role above **approves and applies**:
+  - `developer` — a **subset of senior**; drives work on their own repos. Most
+    risk-restricted: gated moves need sign-off from a higher role.
+  - `senior` — works at the **repo level**; approves developers' risky moves and
+    may **suggest team-layer changes** (which a lead approves/applies).
+  - `lead` — **approves and applies seniors' team-layer suggestions**, and may
+    **suggest infrastructure changes** (which platform approves/applies).
+  - `platform` — **approves lead's infrastructure suggestions**; owns org/team
+    policy and the governance surface (integrations, targets, routes, quotas,
+    processes, oversight, policies).
+  - `admin` — **observability, reporting, insights, and accountability.** Reviews
+    metrics and **insights**, generates reports, understands usage and
+    **experiment results**, manages users, and audits the full trail. Admin *can*
+    access work and policies but
+    **does not drive work or define platform/team policy** — that's not their
+    role or main workflow (the UI surfaces the high-level view; operational
+    detail is drill-in, not default).
+- **Cascading suggestions** *(roadmap)*: anyone can propose a change (even a
+  junior proposing infrastructure); it **cascades up the chain** through each
+  approving level. At every step the reviewer can **accept** (advance to the next
+  level / apply at the top), **deny** (stop), or give **feedback** (return to the
+  proposer to revise and resubmit). Extends the chained-approval queue with the
+  three-outcome step and an escalation path.
 - **Risk profile is per-process and UI-configurable**: oversight level (L0–L4),
   gated steps, required checks, and **`min_approver_role`** together define how
   much oversight a process demands and who may approve — not hardcoded.
@@ -389,6 +400,7 @@ engine, oversight, metrics, and the dashboard all landed in it).
 | 0.12.0 ✅ | **User invitations** — a role invites *lower* roles by email (admin→any, platform→senior & below, senior→developer); invite carries an **expiring token** (default 1 week, configurable) and the assigned role. The invitee opens the link and **sets their own password** to register. Email is a **port/adapter** (default: Linux `mail`); the email service and its credentials are **configurable in the UI by admin/platform** (another provider — SMTP, SendGrid, … — can be swapped in), stored in the DB settings (see 0.12.5). |
 | 0.12.5 ✅ | **Config in the DB, not env** — encrypted `Setting` store; OAuth provider client id/secret resolved from DB settings (env fallback), edited in the UI by platform/admin (`/settings`, Settings tab). **Only `SECRET_KEY` is required in the environment.** |
 | 0.13.0  | Real target backends (Anthropic / OpenAI / MCP); targets token-**or-OAuth** connect (parity with integrations); rate/concurrency windows; retention/purge & residency; cost attribution by team. |
+| 0.17.0  | **Cascading suggestions** — anyone proposes a change; it escalates up the role chain (senior→lead team changes, lead→platform infrastructure). Each level can **accept** (advance/apply), **deny** (stop), or give **feedback** (return to revise & resubmit). Extends the approval queue with a three-outcome step. |
 | 0.16.0  | **Eval / experiment system** — run experiments at each layer (project, platform, harness, charter) using the scientific method: a **hypothesis**, the **change** under test, **evals before and after**, and a **statistical analysis** of the observed effect (is the difference real?). Work can be run through the system **marked as an experiment** (tagged, isolated from normal metrics), and experiments can be **iterated** like engineers do — refine hypothesis/change and re-run, tracking rounds over time and tying into the health scores. |
 | 0.15.0  | **Debt audits & health** — run audits (at the user's level) that identify **factory debt** (this service), **harness debt** (e.g. Claude Code), and **charter debt** (e.g. the `.claude/` folder): surface findings, let the user audit them, run reports, resolve/learn/prune, and show a **health score** + metrics + **insights on what to try next** per area. |
 | 0.14.0  | **Webhook registration** — register webhook URLs (with an event filter + signing secret) so audit events fan out to external services. Endpoints are FastAPI routes, so they appear in `/api-docs` automatically; the outbound payload is documented there too. |

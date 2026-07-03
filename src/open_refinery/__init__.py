@@ -113,7 +113,7 @@ from .users import (
     user_by_token,
 )
 
-__version__ = "0.12.5"
+__version__ = "0.12.6"
 
 __all__ = [
     "Factory",

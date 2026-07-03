@@ -56,7 +56,7 @@ Man-Month* — is the condition under which adding effort actually adds
 throughput, whereas work requiring communication incurs overhead that a central
 agent bottleneck would impose.
 
-> Status: **0.12.5.** Configuration lives in the **database, not the env** — OAuth
+> Status: **0.12.6.** Configuration lives in the **database, not the env** — OAuth
 > provider creds are UI-managed (platform/admin) and encrypted at rest, so **only
 > `SECRET_KEY` is required in the environment**. Atop role-gated invitations,
 > structured output, the async approval queue + chained approvals, the four-role

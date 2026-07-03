@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select'
 
 type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'invitations' | 'settings' | 'events' | 'metrics'
-const RANK: Record<string, number> = { developer: 1, senior: 2, platform: 3, admin: 4 }
+const RANK: Record<string, number> = { developer: 1, senior: 2, lead: 3, platform: 4, admin: 5 }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
 export default function App() {
@@ -274,7 +274,7 @@ function Processes() {
         <Input className="field" placeholder="gated steps (comma)" value={gates} onChange={(e) => setGates(e.target.value)} />
         <Select value={minApprover} onValueChange={(v) => setMinApprover(v ?? '')}>
           <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-          <SelectContent>{['developer', 'senior', 'platform', 'admin'].map((r) =>
+          <SelectContent>{['developer', 'senior', 'lead', 'platform', 'admin'].map((r) =>
             <SelectItem key={r} value={r}>approver: {r}+</SelectItem>)}</SelectContent>
         </Select>
         <Input className="field" placeholder="approval chain (roles, comma)" value={chain}

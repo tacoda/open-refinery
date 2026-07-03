@@ -16,10 +16,15 @@ from sqlmodel import Session, select
 
 from .models import User, UserSession
 
-ROLES = ("developer", "senior", "platform", "admin")
-# Authority ladder: developer drives work; senior performs escalated ops and
-# approves developers' risky moves; platform sets org policy; admin audits all.
-ROLE_RANK = {"developer": 1, "senior": 2, "platform": 3, "admin": 4}
+ROLES = ("developer", "senior", "lead", "platform", "admin")
+# Authority ladder / concerns:
+#   developer — a subset of senior; drives work on their repos.
+#   senior    — repo level; may *suggest* team-layer changes and approve devs'
+#               risky moves.
+#   lead      — approves and applies seniors' suggested (team-layer) changes.
+#   platform  — org/team policy and the governance surface.
+#   admin     — audits everything.
+ROLE_RANK = {"developer": 1, "senior": 2, "lead": 3, "platform": 4, "admin": 5}
 MIN_APPROVER_ROLE = "senior"  # approvals of gated moves need senior or higher
 _PBKDF2_ROUNDS = 600_000
 
