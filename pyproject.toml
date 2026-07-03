@@ -1,6 +1,6 @@
 [project]
 name = "open-refinery"
-version = "0.1.0"
+version = "0.3.0"
 description = "A factory for producing artifacts under governance — provenance, ownership, authorization, and an append-only audit trail on every output."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -40,6 +40,11 @@ packages = ["src/open_refinery"]
 # wheel so `pip install` ships the SPA without the end user needing bun/node.
 [tool.hatch.build.targets.wheel.force-include]
 "src/open_refinery/static" = "open_refinery/static"
+
+# Include the built SPA in the sdist too (it's gitignored), so a wheel built
+# from the sdist is self-sufficient and sdist installs also ship the dashboard.
+[tool.hatch.build.targets.sdist]
+artifacts = ["src/open_refinery/static"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

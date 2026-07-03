@@ -7,11 +7,12 @@ through customizable processes; every output carries its **provenance**, an
 **owner**, and an **audit trail**; every production is **authorized** before it
 runs and **logged** as it happens.
 
-> Status: **0.3.0 — in development.** Server, token auth (developer / platform /
-> admin), repositories, processes (steps + feedback loops), work items with a
-> governed transition loop, oversight levels (L0–L4) with approvals, and an
-> audit trail are working and tested. OAuth, the web dashboard, metrics, and
-> policy governance are on the roadmap.
+> Status: **0.3.0.** Server + bundled dashboard, auth (local / API token /
+> GitHub OAuth, roles developer / platform / admin), first-run setup wizard,
+> repositories, processes (steps + feedback loops), work items with a governed
+> transition loop, oversight levels (L0–L4) with approvals and attestations,
+> metrics, and an audit trail — all working and tested. Integrations, targets /
+> routing / quotas, and policy governance are on the roadmap.
 
 ## Quickstart
 
