@@ -25,6 +25,14 @@ from .approvals import approve as approve_request
 from .approvals import list_approvals, reject as reject_request, request_approval
 from .attestations import AttestationFailed, AttestationMissing, attest
 from .executor import ExecutionError, execute
+from .invitations import (
+    accept_invitation,
+    create_invitation,
+    invitation_email,
+    list_invitations,
+    revoke_invitation,
+    send_invitation_email,
+)
 from .integrations import (
     create_connect_state,
     create_integration,
@@ -122,6 +130,17 @@ class Move(BaseModel):
 
 class RequestApproval(BaseModel):
     to: str
+
+
+class NewInvitation(BaseModel):
+    email: str
+    role: str
+    ttl_days: int = 7
+
+
+class AcceptInvite(BaseModel):
+    token: str
+    password: str
 
 
 class Attest(BaseModel):
@@ -284,6 +303,40 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     @app.post("/me/token/rotate")
     def rotate_my_token(session: Session = Depends(get_session), user: User = Depends(current_user)):
         return {"token": rotate_token(session, user.id)}  # old API token invalidated
+
+    # --- invitations (role-gated; invitee sets their own password) ---
+    @app.post("/invitations", status_code=201)
+    def invite_user(body: NewInvitation, request: Request,
+                    session: Session = Depends(get_session),
+                    user: User = Depends(require("senior", "platform", "admin"))):
+        inv, token = create_invitation(session, body.email, body.role, user.id,
+                                       ttl_days=body.ttl_days)
+        accept_url = f"{_home(request)}#invite={token}"
+        try:
+            send_invitation_email(body.email, accept_url)
+        except Exception:  # email may be unconfigured; the link is still returned
+            pass
+        return {"invitation": inv, "accept_url": accept_url}
+
+    @app.get("/invitations")
+    def get_invitations(session: Session = Depends(get_session),
+                        _: User = Depends(require("senior", "platform", "admin"))):
+        return list_invitations(session, status="pending")
+
+    @app.post("/invitations/{invitation_id}/revoke")
+    def revoke_invite(invitation_id: str, session: Session = Depends(get_session),
+                      _: User = Depends(require("senior", "platform", "admin"))):
+        revoke_invitation(session, invitation_id)
+        return {"status": "revoked"}
+
+    @app.get("/invitations/lookup")
+    def lookup_invite(token: str, session: Session = Depends(get_session)):
+        return {"email": invitation_email(session, token)}
+
+    @app.post("/invitations/accept")
+    def accept_invite(body: AcceptInvite, session: Session = Depends(get_session)):
+        user, token = accept_invitation(session, body.token, body.password)
+        return {"token": token, "user": user}
 
     @app.post("/users", status_code=201)
     def add_user(body: NewUser, session: Session = Depends(get_session),

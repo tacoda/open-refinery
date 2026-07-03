@@ -56,12 +56,13 @@ Man-Month* — is the condition under which adding effort actually adds
 throughput, whereas work requiring communication incurs overhead that a central
 agent bottleneck would impose.
 
-> Status: **0.11.0.** Adds **structured output in the executor** — a target can
-> declare an `output_schema` that the model's output is validated against and
-> persisted structured. Atop the async approval queue + chained approvals, the
-> four-role ladder + configurable risk profile, the executor, policy governance,
-> targets / routing / quotas, integrations, oversight, metrics, and a full audit
-> trail. Self-hosted API docs at `/api-docs`. See [CHANGELOG.md](https://github.com/tacoda/open-refinery/blob/main/CHANGELOG.md).
+> Status: **0.12.0.** Adds **role-gated user invitations** — invite a lower role
+> by email with an expiring link; the invitee sets their own password to join
+> (email is a swappable port). Atop structured output, the async approval queue +
+> chained approvals, the four-role ladder + configurable risk profile, the
+> executor, policy governance, targets / routing / quotas, integrations,
+> oversight, metrics, and a full audit trail. Self-hosted API docs at
+> `/api-docs`. See [CHANGELOG.md](https://github.com/tacoda/open-refinery/blob/main/CHANGELOG.md).
 
 ## Quickstart
 

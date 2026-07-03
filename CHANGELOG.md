@@ -3,6 +3,24 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.12.0] — 2026-07-03
+
+### Added
+- **User invitations** — a user invites a **strictly lower** role by email
+  (admin → any below, platform → senior & below, senior → developer). The invite
+  carries an **expiring token** (default 7 days, configurable) and the assigned
+  role; the invitee opens the link and **sets their own password** to register.
+  Endpoints: `POST /invitations`, `GET /invitations`,
+  `/invitations/{id}/revoke`, `/invitations/lookup`, `/invitations/accept`.
+  Dashboard "Invitations" tab (senior+) and an accept-invite screen.
+- **Email as a port/adapter** — `EmailSender` protocol with a default
+  `LinuxMailSender` (local `mail`); swappable (SMTP/others later; UI-configurable
+  with the DB settings work).
+
+### Changed
+- Dashboard branding is **"open refinery"** (no dash); the browser tab title is
+  `open refinery · <page>`.
+
 ## [0.11.0] — 2026-07-03
 
 ### Added

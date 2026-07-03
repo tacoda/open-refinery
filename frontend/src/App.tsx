@@ -13,7 +13,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'events' | 'metrics'
+type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'invitations' | 'events' | 'metrics'
+const RANK: Record<string, number> = { developer: 1, senior: 2, platform: 3, admin: 4 }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
 export default function App() {
@@ -42,6 +43,10 @@ export default function App() {
     api('/me').then(setMe).catch(() => { clearToken(); setTok(''); setMe(null) })
   }, [token])
 
+  useEffect(() => {
+    document.title = me ? `open refinery · ${view[0].toUpperCase()}${view.slice(1)}` : 'open refinery'
+  }, [view, me])
+
   return (
     <>
       <Toaster richColors position="top-right" />
@@ -51,7 +56,7 @@ export default function App() {
           <div className="app-shell">
             <Tabs value={view} onValueChange={(v) => setView(v as View)}>
               <header className="app-header">
-                <span className="app-brand">open-refinery</span>
+                <span className="app-brand">open refinery</span>
                 <TabsList>
                   <TabsTrigger value="work">Work</TabsTrigger>
                   <TabsTrigger value="approvals">Approvals</TabsTrigger>
@@ -60,6 +65,7 @@ export default function App() {
                   <TabsTrigger value="integrations">Integrations</TabsTrigger>
                   <TabsTrigger value="targets">Targets</TabsTrigger>
                   <TabsTrigger value="policies">Policies</TabsTrigger>
+                  {RANK[me.role] >= RANK.senior && <TabsTrigger value="invitations">Invitations</TabsTrigger>}
                   <TabsTrigger value="events">Audit</TabsTrigger>
                   <TabsTrigger value="metrics">Metrics</TabsTrigger>
                 </TabsList>
@@ -78,6 +84,7 @@ export default function App() {
               <TabsContent value="integrations"><Integrations /></TabsContent>
               <TabsContent value="targets"><Targets /></TabsContent>
               <TabsContent value="policies"><Policies /></TabsContent>
+              {RANK[me.role] >= RANK.senior && <TabsContent value="invitations"><Invitations me={me} /></TabsContent>}
               <TabsContent value="events"><Events /></TabsContent>
               <TabsContent value="metrics"><Metrics /></TabsContent>
             </Tabs>
@@ -104,13 +111,47 @@ function ThemeToggle() {
 }
 
 function Entry({ onToken }: { onToken: (t: string) => void }) {
+  const invite = new URLSearchParams(window.location.hash.slice(1)).get('invite')
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null)
   useEffect(() => {
     applyTheme(getTheme())
     api('/setup/status').then((s) => setNeedsSetup(!!s.needs_setup)).catch(() => setNeedsSetup(false))
   }, [])
+  if (invite) return <AcceptInvite token={invite} onToken={onToken} />
   if (needsSetup === null) return null
   return needsSetup ? <SetupWizard onToken={onToken} /> : <Login onToken={onToken} />
+}
+
+function AcceptInvite({ token, onToken }: { token: string; onToken: (t: string) => void }) {
+  const [email, setEmail] = useState(''), [pw, setPw] = useState('')
+  useEffect(() => {
+    applyTheme(getTheme())
+    api(`/invitations/lookup?token=${encodeURIComponent(token)}`)
+      .then((r) => setEmail(r.email || '')).catch(() => {})
+  }, [])
+  async function go() {
+    try {
+      const r = await post('/invitations/accept', { token, password: pw })
+      setToken(r.token); onToken(r.token); history.replaceState(null, '', '/')
+      toast.success('Welcome to open refinery')
+    } catch (e) { fail(e) }
+  }
+  return (
+    <div className="login-screen">
+      <div className="login-card">
+        <h1 className="app-brand">open refinery</h1>
+        <p className="login-tagline">
+          {email ? `Set a password to join as ${email}.` : 'This invitation is invalid or expired.'}
+        </p>
+        {email && <>
+          <Input placeholder="choose a password" type="password" value={pw}
+                 onChange={(e) => setPw(e.target.value)}
+                 onKeyDown={(e) => e.key === 'Enter' && go()} />
+          <Button onClick={go}>Set password &amp; join</Button>
+        </>}
+      </div>
+    </div>
+  )
 }
 
 function SetupWizard({ onToken }: { onToken: (t: string) => void }) {
@@ -124,7 +165,7 @@ function SetupWizard({ onToken }: { onToken: (t: string) => void }) {
   return (
     <div className="login-screen">
       <div className="login-card">
-        <h1 className="app-brand">Welcome to open-refinery</h1>
+        <h1 className="app-brand">Welcome to open refinery</h1>
         <p className="login-tagline">Create the first admin account to get started.</p>
         <Input placeholder="admin email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <Input placeholder="password" type="password" value={pw}
@@ -151,7 +192,7 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
   return (
     <div className="login-screen">
       <div className="login-card">
-        <h1 className="app-brand">open-refinery</h1>
+        <h1 className="app-brand">open refinery</h1>
         <p className="login-tagline">An open factory to shine light into the dark.</p>
         <Input placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <Input placeholder="password" type="password" value={pw}
@@ -427,6 +468,51 @@ function Policies() {
           )}
         </CardContent>
       </Card>
+    </section>
+  )
+}
+
+function Invitations({ me }: any) {
+  const { rows, load } = useList('/invitations')
+  const options = Object.keys(RANK).filter((r) => RANK[r] < RANK[me.role])  // lower roles only
+  const [email, setEmail] = useState(''), [role, setRole] = useState(options[0] ?? '')
+  const [ttl, setTtl] = useState('7'), [link, setLink] = useState('')
+  const invite = () => post('/invitations', { email, role, ttl_days: Number(ttl) || 7 })
+    .then((r) => { setLink(r.accept_url); setEmail(''); load(); toast.success('Invitation created') })
+    .catch(fail)
+  const revoke = (id: string) => api(`/invitations/${id}/revoke`, { method: 'POST' })
+    .then(load).catch(fail)
+  return (
+    <section className="page">
+      <h2 className="page-title">Invitations</h2>
+      <Card>
+        <CardHeader><CardTitle>Invite a user (they set their own password)</CardTitle></CardHeader>
+        <CardContent>
+          <div className="toolbar">
+            <Input className="field" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Select value={role} onValueChange={(v) => setRole(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue placeholder="role…" /></SelectTrigger>
+              <SelectContent>{options.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+            </Select>
+            <Input className="field" placeholder="expires (days)" value={ttl} onChange={(e) => setTtl(e.target.value)} />
+            <Button onClick={invite}>Send invite</Button>
+          </div>
+          {link && <div className="kv-row"><span className="muted">invite link</span><span className="mono">{link}</span></div>}
+        </CardContent>
+      </Card>
+      <Card><CardContent>
+        <Table>
+          <TableHeader><TableRow><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Expires</TableHead><TableHead /></TableRow></TableHeader>
+          <TableBody>{rows.map((i) => (
+            <TableRow key={i.id}>
+              <TableCell>{i.email}</TableCell>
+              <TableCell><Badge variant="secondary">{i.role}</Badge></TableCell>
+              <TableCell className="mono">{i.expires_at.slice(0, 10)}</TableCell>
+              <TableCell><Button variant="outline" size="sm" onClick={() => revoke(i.id)}>Revoke</Button></TableCell>
+            </TableRow>
+          ))}</TableBody>
+        </Table>
+      </CardContent></Card>
     </section>
   )
 }

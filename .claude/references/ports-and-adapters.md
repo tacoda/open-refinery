@@ -25,8 +25,17 @@ is writing one adapter, not touching the core.
   provider is gated on its own credentials.
 - **Audit sinks** — the `AuditSink` protocol (`MemorySink`, `JsonlSink`,
   `SqlSink`). Swap where events go without touching producers.
+- **Email senders** — the `EmailSender` protocol (default `LinuxMailSender`;
+  SMTP/others register). Chosen and configured by admin/platform in the UI.
 - **Data store** — SQLModel over an engine; other backends (Postgres) slot in at
   the same seam.
+
+## Every connection is UI-managed
+
+All of these connections are configurable at some level, implemented as ports and
+adapters, and **managed by authorized users in the web app** (the right role
+picks and configures the adapter; credentials are stored encrypted in the DB).
+Adding a provider is a new adapter; wiring it up is a UI action, not a redeploy.
 
 ## Rule
 

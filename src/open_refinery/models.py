@@ -139,6 +139,18 @@ class Policy(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
+class Invitation(SQLModel, table=True):
+    __tablename__ = "invitations"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    email: str = Field(index=True)
+    role: str
+    token_hash: str = Field(unique=True, index=True)
+    invited_by: str = Field(foreign_key="users.id")
+    expires_at: str
+    status: str = Field(default="pending")  # pending | accepted | revoked
+    created_at: str = Field(default_factory=now_iso)
+
+
 class ConnectState(SQLModel, table=True):
     __tablename__ = "connect_states"
     state: str = Field(primary_key=True)

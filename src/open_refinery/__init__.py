@@ -57,8 +57,16 @@ from .approvals import (
     reject,
     request_approval,
 )
+from .email import EmailSender, LinuxMailSender, MemorySender, send_email, set_sender
 from .executor import EXECUTORS, ExecutionError, execute, validate_schema
-from .models import ApprovalRequest, Policy, Quota, Route, Target
+from .invitations import (
+    accept_invitation,
+    create_invitation,
+    invitation_email,
+    list_invitations,
+    revoke_invitation,
+)
+from .models import ApprovalRequest, Invitation, Policy, Quota, Route, Target
 from .policies import (
     PolicyDenied,
     create_policy,
@@ -104,7 +112,7 @@ from .users import (
     user_by_token,
 )
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 
 __all__ = [
     "Factory",
@@ -208,5 +216,16 @@ __all__ = [
     "get_approval",
     "list_approvals",
     "apply_transition",
+    "Invitation",
+    "create_invitation",
+    "accept_invitation",
+    "list_invitations",
+    "revoke_invitation",
+    "invitation_email",
+    "EmailSender",
+    "LinuxMailSender",
+    "MemorySender",
+    "send_email",
+    "set_sender",
     "__version__",
 ]
