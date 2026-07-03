@@ -8,6 +8,10 @@ dist/
 build/
 # audit trails / runtime state — regenerated, not versioned
 *.jsonl
+# sqlite database + WAL sidecars — never versioned
+*.db
+*.db-shm
+*.db-wal
 # env
 .env
 # personal Claude Code permissions (not shared)
