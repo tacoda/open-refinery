@@ -3,6 +3,18 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.6.0] — 2026-07-03
+
+### Added
+- **Targets, routing, and quotas** — the Platform layer's outbound governance:
+  - **Targets**: models, MCP servers, and backend APIs, with credentials
+    encrypted at rest.
+  - **Routing**: routes map a process (optionally a step) to a target by
+    priority; a step-specific route wins ties.
+  - **Quotas**: per-target usage caps enforced *before* a call — a blocked call
+    consumes nothing (`429` on the API).
+  - Dashboard "Targets" tab for managing all three.
+
 ## [0.5.0] — 2026-07-03
 
 ### Changed

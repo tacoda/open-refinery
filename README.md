@@ -45,12 +45,12 @@ production authorized, owned, provenanced, and logged, with human oversight
 configurable to each team's philosophy. Minimal to run (one process, SQLite,
 env-light), everything managed through the UI, and completely open source.
 
-> Status: **0.5.0.** Everything in 0.4.0 (integrations — GitHub/GitLab repo
-> import and Jira/Linear work-item sync) on a new **SQLModel data layer**
-> (typed models, per-request sessions, portable toward other backends). Auth is
+> Status: **0.6.0.** Adds the Platform layer's outbound governance — **targets**
+> (models / MCP / APIs), **routing** (process/step/priority), and **quotas**
+> (usage caps enforced before a call) — on the SQLModel data layer, with
+> integrations, oversight, metrics, and a full audit trail. Auth is
 > email/password (+ GitHub OAuth), roles developer / platform / admin. Next:
-> targets / routing / quotas, then policy governance. See
-> [CHANGELOG.md](CHANGELOG.md).
+> policy governance + content filtering. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Quickstart
 
