@@ -244,12 +244,13 @@ function Processes() {
 function Integrations() {
   const { rows, load } = useList('/integrations')
   const [kind, setKind] = useState('github'), [token, setToken] = useState('')
-  const [github, setGithub] = useState(false)
-  useEffect(() => { api('/auth/providers').then((p) => setGithub(!!p.github)).catch(() => {}) }, [])
+  const [providers, setProviders] = useState<Record<string, boolean>>({})
+  useEffect(() => { api('/auth/providers').then(setProviders).catch(() => {}) }, [])
   const connectToken = () => post('/integrations', { kind, token })
     .then(() => { setToken(''); load(); toast.success('Connected') }).catch(fail)
-  const connectOAuth = () => post('/integrations/github/oauth/start', {})
+  const connectOAuth = () => post(`/integrations/${kind}/oauth/start`, {})
     .then((r) => { window.location.href = r.authorize_url }).catch(fail)
+  const KINDS = [['github', 'GitHub'], ['gitlab', 'GitLab']]
   return (
     <section className="page">
       <h2 className="page-title">Integrations</h2>
@@ -259,13 +260,14 @@ function Integrations() {
           <div className="toolbar">
             <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
               <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="github">GitHub</SelectItem></SelectContent>
+              <SelectContent>{KINDS.map(([v, label]) =>
+                <SelectItem key={v} value={v}>{label}</SelectItem>)}</SelectContent>
             </Select>
             <Input className="field" placeholder="access token" type="password" value={token}
                    onChange={(e) => setToken(e.target.value)} />
             <Button onClick={connectToken}>Connect with token</Button>
-            {github && kind === 'github' && (
-              <Button variant="outline" onClick={connectOAuth}>Connect with GitHub OAuth</Button>
+            {providers[kind] && (
+              <Button variant="outline" onClick={connectOAuth}>Connect with OAuth</Button>
             )}
           </div>
         </CardContent>

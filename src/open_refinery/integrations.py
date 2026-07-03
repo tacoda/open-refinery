@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from .crypto import decrypt, encrypt
 from .store import register_schema
 
-KINDS = ("github",)  # gitlab / jira / linear to follow
+KINDS = ("github", "gitlab")  # source hosts; jira / linear arrive with work-item sync
 
 register_schema(
     """
@@ -78,8 +78,29 @@ def github_list_repos(token: str) -> list[dict]:
              "ssh_url": r["ssh_url"], "private": r["private"]} for r in repos]
 
 
+# --- GitLab adapter -------------------------------------------------------
+
+def _gitlab_get(token: str, path: str):
+    req = urllib.request.Request("https://gitlab.com/api/v4" + path,
+                                 headers={"Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return json.load(r)
+
+
+def gitlab_verify(token: str) -> dict:
+    return {"account": _gitlab_get(token, "/user")["username"]}
+
+
+def gitlab_list_repos(token: str) -> list[dict]:
+    projects = _gitlab_get(token, "/projects?membership=true&per_page=100&order_by=updated_at")
+    return [{"name": p["path"], "full_name": p["path_with_namespace"],
+             "ssh_url": p["ssh_url_to_repo"], "private": p["visibility"] != "public"}
+            for p in projects]
+
+
 ADAPTERS = {
     "github": {"verify": github_verify, "list_repos": github_list_repos},
+    "gitlab": {"verify": gitlab_verify, "list_repos": gitlab_list_repos},
 }
 
 

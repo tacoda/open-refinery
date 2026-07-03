@@ -258,29 +258,30 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
     def get_integrations(user: User = Depends(current_user)):
         return list_integrations(db_conn(app), owner_id=owner_scope(user))
 
-    # Connect a service via OAuth (GitHub). The SPA is authenticated, so we bind
-    # the flow to the user with a one-time state; the callback (no auth header)
-    # resolves the user from that state.
-    def _connect_redirect(request: Request) -> str:
+    # Connect a service via OAuth. The SPA is authenticated, so we bind the flow
+    # to the user with a one-time state; the callback (no auth header) resolves
+    # the user from that state. Generic over provider kind.
+    def _connect_redirect(request: Request, kind: str) -> str:
         base = os.environ.get("APP_BASE_URL", str(request.base_url)).rstrip("/")
-        return f"{base}/integrations/github/oauth/callback"
+        return f"{base}/integrations/{kind}/oauth/callback"
 
-    @app.post("/integrations/github/oauth/start")
-    def github_connect_start(request: Request, user: User = Depends(current_user)):
-        if not oauth.is_enabled():
-            raise HTTPException(status_code=404, detail="github oauth not configured")
-        state = create_connect_state(db_conn(app), user.id, "github")
-        url = oauth.authorize_url(state, _connect_redirect(request), scope="repo read:user")
+    @app.post("/integrations/{kind}/oauth/start")
+    def connect_start(kind: str, request: Request, user: User = Depends(current_user)):
+        if not oauth.is_enabled(kind):
+            raise HTTPException(status_code=404, detail=f"{kind} oauth not configured")
+        state = create_connect_state(db_conn(app), user.id, kind)
+        scope = oauth.PROVIDERS[kind]["connect_scope"]
+        url = oauth.authorize_url(kind, state, _connect_redirect(request, kind), scope)
         return {"authorize_url": url}
 
-    @app.get("/integrations/github/oauth/callback")
-    def github_connect_callback(request: Request, code: str = "", state: str = ""):
+    @app.get("/integrations/{kind}/oauth/callback")
+    def connect_callback(kind: str, request: Request, code: str = "", state: str = ""):
         user_id = pop_connect_state(db_conn(app), state)
         if user_id is None:
             return RedirectResponse(_home(request) + "#integration_error=state")
-        token = oauth.exchange_code(code, _connect_redirect(request))
-        create_integration(db_conn(app), "github", token, user_id)
-        return RedirectResponse(_home(request) + "#connected=github")
+        token = oauth.exchange_code(kind, code, _connect_redirect(request, kind))
+        create_integration(db_conn(app), kind, token, user_id)
+        return RedirectResponse(_home(request) + f"#connected={kind}")
 
     @app.post("/integrations/{integ_id}/verify")
     def check_integration(integ_id: str, _: User = Depends(current_user)):
@@ -307,26 +308,27 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
 
     @app.get("/auth/providers")
     def providers():
-        return {"github": oauth.is_enabled()}
+        return oauth.enabled_providers()
 
     @app.get("/auth/github/login")
     def github_login(request: Request):
-        if not oauth.is_enabled():
+        if not oauth.is_enabled("github"):
             raise HTTPException(status_code=404, detail="github oauth not configured")
         state = secrets.token_urlsafe(16)
-        resp = RedirectResponse(oauth.authorize_url(state, _redirect_uri(request)))
+        scope = oauth.PROVIDERS["github"]["login_scope"]
+        resp = RedirectResponse(oauth.authorize_url("github", state, _redirect_uri(request), scope))
         resp.set_cookie("or_oauth_state", state, httponly=True, max_age=600, samesite="lax")
         return resp
 
     @app.get("/auth/github/callback")
     def github_callback(request: Request, code: str = "", state: str = ""):
-        if not oauth.is_enabled():
+        if not oauth.is_enabled("github"):
             raise HTTPException(status_code=404, detail="github oauth not configured")
         cookie_state = request.cookies.get("or_oauth_state")
         if not state or state != cookie_state:
             raise HTTPException(status_code=400, detail="oauth state mismatch")
 
-        access = oauth.exchange_code(code, _redirect_uri(request))
+        access = oauth.exchange_code("github", code, _redirect_uri(request))
         email = oauth.primary_email(access)
         user = user_by_email(db_conn(app), email) if email else None
         if user is None:

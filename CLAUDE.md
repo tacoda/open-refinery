@@ -31,15 +31,29 @@ provenance, logging — and, on the roadmap, **governance via policies**.
 - Order in `produce` is load-bearing: authorize before running; record/log only
   after a successful run.
 
-## Commands
+## Design & philosophy sources
+
+- **Harness engineering vs platform engineering** — a mental model for how both
+  win: <https://traefik.io/blog/harness-engineering-vs-platform-engineering-a-mental-model-for-how-both-win>
+  open-refinery *is* the **platform** (out-of-process governance: identity,
+  audit, routing, quotas, oversight) that harnesses (in-process, app-owned:
+  orchestration, prompt, tools, memory) call through to reach targets. Keep the
+  boundary crisp — the platform governs; it does not do the harness's job.
+
+## Commands (dev only — end users `pip install` + `open-refinery serve`)
 
 ```bash
-uv sync --extra dev
-uv run pytest
-uv run open-refinery --actor ian --text hello
+make install     # uv sync --extra dev
+make test        # pytest
+make dev         # run server: fixed SECRET_KEY + local devtest.db on :8000
+make seed        # sample data + login tokens
+make ui          # build the dashboard into the package
 ```
+
+See `.claude/rules/dev-workflow.md` — always use make for dev; restart `make dev`
+after backend changes.
 
 ## Roadmap (don't build ahead of need)
 
-Governance policy layer, observability read-model, pluggable sinks, async
-recipes. See `docs/ARCHITECTURE.md`.
+See `PLAN.md`. Next: more integration providers, targets + routing + quotas,
+policy governance.
