@@ -30,6 +30,7 @@ from .store import DEFAULT_DATABASE_URL, SqliteSink, connect, query_events
 from .users import (
     DuplicateUser,
     User,
+    count_users,
     create_session,
     create_user,
     session_user,
@@ -86,6 +87,11 @@ class Move(BaseModel):
 class Attest(BaseModel):
     check: str
     passed: bool = True
+
+
+class Setup(BaseModel):
+    email: str
+    password: str
 
 
 # --- app ------------------------------------------------------------------
@@ -147,6 +153,18 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
     @app.get("/health")
     def health():
         return {"status": "ok"}
+
+    # --- first-run setup: create the initial admin in-browser on an empty DB ---
+    @app.get("/setup/status")
+    def setup_status():
+        return {"needs_setup": count_users(db_conn(app)) == 0}
+
+    @app.post("/setup", status_code=201)
+    def setup(body: Setup):
+        if count_users(db_conn(app)) > 0:
+            raise HTTPException(status_code=409, detail="already set up")
+        user, token = create_user(db_conn(app), body.email, body.password, "admin")
+        return {"user": user, "token": token}
 
     @app.get("/me")
     def me(user: User = Depends(current_user)):

@@ -129,6 +129,10 @@ def user_by_email(conn: sqlite3.Connection, email: str) -> User | None:
     return _row_to_user(row) if row else None
 
 
+def count_users(conn: sqlite3.Connection) -> int:
+    return conn.execute("SELECT COUNT(*) n FROM users").fetchone()["n"]
+
+
 def create_session(conn: sqlite3.Connection, user_id: str) -> str:
     """Issue a session token (e.g. after OAuth login). Returns the plaintext token."""
     token = secrets.token_urlsafe(32)

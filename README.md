@@ -19,15 +19,17 @@ Requires **Python 3.11+**. SQLite ships with Python — there is no separate
 database to install.
 
 ```bash
-pip install open-refinery                        # or: uv pip install open-refinery
-open-refinery create-admin --email you@x.dev     # mints the first admin + token (once)
-open-refinery serve                              # server + dashboard on port 8000
+pip install open-refinery        # or: uv pip install open-refinery
+open-refinery serve              # server + dashboard on port 8000
 ```
 
-Open `http://your-host:8000` — the **dashboard** (React + shadcn/ui, light/dark/
-auto themes) is bundled in the package and served by the same process. Paste the
-admin token to sign in; manage repos, processes, work, oversight, and the audit
-trail from there. No Node required to run — the UI is pre-built into the wheel.
+Open `http://your-host:8000` — on a fresh instance the **dashboard** walks you
+through creating the first admin (no CLI needed), then signs you in. From there,
+manage repos, processes, work, oversight, and the audit trail. The UI (React +
+shadcn/ui, light/dark/auto themes) is bundled in the package — no Node to run.
+
+Prefer the CLI to seed the admin? `open-refinery create-admin --email you@x.dev`
+still works.
 
 Background it on a VPS however you like — `&`, `nohup`, `screen`, `tmux`, or
 your process manager:

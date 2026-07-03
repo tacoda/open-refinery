@@ -41,7 +41,7 @@ export default function App() {
     <>
       <Toaster richColors position="top-right" />
       {!token || !me
-        ? <Login onToken={(t) => { setToken(t); setTok(t) }} />
+        ? <Entry onToken={(t) => { setToken(t); setTok(t) }} />
         : (
           <div className="app-shell">
             <Tabs value={view} onValueChange={(v) => setView(v as View)}>
@@ -90,11 +90,43 @@ function ThemeToggle() {
   )
 }
 
+function Entry({ onToken }: { onToken: (t: string) => void }) {
+  const [needsSetup, setNeedsSetup] = useState<boolean | null>(null)
+  useEffect(() => {
+    applyTheme(getTheme())
+    api('/setup/status').then((s) => setNeedsSetup(!!s.needs_setup)).catch(() => setNeedsSetup(false))
+  }, [])
+  if (needsSetup === null) return null
+  return needsSetup ? <SetupWizard onToken={onToken} /> : <Login onToken={onToken} />
+}
+
+function SetupWizard({ onToken }: { onToken: (t: string) => void }) {
+  const [email, setEmail] = useState(''), [pw, setPw] = useState('')
+  async function go() {
+    try {
+      const r = await post('/setup', { email, password: pw })
+      setToken(r.token); onToken(r.token); toast.success('Admin account created')
+    } catch (e) { fail(e) }
+  }
+  return (
+    <div className="login-screen">
+      <div className="login-card">
+        <h1 className="app-brand">Welcome to open-refinery</h1>
+        <p className="login-tagline">Create the first admin account to get started.</p>
+        <Input placeholder="admin email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <Input placeholder="password" type="password" value={pw}
+               onChange={(e) => setPw(e.target.value)}
+               onKeyDown={(e) => e.key === 'Enter' && go()} />
+        <Button onClick={go}>Create admin</Button>
+      </div>
+    </div>
+  )
+}
+
 function Login({ onToken }: { onToken: (t: string) => void }) {
   const [val, setVal] = useState('')
   const [github, setGithub] = useState(false)
   useEffect(() => {
-    applyTheme(getTheme())
     api('/auth/providers').then((p) => setGithub(!!p.github)).catch(() => {})
   }, [])
   async function go() {
