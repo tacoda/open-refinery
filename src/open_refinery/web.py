@@ -54,6 +54,7 @@ from .approval_workflows import (
 )
 from .analysis import analyze
 from .debt import health, list_audits, run_audit
+from .ingest import ingest
 from .governance import landscape
 from .packs import disable_pack, enable_pack, list_packs, list_standards
 from .policies import (
@@ -422,6 +423,11 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def get_claims(repo_id: str, session: Session = Depends(get_session),
                    _: User = Depends(current_user)):
         return list_claims(session, repo_id)
+
+    @app.post("/repositories/{repo_id}/ingest")
+    def ingest_repo(repo_id: str, session: Session = Depends(get_session),
+                    user: User = Depends(current_user)):
+        return ingest(session, repo_id, user.id)  # reads real surfaces via the GitHub integration
 
     @app.post("/repositories/{repo_id}/claims", status_code=201)
     def add_claim(repo_id: str, body: NewClaim, session: Session = Depends(get_session),

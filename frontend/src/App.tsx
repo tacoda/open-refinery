@@ -636,6 +636,11 @@ function Coverage() {
         </Select>
         {cov && <Badge variant={cov.score >= 80 ? 'default' : cov.score >= 50 ? 'secondary' : 'destructive'}>health {cov.score}</Badge>}
         {cov && <span className="muted">covered {cov.covered} · partial {cov.partial} · imitation {cov.imitation} / {cov.total}</span>}
+        <Button variant="outline" size="sm" disabled={!repoId}
+                onClick={() => post(`/repositories/${repoId}/ingest`, {})
+                  .then((r) => { toast.success(`Ingested ${r.created} claim(s)`); load(repoId) }).catch(fail)}>
+          Ingest from source
+        </Button>
       </div>
 
       {cov && cov.imitation_surfaces.length > 0 && (

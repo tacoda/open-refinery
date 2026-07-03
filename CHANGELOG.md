@@ -3,6 +3,25 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.9] — 2026-07-03
+
+### Added
+- **Ingest repo surfaces** (`POST /repositories/{id}/ingest`). Reads a repo's
+  real surfaces via a connected **GitHub integration** and turns stated behaviors
+  into `Claim`s: **charter** ← `.claude/` docs (headings/bullets), **harness** ←
+  `CLAUDE.md`/`AGENTS.md`, **code** ← structural signals (tests dir, CI present).
+  Each new claim gets a heuristic backing read — `has_instruction` if it echoes
+  an authored policy/standard, `has_gate` if the org has a gated process. Re-ingest
+  is idempotent (dedupe by repo+surface+text). Coverage/charter-health now run on
+  reality instead of hand-seeded claims. Dashboard: **Ingest from source** button
+  on the Coverage tab.
+
+### Note
+- The reader is injectable; extraction/dedup/backing are tested offline. The live
+  GitHub read is best-effort (returns nothing on any error rather than failing).
+  Follow-up: schedule ingest, and per-repo integration linking (today it uses the
+  repo owner's first GitHub integration).
+
 ## [0.13.8] — 2026-07-03
 
 ### Added
