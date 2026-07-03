@@ -43,6 +43,17 @@ def _create_admin(args: argparse.Namespace) -> int:
     return 0
 
 
+def _openapi(args: argparse.Namespace) -> int:
+    """Print the OpenAPI spec — used by the build to generate TS types + docs."""
+    import json
+
+    from .web import create_app
+
+    app = create_app(database_url="sqlite:///:memory:")
+    print(json.dumps(app.openapi()))
+    return 0
+
+
 def _seed(args: argparse.Namespace) -> int:
     import sys
 
@@ -91,6 +102,9 @@ def main(argv: list[str] | None = None) -> int:
 
     seed = sub.add_parser("seed", help="populate the database with sample data (dev)")
     seed.set_defaults(func=_seed)
+
+    openapi = sub.add_parser("openapi", help="print the OpenAPI spec (build tooling)")
+    openapi.set_defaults(func=_openapi)
 
     demo = sub.add_parser("demo", help="produce one artifact and print its record")
     demo.add_argument("--actor", default="demo-user")

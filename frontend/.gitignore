@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# generated OpenAPI spec (intermediate; api-types.ts is committed)
+openapi.json

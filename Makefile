@@ -1,9 +1,11 @@
 .DEFAULT_GOAL := help
-.PHONY: help install ui ui-dev test serve dev seed demo clean dist publish
+.PHONY: help install ui ui-dev types apidocs test serve dev seed demo clean dist publish
 
 # --- dev-only convenience (end users use `pip install open-refinery && open-refinery serve`) ---
 # Secrets live in .env (gitignored); `make dev` sources it. DB is a local file.
 DEV_DB := sqlite:///$(CURDIR)/devtest.db
+STATIC := $(CURDIR)/src/open_refinery/static
+SWAGGER := $(CURDIR)/frontend/node_modules/swagger-ui-dist
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -12,8 +14,15 @@ help: ## Show this help
 install: ## Create venv and install with dev deps (uv)
 	uv sync --extra dev
 
-ui: ## Build the dashboard into the package (release step; needs bun)
+ui: types ## Build the dashboard + self-hosted API docs into the package (needs bun)
 	cd frontend && bun install && bun run build
+	mkdir -p $(STATIC)/api-docs-assets
+	cp $(SWAGGER)/swagger-ui-bundle.js $(SWAGGER)/swagger-ui.css $(STATIC)/api-docs-assets/
+
+types: ## Generate TS types from the FastAPI OpenAPI schema (backend/frontend parity)
+	cd frontend && bun install
+	uv run open-refinery openapi > $(CURDIR)/frontend/openapi.json
+	cd frontend && bunx openapi-typescript openapi.json -o src/api-types.ts
 
 ui-dev: ## Run the Vite dev server (proxies API to :8000)
 	cd frontend && bun run dev

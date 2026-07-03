@@ -59,6 +59,7 @@ class Process(SQLModel, table=True):
     initial: str
     oversight: str = "dark"
     min_approver_role: str = "senior"  # min role to approve a gated move (risk profile)
+    approval_chain: list = Field(default_factory=list, sa_column=Column(JSON))  # ordered roles; [] = [min_approver_role]
     stages: list = Field(default_factory=list, sa_column=Column(JSON))
     transitions: list = Field(default_factory=list, sa_column=Column(JSON))  # [[from, to], ...]
     gates: list = Field(default_factory=list, sa_column=Column(JSON))
@@ -155,6 +156,18 @@ class Event(SQLModel, table=True):
     output_digest: str
     subject: str | None = Field(default=None, index=True)
     created_at: str = Field(default_factory=now_iso, index=True)
+
+
+class ApprovalRequest(SQLModel, table=True):
+    __tablename__ = "approval_requests"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    work_item_id: str = Field(foreign_key="work_items.id", index=True)
+    to_step: str
+    requested_by: str = Field(foreign_key="users.id")
+    required_roles: list = Field(default_factory=list, sa_column=Column(JSON))  # ordered chain
+    approvals: list = Field(default_factory=list, sa_column=Column(JSON))       # [{role,user_id,at}]
+    status: str = Field(default="pending", index=True)  # pending | applied | rejected
+    created_at: str = Field(default_factory=now_iso)
 
 
 class Attestation(SQLModel, table=True):

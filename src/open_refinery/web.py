@@ -14,6 +14,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -181,7 +182,8 @@ class ExecuteRequest(BaseModel):
 # --- app ------------------------------------------------------------------
 
 def create_app(session: Session | None = None, database_url: str = DEFAULT_DATABASE_URL) -> FastAPI:
-    app = FastAPI(title="open-refinery")
+    # Self-host API docs at /api-docs (assets bundled at build time — no CDN).
+    app = FastAPI(title="open-refinery", docs_url=None, redoc_url=None)
     engine = session.get_bind() if session is not None else engine_for(database_url)
     app.state.engine = engine
 
@@ -247,6 +249,14 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     @app.get("/health")
     def health():
         return {"status": "ok"}
+
+    @app.get("/api-docs", include_in_schema=False)
+    def api_docs():
+        # self-hosted Swagger UI; assets copied into static/api-docs-assets at build
+        return get_swagger_ui_html(
+            openapi_url="/openapi.json", title="open-refinery API",
+            swagger_js_url="/api-docs-assets/swagger-ui-bundle.js",
+            swagger_css_url="/api-docs-assets/swagger-ui.css")
 
     @app.get("/setup/status")
     def setup_status(session: Session = Depends(get_session)):

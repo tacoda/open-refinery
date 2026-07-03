@@ -4,10 +4,38 @@
 
 ## What this is
 
-A factory that produces artifacts under governance. The production loop is:
-**authorize → run recipe → record provenance + ownership → audit → log**.
-Core pillars: observability, auditability, authorization, ownership,
-provenance, logging — and, on the roadmap, **governance via policies**.
+A self-hosted **platform layer** that governs AI-driven software work: work
+ships through customizable processes, and every step is authorized, owned,
+provenanced, quota'd, content-filtered, and audited. The governed loop is
+**authorize → (quota / secrets / filter) → act → record → audit**.
+
+## Architecture (load-bearing)
+
+- **The web dashboard is the main user interface** — React + TypeScript + Vite +
+  Tailwind + shadcn/ui (`frontend/`). It consumes the **FastAPI backend** over
+  HTTP. Everything a user does goes through the API; the dashboard is a client,
+  the backend is the governance boundary and source of truth.
+- **Ports and adapters** for the many connectors — integrations
+  (`ADAPTERS`), executor backends (`EXECUTORS`), OAuth providers (`PROVIDERS`),
+  audit sinks (`AuditSink`), the data store. New connectors are adapters behind
+  an existing port; don't thread vendor detail through the core. See
+  `.claude/references/ports-and-adapters.md`.
+- **Deterministic orchestration** — the transition loop / executor pipeline is
+  plain code (a queue), not an agent. See `.claude/references/`.
+
+## Design lineage
+
+Read `.claude/references/` before architectural decisions — harness-vs-platform
+(the scope boundary), the deterministic queue, no-sub-agents, and ports &
+adapters. They explain *why* the system is shaped this way.
+
+## API docs & type parity
+
+- FastAPI auto-generates OpenAPI; self-hosted Swagger UI is served at
+  **`/api-docs`** (assets bundled at build, no CDN).
+- `make types` regenerates `frontend/src/api-types.ts` from the OpenAPI schema
+  (`openapi-typescript`) so the frontend types match the backend — run it (or
+  `make ui`, which includes it) after changing API request/response shapes.
 
 ## Layout
 
