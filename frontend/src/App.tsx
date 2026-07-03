@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'repos' | 'processes' | 'events' | 'metrics'
+type View = 'work' | 'repos' | 'processes' | 'integrations' | 'events' | 'metrics'
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
 export default function App() {
@@ -51,6 +51,7 @@ export default function App() {
                   <TabsTrigger value="work">Work</TabsTrigger>
                   <TabsTrigger value="repos">Repos</TabsTrigger>
                   <TabsTrigger value="processes">Processes</TabsTrigger>
+                  <TabsTrigger value="integrations">Integrations</TabsTrigger>
                   <TabsTrigger value="events">Audit</TabsTrigger>
                   <TabsTrigger value="metrics">Metrics</TabsTrigger>
                 </TabsList>
@@ -65,6 +66,7 @@ export default function App() {
               <TabsContent value="work"><Work /></TabsContent>
               <TabsContent value="repos"><Repos /></TabsContent>
               <TabsContent value="processes"><Processes /></TabsContent>
+              <TabsContent value="integrations"><Integrations /></TabsContent>
               <TabsContent value="events"><Events /></TabsContent>
               <TabsContent value="metrics"><Metrics /></TabsContent>
             </Tabs>
@@ -231,6 +233,65 @@ function Processes() {
         </Table>
       </CardContent></Card>
     </section>
+  )
+}
+
+function Integrations() {
+  const { rows, load } = useList('/integrations')
+  const [kind, setKind] = useState('github'), [name, setName] = useState(''), [token, setToken] = useState('')
+  const add = () => post('/integrations', { kind, name, token })
+    .then(() => { setName(''); setToken(''); load() }).catch(fail)
+  return (
+    <section className="page">
+      <h2 className="page-title">Integrations</h2>
+      <div className="toolbar">
+        <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
+          <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectItem value="github">GitHub</SelectItem></SelectContent>
+        </Select>
+        <Input className="field" placeholder="name" value={name} onChange={(e) => setName(e.target.value)} />
+        <Input className="field" placeholder="access token" type="password" value={token}
+               onChange={(e) => setToken(e.target.value)} />
+        <Button onClick={add}>Connect</Button>
+      </div>
+      <div className="work-list">
+        {rows.map((i) => <IntegrationCard key={i.id} integ={i} />)}
+      </div>
+    </section>
+  )
+}
+
+function IntegrationCard({ integ }: any) {
+  const [repos, setRepos] = useState<any[] | null>(null)
+  const verify = () => api(`/integrations/${integ.id}/verify`, { method: 'POST' })
+    .then((r) => toast.success(`Connected as ${r.account}`)).catch(fail)
+  const browse = () => api(`/integrations/${integ.id}/repos`).then(setRepos).catch(fail)
+  const importRepo = (r: any) => post('/repositories', { name: r.name, git_url: r.ssh_url })
+    .then(() => toast.success(`Imported ${r.name}`)).catch(fail)
+  return (
+    <Card>
+      <CardContent>
+        <div className="work-head">
+          <span className="work-title">{integ.name}</span>
+          <Badge variant="secondary">{integ.kind}</Badge>
+        </div>
+        <div className="work-actions">
+          <Button variant="outline" size="sm" onClick={verify}>Verify</Button>
+          <Button variant="secondary" size="sm" onClick={browse}>Browse repos</Button>
+        </div>
+        {repos && (
+          <Table>
+            <TableBody>{repos.map((r) => (
+              <TableRow key={r.full_name}>
+                <TableCell>{r.full_name}</TableCell>
+                <TableCell><Badge variant="outline">{r.private ? 'private' : 'public'}</Badge></TableCell>
+                <TableCell><Button size="sm" onClick={() => importRepo(r)}>Import</Button></TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
