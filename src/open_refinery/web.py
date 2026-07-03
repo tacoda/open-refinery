@@ -52,6 +52,7 @@ from .approval_workflows import (
     review,
     set_workflow,
 )
+from .analysis import analyze
 from .governance import landscape
 from .packs import disable_pack, enable_pack, list_packs, list_standards
 from .policies import (
@@ -88,6 +89,7 @@ from .users import (
     create_user,
     delete_role,
     list_roles,
+    role_rank,
     rotate_token,
     session_user,
     user_by_email,
@@ -385,6 +387,11 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def get_governance(session: Session = Depends(get_session),
                        _: User = Depends(require("admin"))):
         return landscape(session)
+
+    # --- governance analysis (poison flags; per-role visibility) ---
+    @app.get("/governance/analysis")
+    def get_analysis(session: Session = Depends(get_session), user: User = Depends(current_user)):
+        return analyze(session, viewer_rank=role_rank(session, user.role))
 
     # --- per-layer approval workflows (govern changes to governance) ---
     @app.get("/approval-workflows")

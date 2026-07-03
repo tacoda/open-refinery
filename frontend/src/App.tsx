@@ -1055,7 +1055,11 @@ function Events() {
 
 function Metrics() {
   const [m, setM] = useState<any>(null)
-  useEffect(() => { api('/metrics').then(setM).catch(fail) }, [])
+  const [ga, setGa] = useState<any>(null)
+  useEffect(() => {
+    api('/metrics').then(setM).catch(fail)
+    api('/governance/analysis').then(setGa).catch(() => {})
+  }, [])
   if (!m) return null
   const panels = [
     { title: 'WIP by step', data: m.wip_by_stage, accent: 'accent-blue' },
@@ -1079,6 +1083,34 @@ function Metrics() {
           </Card>
         ))}
       </div>
+
+      {ga && (
+        <Card>
+          <CardHeader><CardTitle>Governance flags {ga.total ? `(${ga.total})` : ''}</CardTitle></CardHeader>
+          <CardContent>
+            <div className="toolbar">
+              {Object.entries(ga.metrics).map(([k, v]) => (
+                <Badge key={k} variant="outline">{k}: {String(v)}</Badge>
+              ))}
+              {!ga.total && <span className="muted">no poison detected at your layer</span>}
+            </div>
+            {ga.total > 0 && (
+              <Table>
+                <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Severity</TableHead><TableHead>Layer</TableHead><TableHead>Detail</TableHead><TableHead>Insight</TableHead></TableRow></TableHeader>
+                <TableBody>{ga.findings.map((f: any, i: number) => (
+                  <TableRow key={i}>
+                    <TableCell><Badge variant={f.severity === 'high' ? 'destructive' : 'secondary'}>{f.type}</Badge></TableCell>
+                    <TableCell className="mono">{f.severity}</TableCell>
+                    <TableCell className="mono">{f.author_role}</TableCell>
+                    <TableCell>{f.detail}</TableCell>
+                    <TableCell className="muted">{f.insight}</TableCell>
+                  </TableRow>
+                ))}</TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </section>
   )
 }

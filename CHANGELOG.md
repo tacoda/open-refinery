@@ -3,6 +3,23 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.4] — 2026-07-03
+
+### Added
+- **Governance analysis — poison flags** (`GET /governance/analysis`; per-role
+  visibility). Static analysis over the rule set + artifact content flags: **dead**
+  rules (shadowed by a strict higher-layer opposite rule), **contradictions**
+  (same-layer opposite-effect overlapping rules), **redundant** rules (covered by
+  a broader same-effect rule), and **prompt_injection** in skill/command/agent
+  `content` (starter pattern set). Each finding carries the author layer + an
+  **insight**; a viewer sees only findings at or below their layer, with per-type
+  **metrics**. The admin governance landscape's `violations` is now populated from
+  this (was stubbed). Dashboard: a **Governance flags** card in the Metrics tab.
+
+### Note
+- Drift proper (config vs. what's actually enforced; charter/harness vs. code)
+  is the next **repo-level** slice.
+
 ## [0.13.3] — 2026-07-03
 
 ### Added

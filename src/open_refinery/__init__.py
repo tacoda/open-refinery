@@ -76,6 +76,7 @@ from .approval_workflows import (
     review,
     set_workflow,
 )
+from .analysis import analyze
 from .governance import landscape
 from .packs import (
     disable_pack,
@@ -231,6 +232,7 @@ __all__ = [
     "disable_pack",
     "list_standards",
     "landscape",
+    "analyze",
     "set_workflow",
     "list_workflows",
     "propose",

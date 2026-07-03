@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from sqlmodel import Session, func, select
 
+from .analysis import analyze
 from .models import Policy, User
 from .policies import list_policies
 from .users import list_roles, role_rank
@@ -59,5 +60,5 @@ def landscape(session: Session) -> dict:
         "roles": [{"name": r.name, "rank": r.rank, "users": int(counts.get(r.name, 0))} for r in roles],
         "layers": layered,
         "overrides": overrides,
-        "violations": [],  # pending enforcement-outcome logging (roadmap)
+        "violations": analyze(session)["findings"],  # dead/contradiction/redundant/injection
     }
