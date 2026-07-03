@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install test serve demo clean dist publish
+.PHONY: help install ui ui-dev test serve demo clean dist publish
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -7,6 +7,12 @@ help: ## Show this help
 
 install: ## Create venv and install with dev deps (uv)
 	uv sync --extra dev
+
+ui: ## Build the dashboard into the package (release step; needs bun)
+	cd frontend && bun install && bun run build
+
+ui-dev: ## Run the Vite dev server (proxies API to :8000)
+	cd frontend && bun run dev
 
 test: ## Run the test suite
 	uv run pytest -q
@@ -21,7 +27,7 @@ clean: ## Remove build artifacts and caches
 	rm -rf dist build *.egg-info .pytest_cache
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
 
-dist: ## Build sdist + wheel
+dist: ui ## Build the UI then the sdist + wheel (wheel bundles the SPA)
 	uv build
 
 publish: dist ## Build and publish to PyPI (needs token)

@@ -1,0 +1,167 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Geist Variable', sans-serif;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Light = cream. Primary = blue; green / purple / orange as secondary highlights. */
+:root {
+    --background: oklch(0.985 0.010 90);
+    --foreground: oklch(0.235 0.010 70);
+    --card: oklch(0.995 0.007 90);
+    --card-foreground: oklch(0.235 0.010 70);
+    --popover: oklch(0.995 0.007 90);
+    --popover-foreground: oklch(0.235 0.010 70);
+    --primary: oklch(0.55 0.17 255);
+    --primary-foreground: oklch(0.99 0.005 90);
+    --secondary: oklch(0.945 0.012 90);
+    --secondary-foreground: oklch(0.30 0.010 70);
+    --muted: oklch(0.945 0.012 90);
+    --muted-foreground: oklch(0.52 0.010 70);
+    --accent: oklch(0.93 0.030 255);
+    --accent-foreground: oklch(0.32 0.08 255);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.905 0.012 88);
+    --input: oklch(0.905 0.012 88);
+    --ring: oklch(0.55 0.17 255);
+    --chart-1: oklch(0.55 0.17 255);  /* blue */
+    --chart-2: oklch(0.60 0.15 150);  /* green */
+    --chart-3: oklch(0.55 0.19 300);  /* purple */
+    --chart-4: oklch(0.68 0.16 55);   /* orange */
+    --chart-5: oklch(0.52 0.010 70);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.975 0.012 90);
+    --sidebar-foreground: oklch(0.235 0.010 70);
+    --sidebar-primary: oklch(0.55 0.17 255);
+    --sidebar-primary-foreground: oklch(0.99 0.005 90);
+    --sidebar-accent: oklch(0.93 0.030 255);
+    --sidebar-accent-foreground: oklch(0.32 0.08 255);
+    --sidebar-border: oklch(0.905 0.012 88);
+    --sidebar-ring: oklch(0.55 0.17 255);
+}
+
+/* Dark = dark gray, brighter highlights. */
+.dark {
+    --background: oklch(0.205 0.006 70);
+    --foreground: oklch(0.960 0.006 90);
+    --card: oklch(0.245 0.006 70);
+    --card-foreground: oklch(0.960 0.006 90);
+    --popover: oklch(0.245 0.006 70);
+    --popover-foreground: oklch(0.960 0.006 90);
+    --primary: oklch(0.66 0.16 255);
+    --primary-foreground: oklch(0.16 0.02 255);
+    --secondary: oklch(0.285 0.006 70);
+    --secondary-foreground: oklch(0.960 0.006 90);
+    --muted: oklch(0.285 0.006 70);
+    --muted-foreground: oklch(0.715 0.010 85);
+    --accent: oklch(0.32 0.05 255);
+    --accent-foreground: oklch(0.90 0.03 255);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 12%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.66 0.16 255);
+    --chart-1: oklch(0.68 0.16 255);  /* blue */
+    --chart-2: oklch(0.70 0.15 150);  /* green */
+    --chart-3: oklch(0.68 0.18 300);  /* purple */
+    --chart-4: oklch(0.74 0.15 55);   /* orange */
+    --chart-5: oklch(0.715 0.010 85);
+    --sidebar: oklch(0.245 0.006 70);
+    --sidebar-foreground: oklch(0.960 0.006 90);
+    --sidebar-primary: oklch(0.66 0.16 255);
+    --sidebar-primary-foreground: oklch(0.16 0.02 255);
+    --sidebar-accent: oklch(0.32 0.05 255);
+    --sidebar-accent-foreground: oklch(0.90 0.03 255);
+    --sidebar-border: oklch(1 0 0 / 12%);
+    --sidebar-ring: oklch(0.66 0.16 255);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+
+/* Semantic layout classes so app JSX never carries raw utility classes. */
+@layer components {
+  .app-shell { @apply mx-auto max-w-6xl p-6; }
+  .app-header { @apply flex flex-wrap items-center gap-4 border-b pb-4 mb-6; }
+  .app-brand { @apply text-lg font-semibold tracking-tight; }
+  .app-spacer { @apply ml-auto; }
+  .app-user { @apply text-sm text-muted-foreground; }
+
+  .page { @apply space-y-4; }
+  .page-title { @apply text-xl font-semibold tracking-tight; }
+  .toolbar { @apply flex flex-wrap items-end gap-2; }
+  .field { @apply w-44; }
+
+  .work-list { @apply space-y-3; }
+  .work-head { @apply flex items-center gap-2; }
+  .work-title { @apply font-medium; }
+  .work-actions { @apply flex flex-wrap items-center gap-2 pt-1; }
+
+  .metric-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .kv-row { @apply flex items-center justify-between py-1 text-sm; }
+  .muted { @apply text-sm text-muted-foreground; }
+  .mono { @apply font-mono text-xs text-muted-foreground; }
+
+  .login-screen { @apply min-h-screen grid place-items-center p-6; }
+  .login-card { @apply w-full max-w-sm space-y-4 text-center; }
+  .login-tagline { @apply text-sm text-muted-foreground; }
+  .stack { @apply flex flex-col gap-2 text-left; }
+
+  /* the four highlight colors, surfaced on metric cards */
+  .accent-blue   { border-left: 3px solid var(--chart-1); }
+  .accent-green  { border-left: 3px solid var(--chart-2); }
+  .accent-purple { border-left: 3px solid var(--chart-3); }
+  .accent-orange { border-left: 3px solid var(--chart-4); }
+}

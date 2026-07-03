@@ -8,10 +8,15 @@ own; platform and admin see everything. User management is admin-only.
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+_STATIC = Path(__file__).parent / "static"
 
 from .attestations import AttestationFailed, AttestationMissing, attest
 from .metrics import summary
@@ -76,6 +81,15 @@ class Attest(BaseModel):
 def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAULT_DATABASE_URL) -> FastAPI:
     app = FastAPI(title="open-refinery")
     app.state.conn = conn or connect(database_url, check_same_thread=False)
+
+    # Dev only: the Vite dev server (localhost) calls the API cross-origin.
+    # In production the SPA is served same-origin from _STATIC, so this is a no-op.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"http://localhost(:\d+)?",
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     def db(request: Request) -> sqlite3.Connection:
         return request.app.state.conn
@@ -184,6 +198,11 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
     @app.get("/metrics")
     def metrics(user: User = Depends(current_user)):
         return summary(db_conn(app), owner_id=owner_scope(user))
+
+    # Serve the built dashboard last so API routes always match first. Absent in a
+    # source checkout without a frontend build; present in the shipped wheel.
+    if (_STATIC / "index.html").exists():
+        app.mount("/", StaticFiles(directory=_STATIC, html=True), name="spa")
 
     return app
 

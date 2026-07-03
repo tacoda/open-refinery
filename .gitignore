@@ -12,6 +12,10 @@ build/
 *.db
 *.db-shm
 *.db-wal
+# frontend deps + build output (SPA is built at release time, shipped in the wheel)
+frontend/node_modules/
+frontend/dist/
+src/open_refinery/static/
 # env
 .env
 # personal Claude Code permissions (not shared)

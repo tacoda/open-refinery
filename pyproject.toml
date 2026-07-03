@@ -36,5 +36,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/open_refinery"]
 
+# The built dashboard is gitignored (compiled at release time); force it into the
+# wheel so `pip install` ships the SPA without the end user needing bun/node.
+[tool.hatch.build.targets.wheel.force-include]
+"src/open_refinery/static" = "open_refinery/static"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

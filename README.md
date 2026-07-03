@@ -21,8 +21,13 @@ database to install.
 ```bash
 pip install open-refinery                        # or: uv pip install open-refinery
 open-refinery create-admin --email you@x.dev     # mints the first admin + token (once)
-open-refinery serve                              # server on port 8000
+open-refinery serve                              # server + dashboard on port 8000
 ```
+
+Open `http://your-host:8000` — the **dashboard** (React + shadcn/ui, light/dark/
+auto themes) is bundled in the package and served by the same process. Paste the
+admin token to sign in; manage repos, processes, work, oversight, and the audit
+trail from there. No Node required to run — the UI is pre-built into the wheel.
 
 Background it on a VPS however you like — `&`, `nohup`, `screen`, `tmux`, or
 your process manager:
@@ -110,11 +115,22 @@ what, from which inputs, and when.
 ## Development
 
 ```bash
-make install            # uv sync --extra dev
+make install            # backend: uv sync --extra dev
 make test               # uv run pytest
 make serve              # run the server locally
 make help               # list all tasks
 ```
+
+Frontend (dashboard) lives in `frontend/` — React + TypeScript + Vite + Tailwind
++ shadcn/ui, built with [bun](https://bun.sh):
+
+```bash
+make ui-dev             # Vite dev server (proxies API to :8000)
+make ui                 # build the SPA into the package
+make dist               # build UI + wheel (the wheel bundles the SPA)
+```
+
+The build step is release-time only; end users never need bun/node.
 
 See [PLAN.md](PLAN.md), [CONTRIBUTING.md](CONTRIBUTING.md), and
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
