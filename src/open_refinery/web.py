@@ -26,6 +26,7 @@ from .attestations import AttestationFailed, AttestationMissing, attest
 from .integrations import (
     create_connect_state,
     create_integration,
+    delete_integration,
     list_integrations,
     list_remote_repos,
     pop_connect_state,
@@ -33,7 +34,12 @@ from .integrations import (
 from .integrations import verify as verify_integration
 from .metrics import summary
 from .processes import create_process, list_processes
-from .repositories import DuplicateRepository, create_repository, list_repositories
+from .repositories import (
+    DuplicateRepository,
+    create_repository,
+    import_or_get,
+    list_repositories,
+)
 from .store import DEFAULT_DATABASE_URL, SqliteSink, connect, query_events
 from .users import (
     DuplicateUser,
@@ -202,6 +208,10 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
     def get_repos(user: User = Depends(current_user)):
         return list_repositories(db_conn(app), owner_id=owner_scope(user))
 
+    @app.post("/repositories/import", status_code=201)
+    def import_repo(body: NewRepo, user: User = Depends(current_user)):
+        return import_or_get(db_conn(app), body.name, body.git_url, user.id)
+
     @app.post("/processes", status_code=201)
     def add_process(body: NewProcess, user: User = Depends(current_user)):
         return create_process(
@@ -257,6 +267,11 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
     @app.get("/integrations")
     def get_integrations(user: User = Depends(current_user)):
         return list_integrations(db_conn(app), owner_id=owner_scope(user))
+
+    @app.delete("/integrations/{integ_id}")
+    def remove_integration(integ_id: str, _: User = Depends(current_user)):
+        delete_integration(db_conn(app), integ_id)
+        return {"status": "deleted"}
 
     # Connect a service via OAuth. The SPA is authenticated, so we bind the flow
     # to the user with a one-time state; the callback (no auth header) resolves

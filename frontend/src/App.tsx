@@ -273,18 +273,20 @@ function Integrations() {
         </CardContent>
       </Card>
       <div className="work-list">
-        {rows.map((i) => <IntegrationCard key={i.id} integ={i} />)}
+        {rows.map((i) => <IntegrationCard key={i.id} integ={i} onChange={load} />)}
       </div>
     </section>
   )
 }
 
-function IntegrationCard({ integ }: any) {
+function IntegrationCard({ integ, onChange }: any) {
   const [repos, setRepos] = useState<any[] | null>(null)
   const verify = () => api(`/integrations/${integ.id}/verify`, { method: 'POST' })
     .then((r) => toast.success(`Connected as ${r.account}`)).catch(fail)
   const browse = () => api(`/integrations/${integ.id}/repos`).then(setRepos).catch(fail)
-  const importRepo = (r: any) => post('/repositories', { name: r.name, git_url: r.ssh_url })
+  const remove = () => api(`/integrations/${integ.id}`, { method: 'DELETE' })
+    .then(() => { toast.success('Disconnected'); onChange() }).catch(fail)
+  const importRepo = (r: any) => post('/repositories/import', { name: r.name, git_url: r.ssh_url })
     .then(() => toast.success(`Imported ${r.name}`)).catch(fail)
   return (
     <Card>
@@ -296,6 +298,7 @@ function IntegrationCard({ integ }: any) {
         <div className="work-actions">
           <Button variant="outline" size="sm" onClick={verify}>Verify</Button>
           <Button variant="secondary" size="sm" onClick={browse}>Browse repos</Button>
+          <Button variant="outline" size="sm" onClick={remove}>Disconnect</Button>
         </div>
         {repos && (
           <Table>

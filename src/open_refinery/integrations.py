@@ -168,6 +168,11 @@ def list_integrations(
     return [_row(r) for r in rows]
 
 
+def delete_integration(conn: sqlite3.Connection, integ_id: str) -> None:
+    conn.execute("DELETE FROM integrations WHERE id = ?", (integ_id,))
+    conn.commit()
+
+
 def _token(conn: sqlite3.Connection, integ_id: str) -> str:
     row = conn.execute("SELECT secret FROM integrations WHERE id = ?", (integ_id,)).fetchone()
     if row is None:

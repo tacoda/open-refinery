@@ -76,6 +76,14 @@ def create_repository(
     return repo
 
 
+def import_or_get(
+    conn: sqlite3.Connection, name: str, git_url: str, owner_id: str
+) -> Repository:
+    """Idempotent import: return the existing repo for this git URL, else create it."""
+    row = conn.execute("SELECT * FROM repositories WHERE git_url = ?", (git_url,)).fetchone()
+    return _row_to_repo(row) if row else create_repository(conn, name, git_url, owner_id)
+
+
 def get_repository(conn: sqlite3.Connection, repo_id: str) -> Repository | None:
     row = conn.execute("SELECT * FROM repositories WHERE id = ?", (repo_id,)).fetchone()
     return _row_to_repo(row) if row else None

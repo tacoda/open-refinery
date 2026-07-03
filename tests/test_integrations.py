@@ -69,6 +69,21 @@ def test_verify_and_repos_use_decrypted_token(monkeypatch):
     assert integrations.list_remote_repos(conn, integ.id)[0]["full_name"] == "acme/web"
 
 
+def test_delete_integration():
+    conn, ian = setup()
+    integ = create_integration(conn, "github", "gho_tok", ian.id)
+    assert len(list_integrations(conn)) == 1
+    integrations.delete_integration(conn, integ.id)
+    assert list_integrations(conn) == []
+
+
+def test_gitlab_kind_supported(monkeypatch):
+    conn, ian = setup()
+    monkeypatch.setitem(integrations.ADAPTERS["gitlab"], "verify", lambda t: {"account": "gl-user"})
+    integ = create_integration(conn, "gitlab", "glpat", ian.id)
+    assert integ.kind == "gitlab" and integ.account == "gl-user"
+
+
 def test_connect_state_is_one_time():
     conn, ian = setup()
     state = integrations.create_connect_state(conn, ian.id, "github")

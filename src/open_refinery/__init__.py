@@ -9,6 +9,7 @@ from .repositories import (
     Repository,
     create_repository,
     get_repository,
+    import_or_get,
     list_repositories,
 )
 from .processes import (
@@ -28,6 +29,7 @@ from .attestations import (
 from .integrations import (
     Integration,
     create_integration,
+    delete_integration,
     get_integration,
     list_integrations,
 )
@@ -118,7 +120,9 @@ __all__ = [
     "run_migrations",
     "Integration",
     "create_integration",
+    "delete_integration",
     "get_integration",
     "list_integrations",
+    "import_or_get",
     "__version__",
 ]
