@@ -27,17 +27,27 @@ class Record:
     owner: str
     input_digest: str
     output_digest: str
+    subject: str | None = None  # entity this production concerns (e.g. work item id)
     artifact_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     @classmethod
-    def of(cls, recipe: str, actor: str, owner: str, inputs: dict, output: object) -> Record:
+    def of(
+        cls,
+        recipe: str,
+        actor: str,
+        owner: str,
+        inputs: dict,
+        output: object,
+        subject: str | None = None,
+    ) -> Record:
         return cls(
             recipe=recipe,
             actor=actor,
             owner=owner,
             input_digest=_digest(inputs),
             output_digest=_digest(output),
+            subject=subject,
         )
 
     def to_dict(self) -> dict:

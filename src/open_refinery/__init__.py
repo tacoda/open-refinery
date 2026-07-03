@@ -19,6 +19,15 @@ from .processes import (
     list_processes,
 )
 from .store import SqliteSink, connect, query_events
+from .work_items import (
+    InvalidTransition,
+    UnknownWorkItem,
+    WorkItem,
+    create_work_item,
+    get_work_item,
+    list_work_items,
+    transition,
+)
 from .users import (
     ROLES,
     DuplicateUser,
@@ -62,5 +71,12 @@ __all__ = [
     "create_process",
     "get_process",
     "list_processes",
+    "WorkItem",
+    "InvalidTransition",
+    "UnknownWorkItem",
+    "create_work_item",
+    "get_work_item",
+    "list_work_items",
+    "transition",
     "__version__",
 ]

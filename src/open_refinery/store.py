@@ -26,10 +26,12 @@ _SCHEMAS: list[str] = [
         owner         TEXT NOT NULL,
         input_digest  TEXT NOT NULL,
         output_digest TEXT NOT NULL,
+        subject       TEXT,
         created_at    TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS ix_events_actor ON events(actor);
     CREATE INDEX IF NOT EXISTS ix_events_recipe ON events(recipe);
+    CREATE INDEX IF NOT EXISTS ix_events_subject ON events(subject);
     CREATE INDEX IF NOT EXISTS ix_events_created_at ON events(created_at);
     """
 ]
@@ -71,8 +73,8 @@ class SqliteSink:
     def write(self, record: Record) -> None:
         self._conn.execute(
             "INSERT INTO events "
-            "(artifact_id, recipe, actor, owner, input_digest, output_digest, created_at) "
-            "VALUES (:artifact_id, :recipe, :actor, :owner, :input_digest, :output_digest, :created_at)",
+            "(artifact_id, recipe, actor, owner, input_digest, output_digest, subject, created_at) "
+            "VALUES (:artifact_id, :recipe, :actor, :owner, :input_digest, :output_digest, :subject, :created_at)",
             record.to_dict(),
         )
         self._conn.commit()
@@ -84,6 +86,7 @@ def query_events(
     actor: str | None = None,
     recipe: str | None = None,
     owner: str | None = None,
+    subject: str | None = None,
     since: str | None = None,
     until: str | None = None,
     limit: int = 100,
@@ -91,7 +94,7 @@ def query_events(
     """Query the audit trail, newest first. Filters combine with AND."""
     clauses: list[str] = []
     params: dict[str, object] = {}
-    for col, val in (("actor", actor), ("recipe", recipe), ("owner", owner)):
+    for col, val in (("actor", actor), ("recipe", recipe), ("owner", owner), ("subject", subject)):
         if val is not None:
             clauses.append(f"{col} = :{col}")
             params[col] = val
