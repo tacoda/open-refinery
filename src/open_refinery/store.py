@@ -61,8 +61,20 @@ def connect(
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+
+    # A brand-new DB gets the latest schema from register_schema and is stamped
+    # to the newest version; an existing DB is evolved by pending migrations.
+    from .migrations import run_migrations, stamp_latest
+
+    fresh = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='events'"
+    ).fetchone() is None
     for ddl in _SCHEMAS:
         conn.executescript(ddl)
+    if fresh:
+        stamp_latest(conn)
+    else:
+        run_migrations(conn)
     return conn
 
 

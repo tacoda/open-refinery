@@ -25,6 +25,7 @@ from .attestations import (
     attest,
     attestations_for,
 )
+from .migrations import run_migrations
 from .metrics import (
     activity_by_actor,
     event_counts,
@@ -108,5 +109,6 @@ __all__ = [
     "lead_times",
     "seed",
     "AlreadySeeded",
+    "run_migrations",
     "__version__",
 ]
