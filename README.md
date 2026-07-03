@@ -61,7 +61,7 @@ agent bottleneck would impose.
 > (oversight, gated steps, required checks, min approver role), and API token
 > rotation — atop the executor, policy governance, targets / routing / quotas,
 > integrations, oversight, metrics, and a full audit trail. Auth is
-> email/password (+ GitHub OAuth). See [CHANGELOG.md](CHANGELOG.md).
+> email/password (+ GitHub OAuth). See [CHANGELOG.md](https://github.com/tacoda/open-refinery/blob/main/CHANGELOG.md).
 
 ## Quickstart
 
@@ -204,10 +204,10 @@ make dist               # build UI + wheel (the wheel bundles the SPA)
 The build step is release-time only; end users never need bun/node.
 
 For a full fresh-VPS walkthrough — install, background the server, create the
-admin, ports, and HTTPS/TLS on a public host — see [USER_GUIDE.md](USER_GUIDE.md).
+admin, ports, and HTTPS/TLS on a public host — see [USER_GUIDE.md](https://github.com/tacoda/open-refinery/blob/main/USER_GUIDE.md).
 
-See also [PLAN.md](PLAN.md), [CONTRIBUTING.md](CONTRIBUTING.md), and
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+See also [PLAN.md](https://github.com/tacoda/open-refinery/blob/main/PLAN.md), [CONTRIBUTING.md](https://github.com/tacoda/open-refinery/blob/main/CONTRIBUTING.md), and
+[docs/ARCHITECTURE.md](https://github.com/tacoda/open-refinery/blob/main/docs/ARCHITECTURE.md).
 
 ## Credits
 
@@ -227,4 +227,4 @@ platform's) draws on Anton Vinogradov's
 
 ## License
 
-[MIT](LICENSE) © Ian Johnson
+[MIT](https://github.com/tacoda/open-refinery/blob/main/LICENSE) © Ian Johnson
