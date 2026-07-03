@@ -25,6 +25,13 @@ from .attestations import (
     attest,
     attestations_for,
 )
+from .metrics import (
+    activity_by_actor,
+    event_counts,
+    lead_times,
+    summary,
+    wip_by_stage,
+)
 from .oversight import LEVELS, requires_approval
 from .work_items import (
     ApprovalRequired,
@@ -93,5 +100,10 @@ __all__ = [
     "attestations_for",
     "AttestationMissing",
     "AttestationFailed",
+    "summary",
+    "wip_by_stage",
+    "event_counts",
+    "activity_by_actor",
+    "lead_times",
     "__version__",
 ]

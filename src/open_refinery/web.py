@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .attestations import AttestationFailed, AttestationMissing, attest
+from .metrics import summary
 from .processes import create_process, list_processes
 from .repositories import DuplicateRepository, create_repository, list_repositories
 from .store import DEFAULT_DATABASE_URL, SqliteSink, connect, query_events
@@ -179,6 +180,10 @@ def create_app(conn: sqlite3.Connection | None = None, database_url: str = DEFAU
         # developers see only their own events; platform/admin see all.
         owner = owner_scope(user)
         return query_events(db_conn(app), owner=owner, subject=subject, actor=actor, limit=limit)
+
+    @app.get("/metrics")
+    def metrics(user: User = Depends(current_user)):
+        return summary(db_conn(app), owner_id=owner_scope(user))
 
     return app
 

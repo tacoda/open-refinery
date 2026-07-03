@@ -93,7 +93,7 @@ artifact, record = factory.produce("upper", actor="ian", text="hello")
 | Auditability    | `AuditSink` (`MemorySink`, `JsonlSink`) — append-only trail  |
 | Logging         | stdlib `logging`, logger name `open_refinery`               |
 | Oversight       | Per-process autonomy levels L0–L4; gated steps need recorded approvals |
-| Observability   | *(roadmap)* read-model / metrics over the audit trail       |
+| Observability   | `GET /metrics` — WIP, event counts, per-actor activity, lead times over the audit trail |
 | Governance      | *(roadmap)* policy layer that constrains what may be produced |
 
 ## Durable audit trail
