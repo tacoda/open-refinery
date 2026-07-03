@@ -49,7 +49,8 @@ reaches a target.
 | Backend   | FastAPI + Python (builds on the 0.1.0 core; `uv` + `hatchling`)     |
 | Data      | SQLite default (one file, WAL); `DATABASE_URL` swaps to Postgres    |
 | Dashboard | React SPA, served by the API in production (single deploy)          |
-| Identity  | Local accounts (email/pw) + per-user API token; roles `developer`/`platform`/`admin` |
+| Identity  | Dual: **OAuth** for interactive/human accounts (dashboard sign-in, Claude-Code-style), **API tokens** for programmatic/API accounts. Roles `developer`/`platform`/`admin`. |
+| Orchestration | **LangGraph** for executing agentic stage actions with durable checkpointer state (persisted to our DB). Process state machine itself stays declarative domain data — *not* a langgraph graph. `deepagents` optional (see open questions). |
 
 ## Domain model
 
@@ -80,10 +81,13 @@ audited → logged. Same loop as the 0.1.0 factory, one level up.
 
 ### Process customization
 
-A process is declarative data (stored in DB, editable via dashboard/API):
-stages, allowed transitions, WIP limits, required guards. **Guards** are the
-code seam — registered by name in Python (`GUARD_FACTORIES` pattern from
-pyness), configured/tuned by data. Ships with two built-in archetypes:
+A process is a **series of steps (stages) connected by transitions** — a
+directed graph, so **feedback loops are first-class** (a step can point back to
+an earlier one, e.g. `verify → patch` on a failed check). It is declarative data
+(stored in DB, **fully editable through the web UI** — no config files): steps,
+allowed transitions, WIP limits, required guards. **Guards** are the code seam —
+registered by name in Python (`GUARD_FACTORIES` pattern from pyness),
+configured/tuned by data. Ships with two built-in archetypes:
 
 - **Board (kanban)**: columns, manual transitions, WIP limits. Team-based flow.
 - **Doctrine**: a fixed ordered procedure with guards between steps (e.g. vuln
@@ -201,10 +205,15 @@ src/open_refinery/
 
 ## Auth & accountability
 
-- **Login**: email + password (hashed, e.g. argon2). Session issues a
-  per-user **API token** (stored hashed; shown once).
-- **Every request** carries the token → resolves to a `User` → stamped on any
-  resulting `Event`. No anonymous mutations.
+- **Two authentication paths, one identity model:**
+  - **OAuth** — interactive human accounts sign in through the dashboard via an
+    OAuth provider (Claude-Code-style login). Best UX, no password to manage.
+  - **API tokens** — programmatic/API accounts authenticate with a per-user
+    token (stored hashed, shown once). For CI, harnesses, and scripts.
+  - Local email/password (already built) remains as the offline/self-hosted
+    fallback. All three resolve to the same `User` + role.
+- **Every request** carries an OAuth session or a token → resolves to a `User`
+  → stamped on any resulting `Event`. No anonymous mutations.
 - **Roles** — three roles defined by *scope of authority*, not a simple
   permission ladder:
   - `developer` — **drives work and sets repository (project) standards.**
@@ -269,8 +278,8 @@ command up.
 |---------|----------------------------------------------------------------------|
 | 0.1.0 ✅ | Core factory: authorize → produce → record → audit → log            |
 | 0.2.0   | Persistence (SQLite/Postgres), migrations, durable event store; migrate `AuditSink` to SQL. Entities: `User`, `Repository`, `Process`, `WorkItem`. |
-| 0.3.0   | FastAPI + auth: local accounts, API tokens, roles, ownership scoping, **first-run setup wizard**. |
-| 0.4.0   | Process engine: declarative processes, stages, guards, board + doctrine archetypes; the transition loop. |
+| 0.3.0   | FastAPI + auth: local accounts, API tokens, **OAuth sign-in**, roles, ownership scoping, **first-run setup wizard**. |
+| 0.4.0   | Process engine: declarative processes, stages, guards, board + doctrine archetypes; the transition loop. Agentic stage actions execute via **LangGraph** (durable checkpointer state). |
 | 0.5.0   | Oversight: autonomy levels (L0–L4), gates, approvals, attestations, quality gates. |
 | 0.6.0   | Integrations: adapter framework + GitHub, GitLab, Jira, Linear; **UI token entry**, encrypted credential store, sync. |
 | 0.7.0   | Targets + routing + quotas: model/MCP/API targets, route rules, budgets, cost tracking, rate limits — all UI-managed. |
@@ -289,6 +298,12 @@ command up.
 - **Secrets at rest**: tokens are UI-entered and encrypted with `SECRET_KEY`
   (decided). Open: key rotation and re-encryption strategy; optional KMS/secret
   store for larger deployments. Security review before 0.6.0.
+- **`deepagents` adoption**: LangGraph checkpointers already give durable
+  orchestration state. `deepagents` adds a planning tool, subagents, and
+  virtual-FS backends (`StateBackend` thread-scoped, `StoreBackend` durable
+  cross-thread). Adopt *only* when a stage action runs an agentic planning /
+  subagent loop needing scratchpad memory — its `StoreBackend` can persist to
+  our DB. Not needed for the process state machine. Decide per stage-executor.
 - **Real-time**: does the board need live updates (websockets/SSE) or is poll
   enough for 1.0?
 - **OAuth vs PAT per integration**: some sources (GitHub, GitLab) support OAuth

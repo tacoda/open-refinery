@@ -11,6 +11,13 @@ from .repositories import (
     get_repository,
     list_repositories,
 )
+from .processes import (
+    ARCHETYPES,
+    Process,
+    create_process,
+    get_process,
+    list_processes,
+)
 from .store import SqliteSink, connect, query_events
 from .users import (
     ROLES,
@@ -50,5 +57,10 @@ __all__ = [
     "create_repository",
     "get_repository",
     "list_repositories",
+    "Process",
+    "ARCHETYPES",
+    "create_process",
+    "get_process",
+    "list_processes",
     "__version__",
 ]
