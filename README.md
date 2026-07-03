@@ -2,10 +2,48 @@
 
 *An open factory to shine light into the dark.*
 
-A self-hosted dark factory that adds auditability to make it open. Work ships
-through customizable processes; every output carries its **provenance**, an
-**owner**, and an **audit trail**; every production is **authorized** before it
-runs and **logged** as it happens.
+**open-refinery is a self-hosted control plane for AI-driven software work.**
+Teams define the *processes* their work moves through — a kanban board, a
+vulnerability-remediation doctrine, whatever fits — connect their repositories,
+and ship work through those processes. Every step is owned, authorized,
+recorded, and queryable. It runs "dark" (lights-out automation) but stays
+"open": nothing happens without an attributable, auditable trail.
+
+### What it is
+
+The **platform layer** between your harnesses (agents, scripts, CI — the
+in-process, app-owned side) and your targets (repos, models, tools). It governs
+*how work reaches those targets*: identity and roles, authorization, provenance,
+an append-only audit trail, oversight gates, and metrics. Install it on any VPS
+with `pip install` and one command; manage everything from the web dashboard.
+
+### What it does
+
+- Ships work through **customizable processes** — ordered steps with feedback
+  loops (board or doctrine archetypes).
+- Puts a **human-oversight dial** on every process (L0 manual → L4 fully dark),
+  with approvals and quality-gate attestations where you want them.
+- Records a **complete, attributed audit trail** — who did what, to which work
+  item, with what inputs — and derives **metrics** (WIP, lead time, throughput)
+  from it.
+- Enforces **ownership**: developers see their own work; platform sets org-wide
+  standards; admins audit everything.
+
+### What it doesn't do
+
+- It is **not** a CI runner, a build system, or an agent framework — it
+  *governs* work, it doesn't execute your builds or own your prompts.
+- It is **not** multi-tenant SaaS. One install serves **one organization**,
+  self-hosted and single-tenant by design.
+- It doesn't hide anything: no opaque automation, no un-owned actions.
+
+### Philosophy & goals
+
+Automation you can't audit isn't trustworthy. open-refinery's goal is to make
+lights-out software work **safe to trust** by making it *legible* — every
+production authorized, owned, provenanced, and logged, with human oversight
+configurable to each team's philosophy. Minimal to run (one process, SQLite,
+env-light), everything managed through the UI, and completely open source.
 
 > Status: **0.3.0.** Server + bundled dashboard, auth (local / API token /
 > GitHub OAuth, roles developer / platform / admin), first-run setup wizard,
@@ -156,6 +194,13 @@ The build step is release-time only; end users never need bun/node.
 
 See [PLAN.md](PLAN.md), [CONTRIBUTING.md](CONTRIBUTING.md), and
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Credits
+
+The harness-vs-platform framing that shapes open-refinery's design — the
+platform as the out-of-process governance layer that harnesses call through —
+draws on Traefik Labs' mental model:
+[Harness engineering vs platform engineering](https://traefik.io/blog/harness-engineering-vs-platform-engineering-a-mental-model-for-how-both-win).
 
 ## License
 
