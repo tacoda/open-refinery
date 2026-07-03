@@ -825,6 +825,10 @@ export interface components {
             credential?: {
                 [key: string]: string;
             } | null;
+            /** Output Schema */
+            output_schema?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** NewUser */
         NewUser: {

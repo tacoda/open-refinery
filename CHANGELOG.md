@@ -3,6 +3,17 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.11.0] — 2026-07-03
+
+### Added
+- **Structured output in the executor** — a target may declare an
+  `output_schema`; when set, the executor validates the model's output against it
+  (object shape, required keys, declared types), content-filters string leaves,
+  and persists/returns it **structured** (not stringified). Output that doesn't
+  conform fails the call. Free-text remains the fallback when no schema is set.
+  Aligns with `.claude/rules/structured-output.md`. (Real Anthropic/OpenAI/MCP
+  backends land next.)
+
 ## [0.10.0] — 2026-07-03
 
 ### Added

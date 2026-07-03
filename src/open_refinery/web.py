@@ -154,6 +154,7 @@ class NewTarget(BaseModel):
     kind: str
     endpoint: str
     credential: dict[str, str] | None = None
+    output_schema: dict | None = None
 
 
 class NewRoute(BaseModel):
@@ -436,7 +437,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def add_target(body: NewTarget, session: Session = Depends(get_session),
                    user: User = Depends(current_user)):
         return create_target(session, body.name, body.kind, body.endpoint, user.id,
-                            credential=body.credential)
+                            credential=body.credential, output_schema=body.output_schema)
 
     @app.get("/targets")
     def get_targets(session: Session = Depends(get_session), user: User = Depends(current_user)):

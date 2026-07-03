@@ -24,6 +24,8 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE processes ADD COLUMN min_approver_role TEXT NOT NULL DEFAULT 'senior';",
     # v3 (0.10.0): ordered approval chain (roles) for async/chained approvals
     "ALTER TABLE processes ADD COLUMN approval_chain TEXT NOT NULL DEFAULT '[]';",
+    # v4 (0.11.0): optional structured-output schema per target
+    "ALTER TABLE targets ADD COLUMN output_schema TEXT NOT NULL DEFAULT '{}';",
 ]
 
 

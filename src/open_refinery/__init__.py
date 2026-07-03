@@ -57,7 +57,7 @@ from .approvals import (
     reject,
     request_approval,
 )
-from .executor import EXECUTORS, ExecutionError, execute
+from .executor import EXECUTORS, ExecutionError, execute, validate_schema
 from .models import ApprovalRequest, Policy, Quota, Route, Target
 from .policies import (
     PolicyDenied,
@@ -104,7 +104,7 @@ from .users import (
     user_by_token,
 )
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 
 __all__ = [
     "Factory",
@@ -199,6 +199,7 @@ __all__ = [
     "execute",
     "EXECUTORS",
     "ExecutionError",
+    "validate_schema",
     "resolve_target",
     "ApprovalRequest",
     "request_approval",

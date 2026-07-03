@@ -25,13 +25,14 @@ class QuotaExceeded(Exception):
 # --- targets --------------------------------------------------------------
 
 def create_target(session: Session, name: str, kind: str, endpoint: str, owner_id: str,
-                  *, credential: dict | None = None) -> Target:
+                  *, credential: dict | None = None, output_schema: dict | None = None) -> Target:
     if kind not in KINDS:
         raise ValueError(f"unknown target kind: {kind!r} (expected {KINDS})")
     if session.get(User, owner_id) is None:
         raise ValueError(f"unknown owner: {owner_id!r}")
     secret = encrypt(json.dumps(credential)) if credential else ""
-    target = Target(name=name, kind=kind, endpoint=endpoint, owner_id=owner_id, secret=secret)
+    target = Target(name=name, kind=kind, endpoint=endpoint, owner_id=owner_id, secret=secret,
+                    output_schema=output_schema or {})
     session.add(target)
     session.commit()
     session.refresh(target)

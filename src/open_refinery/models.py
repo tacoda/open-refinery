@@ -103,6 +103,7 @@ class Target(SQLModel, table=True):
     endpoint: str      # model id, MCP server URL, or API base URL
     owner_id: str = Field(foreign_key="users.id", index=True)
     secret: str = ""   # encrypted JSON credential; "" when none
+    output_schema: dict = Field(default_factory=dict, sa_column=Column(JSON))  # {} = free text
     created_at: str = Field(default_factory=now_iso)
 
 

@@ -21,7 +21,48 @@ from .targets import consume_quota, resolve_targets, target_credential
 
 
 class ExecutionError(Exception):
-    """Raised when no route resolves or every candidate target fails."""
+    """Raised when no route resolves, a target's output fails its schema, or
+    every candidate target fails."""
+
+
+_JSON_TYPES = {"string": str, "number": (int, float), "integer": int,
+               "boolean": bool, "object": dict, "array": list}
+
+
+def validate_schema(obj, schema: dict) -> None:
+    """Minimal JSON-schema check: object, required keys present, declared types.
+
+    ponytail: covers required + top-level property types — enough to enforce a
+    structured contract. Swap in `jsonschema` if richer validation is needed.
+    """
+    if not isinstance(obj, dict):
+        raise ExecutionError("structured output must be a JSON object")
+    for key in schema.get("required", []):
+        if key not in obj:
+            raise ExecutionError(f"structured output missing required key {key!r}")
+    for key, spec in schema.get("properties", {}).items():
+        expected = spec.get("type") if isinstance(spec, dict) else None
+        if key in obj and expected in _JSON_TYPES and not isinstance(obj[key], _JSON_TYPES[expected]):
+            raise ExecutionError(f"structured output {key!r} must be {expected}")
+
+
+def _filter_value(value):
+    """Content-filter string leaves anywhere in a structured value."""
+    if isinstance(value, str):
+        return scan_content(value)  # (clean, hits)
+    if isinstance(value, dict):
+        out, hits = {}, []
+        for k, v in value.items():
+            out[k], h = _filter_value(v)
+            hits += h
+        return out, hits
+    if isinstance(value, list):
+        out, hits = [], []
+        for v in value:
+            cv, h = _filter_value(v)
+            out.append(cv); hits += h
+        return out, hits
+    return value, []
 
 
 def stub_backend(target, credential, payload: str) -> dict:
@@ -58,14 +99,22 @@ def execute(session: Session, actor_id: str, process_id: str, payload: str, audi
                 inputs={"target": target.id, "step": step}, output=str(exc), subject=work_item_id))
             continue
 
-        clean_out, out_hits = scan_content(str(result.get("output", "")))
+        raw = result.get("output", "")
+        if target.output_schema:  # structured contract: validate + keep structured
+            validate_schema(raw, target.output_schema)
+            clean_out, out_hits = _filter_value(raw)
+            structured = True
+        else:
+            clean_out, out_hits = scan_content(str(raw))
+            structured = False
         units = int(result.get("units", 1))
         redactions = in_hits + out_hits
         audit.write(Record.of(
             recipe="invoke", actor=actor_id, owner=actor_id,
-            inputs={"target": target.id, "step": step, "units": units, "redactions": redactions},
+            inputs={"target": target.id, "step": step, "units": units,
+                    "redactions": redactions, "structured": structured},
             output=clean_out, subject=work_item_id))
         return {"output": clean_out, "target": target.name, "kind": target.kind,
-                "units": units, "redactions": redactions}
+                "units": units, "redactions": redactions, "structured": structured}
 
     raise ExecutionError("all candidate targets failed: " + "; ".join(errors))

@@ -56,12 +56,12 @@ Man-Month* — is the condition under which adding effort actually adds
 throughput, whereas work requiring communication incurs overhead that a central
 agent bottleneck would impose.
 
-> Status: **0.10.0.** Adds an **async approval queue** with **chained approvals**
-> (e.g. senior → platform), on top of the four-role ladder + configurable
-> per-process risk profile, the executor, policy governance, targets / routing /
-> quotas, integrations, oversight, metrics, and a full audit trail. Self-hosted
-> API docs at `/api-docs`; OpenAPI→TypeScript type parity. Auth is
-> email/password (+ GitHub OAuth). See [CHANGELOG.md](https://github.com/tacoda/open-refinery/blob/main/CHANGELOG.md).
+> Status: **0.11.0.** Adds **structured output in the executor** — a target can
+> declare an `output_schema` that the model's output is validated against and
+> persisted structured. Atop the async approval queue + chained approvals, the
+> four-role ladder + configurable risk profile, the executor, policy governance,
+> targets / routing / quotas, integrations, oversight, metrics, and a full audit
+> trail. Self-hosted API docs at `/api-docs`. See [CHANGELOG.md](https://github.com/tacoda/open-refinery/blob/main/CHANGELOG.md).
 
 ## Quickstart
 
@@ -134,8 +134,9 @@ export APP_BASE_URL=https://or.example.com   # optional; used to build the callb
 Register the OAuth App's callback as `<APP_BASE_URL>/auth/github/callback`.
 A GitHub login is accepted only when its **verified primary email matches an
 existing user** — provision accounts first (an admin creates them in the UI);
-unknown emails are denied. The OAuth client id/secret are the one bit of config
-that must be env (they're needed before anyone can log in). API/CI accounts keep
+unknown emails are denied. (Roadmap: OAuth client id/secret move to DB settings,
+editable in the UI by platform/admin — so **only `SECRET_KEY` is required in the
+environment**; everything else lives in the database.) API/CI accounts keep
 using tokens.
 
 ## Library
