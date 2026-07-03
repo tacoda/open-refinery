@@ -1,6 +1,6 @@
 [project]
 name = "open-refinery"
-version = "0.13.4"
+version = "0.13.5"
 description = "A factory for producing artifacts under governance — provenance, ownership, authorization, and an append-only audit trail on every output."
 readme = "README.md"
 requires-python = ">=3.11"

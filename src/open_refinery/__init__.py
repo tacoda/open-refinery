@@ -77,6 +77,12 @@ from .approval_workflows import (
     set_workflow,
 )
 from .analysis import analyze
+from .repo_governance import (
+    create_claim,
+    delete_claim,
+    list_claims,
+    report as repo_report,
+)
 from .governance import landscape
 from .packs import (
     disable_pack,
@@ -233,6 +239,10 @@ __all__ = [
     "list_standards",
     "landscape",
     "analyze",
+    "create_claim",
+    "list_claims",
+    "delete_claim",
+    "repo_report",
     "set_workflow",
     "list_workflows",
     "propose",

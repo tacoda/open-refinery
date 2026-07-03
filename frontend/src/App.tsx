@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics'
+type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
@@ -76,6 +76,7 @@ export default function App() {
                   <TabsTrigger value="policies">Policies</TabsTrigger>
                   <TabsTrigger value="packs">Packs</TabsTrigger>
                   <TabsTrigger value="proposals">Proposals</TabsTrigger>
+                  <TabsTrigger value="coverage">Coverage</TabsTrigger>
                   {canInvite && <TabsTrigger value="invitations">Invitations</TabsTrigger>}
                   {isPlatform && <TabsTrigger value="settings">Settings</TabsTrigger>}
                   {isAdmin && <TabsTrigger value="governance">Governance</TabsTrigger>}
@@ -99,6 +100,7 @@ export default function App() {
               <TabsContent value="policies"><Policies /></TabsContent>
               <TabsContent value="packs"><Packs me={me} roles={roles} /></TabsContent>
               <TabsContent value="proposals"><Proposals me={me} roles={roles} isAdmin={isAdmin} /></TabsContent>
+              <TabsContent value="coverage"><Coverage /></TabsContent>
               {canInvite && <TabsContent value="invitations"><Invitations me={me} roles={roles} /></TabsContent>}
               {isPlatform && <TabsContent value="settings"><Settings /></TabsContent>}
               {isAdmin && <TabsContent value="governance"><Governance /></TabsContent>}
@@ -542,6 +544,97 @@ function Settings() {
               <TableRow key={k}>
                 <TableCell className="mono">{k}</TableCell>
                 <TableCell><Button variant="outline" size="sm" onClick={() => del(k)}>Delete</Button></TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
+function Coverage() {
+  const { rows: repos } = useList('/repositories')
+  const [repoId, setRepoId] = useState('')
+  const [rep, setRep] = useState<any>(null)
+  const [claims, setClaims] = useState<any[]>([])
+  useEffect(() => { if (!repoId && repos.length) setRepoId(repos[0].id) }, [repos, repoId])
+  const load = (id: string) => {
+    if (!id) return
+    api(`/repositories/${id}/coverage`).then(setRep).catch(fail)
+    api(`/repositories/${id}/claims`).then(setClaims).catch(fail)
+  }
+  useEffect(() => { load(repoId) }, [repoId])
+
+  const [surface, setSurface] = useState('charter'), [text, setText] = useState('')
+  const [hasI, setHasI] = useState(false), [hasG, setHasG] = useState(false)
+  const add = () => post(`/repositories/${repoId}/claims`, {
+    surface, text, has_instruction: hasI, has_gate: hasG,
+  }).then(() => { setText(''); load(repoId) }).catch(fail)
+  const del = (id: string) => api(`/claims/${id}`, { method: 'DELETE' }).then(() => load(repoId)).catch(fail)
+
+  const cov = rep?.coverage
+  return (
+    <section className="page">
+      <h2 className="page-title">Repo coverage & drift</h2>
+      <div className="toolbar">
+        <Select value={repoId} onValueChange={(v) => setRepoId(v ?? '')}>
+          <SelectTrigger className="field"><SelectValue placeholder="repository…" /></SelectTrigger>
+          <SelectContent>{repos.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
+        </Select>
+        {cov && <Badge variant={cov.score >= 80 ? 'default' : cov.score >= 50 ? 'secondary' : 'destructive'}>health {cov.score}</Badge>}
+        {cov && <span className="muted">covered {cov.covered} · partial {cov.partial} · imitation {cov.imitation} / {cov.total}</span>}
+      </div>
+
+      {cov && cov.imitation_surfaces.length > 0 && (
+        <Card className="accent-orange">
+          <CardHeader><CardTitle>Imitation surfaces — claimed, not enforced (act here)</CardTitle></CardHeader>
+          <CardContent>{cov.imitation_surfaces.map((c: any) => (
+            <div key={c.id} className="kv-row"><Badge variant="outline">{c.surface}</Badge><span>{c.text}</span></div>
+          ))}</CardContent>
+        </Card>
+      )}
+
+      {rep && rep.drift.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Drift across surfaces</CardTitle></CardHeader>
+          <CardContent>{rep.drift.map((d: any) => (
+            <div key={d.axis}>
+              <div className="kv-row"><span className="muted mono">{d.axis}</span></div>
+              {Object.entries(d.only_in).map(([s, list]: any) => list.length > 0 && (
+                <div key={s} className="kv-row"><span className="mono">only in {s}</span><span>{list.join(' · ')}</span></div>
+              ))}
+            </div>
+          ))}</CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader><CardTitle>Claims</CardTitle></CardHeader>
+        <CardContent>
+          <div className="toolbar">
+            <Select value={surface} onValueChange={(v) => setSurface(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+              <SelectContent>{['charter', 'harness', 'code'].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            </Select>
+            <Input className="field" placeholder="claimed behavior" value={text} onChange={(e) => setText(e.target.value)} />
+            <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <input type="checkbox" checked={hasI} onChange={(e) => setHasI(e.target.checked)} /> instruction
+            </label>
+            <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <input type="checkbox" checked={hasG} onChange={(e) => setHasG(e.target.checked)} /> gate
+            </label>
+            <Button onClick={add} disabled={!repoId || !text}>Add claim</Button>
+          </div>
+          <Table>
+            <TableHeader><TableRow><TableHead>Surface</TableHead><TableHead>Claim</TableHead><TableHead>Instruction</TableHead><TableHead>Gate</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>{claims.map((c: any) => (
+              <TableRow key={c.id}>
+                <TableCell><Badge variant="outline">{c.surface}</Badge></TableCell>
+                <TableCell>{c.text}</TableCell>
+                <TableCell>{c.has_instruction ? '✓' : '—'}</TableCell>
+                <TableCell>{c.has_gate ? '✓' : '—'}</TableCell>
+                <TableCell><Button variant="outline" size="sm" onClick={() => del(c.id)}>Delete</Button></TableCell>
               </TableRow>
             ))}</TableBody>
           </Table>

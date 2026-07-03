@@ -247,6 +247,21 @@ class Standard(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
+class Claim(SQLModel, table=True):
+    """A stated behavior on a repo surface (charter/harness/code), and whether an
+    instruction and a gate actually back it. A claim with neither is an
+    *imitation surface* — reads as governed, isn't."""
+    __tablename__ = "claims"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    repo_id: str = Field(foreign_key="repositories.id", index=True)
+    surface: str                      # charter | harness | code
+    text: str
+    has_instruction: bool = False     # a backing instruction exists (rule/skill/command/agent)
+    has_gate: bool = False            # a gate/check enforces it
+    owner_id: str = Field(foreign_key="users.id", index=True)
+    created_at: str = Field(default_factory=now_iso)
+
+
 class Attestation(SQLModel, table=True):
     __tablename__ = "attestations"
     id: str = Field(default_factory=new_id, primary_key=True)

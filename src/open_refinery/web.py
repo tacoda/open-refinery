@@ -63,6 +63,7 @@ from .policies import (
     scan_content,
 )
 from .processes import create_process, list_processes
+from .repo_governance import create_claim, delete_claim, list_claims, report as repo_report
 from .repositories import DuplicateRepository, create_repository, import_or_get, list_repositories
 from .settings import delete_setting, get_setting, list_setting_keys, set_setting
 from .store import DEFAULT_DATABASE_URL, SqliteSink, engine_for, query_events
@@ -247,6 +248,13 @@ class ResubmitBody(BaseModel):
     payload: dict | None = None
 
 
+class NewClaim(BaseModel):
+    surface: str
+    text: str
+    has_instruction: bool = False
+    has_gate: bool = False
+
+
 class ScanRequest(BaseModel):
     text: str
 
@@ -387,6 +395,29 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def get_governance(session: Session = Depends(get_session),
                        _: User = Depends(require("admin"))):
         return landscape(session)
+
+    # --- repo-level drift & coverage ---
+    @app.get("/repositories/{repo_id}/coverage")
+    def get_coverage(repo_id: str, session: Session = Depends(get_session),
+                     _: User = Depends(current_user)):
+        return repo_report(session, repo_id)
+
+    @app.get("/repositories/{repo_id}/claims")
+    def get_claims(repo_id: str, session: Session = Depends(get_session),
+                   _: User = Depends(current_user)):
+        return list_claims(session, repo_id)
+
+    @app.post("/repositories/{repo_id}/claims", status_code=201)
+    def add_claim(repo_id: str, body: NewClaim, session: Session = Depends(get_session),
+                  user: User = Depends(current_user)):
+        return create_claim(session, repo_id, body.surface, body.text, user.id,
+                            has_instruction=body.has_instruction, has_gate=body.has_gate)
+
+    @app.delete("/claims/{claim_id}")
+    def remove_claim(claim_id: str, session: Session = Depends(get_session),
+                     _: User = Depends(current_user)):
+        delete_claim(session, claim_id)
+        return {"status": "deleted"}
 
     # --- governance analysis (poison flags; per-role visibility) ---
     @app.get("/governance/analysis")

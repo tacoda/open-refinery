@@ -3,6 +3,21 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.5] — 2026-07-03
+
+### Added
+- **Repo-level drift & coverage.** Each governance **`Claim`** sits on a repo
+  **surface** (charter / harness / code) and records whether an **instruction**
+  and a **gate** back it. Per repo: **coverage** (fraction fully backed, overall
+  + per surface, 0–100 health score), **imitation surfaces** (claims with no
+  instruction *and* no gate — reads as governed, isn't; the prime action
+  targets), and **drift** across all three axes (charter↔harness, charter↔code,
+  harness↔code — claims on one surface missing on another).
+  `GET /repositories/{id}/coverage`, `GET/POST /repositories/{id}/claims`,
+  `DELETE /claims/{id}`. Dashboard **Coverage** tab. Claims are authored/seeded
+  today; auto-ingesting real `.claude/`, harness config, and code signals is a
+  follow-up connector.
+
 ## [0.13.4] — 2026-07-03
 
 ### Added
