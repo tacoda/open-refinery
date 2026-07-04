@@ -3,6 +3,17 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.21] — 2026-07-03
+
+### Added
+- **Empty states** across the list tabs — repos, processes, targets, routes,
+  quotas, policies, proposals, integrations, invitations, and the audit log now
+  show a clear "nothing yet" row instead of a blank table (shared `EmptyRow`).
+- **Frontend tests (Vitest)** — component tests with a **mocked API** covering
+  empty / populated / role-gated states (EmptyRow + the Packs marketplace).
+  `make ui-test` (or `bun run test` in `frontend/`). Test files are excluded from
+  the production `tsc` build.
+
 ## [0.13.20] — 2026-07-03
 
 ### Changed

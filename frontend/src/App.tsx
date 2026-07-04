@@ -17,6 +17,12 @@ type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'tar
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
+// Empty-state row for a list; render inside <TableBody> when there are no rows.
+export function EmptyRow({ show, cols, children }: { show: boolean; cols: number; children: any }) {
+  if (!show) return null
+  return <TableRow><TableCell colSpan={cols} className="muted">{children}</TableCell></TableRow>
+}
+
 export default function App() {
   const [token, setTok] = useState(getToken())
   const [me, setMe] = useState<any>(null)
@@ -313,7 +319,7 @@ function Processes() {
           <TableHeader><TableRow>
             <TableHead>Name</TableHead><TableHead>Type</TableHead><TableHead>Oversight</TableHead><TableHead>Steps</TableHead>
           </TableRow></TableHeader>
-          <TableBody>{rows.map((p) => (
+          <TableBody><EmptyRow show={!rows.length} cols={9}>Nothing here yet.</EmptyRow>{rows.map((p) => (
             <TableRow key={p.id}>
               <TableCell>{p.name}</TableCell>
               <TableCell><Badge variant="secondary">{p.archetype}</Badge></TableCell>
@@ -402,7 +408,7 @@ function IntegrationCard({ integ, onChange }: any) {
         {tracker && <SyncPanel integ={integ} />}
         {repos && (
           <Table>
-            <TableBody>{repos.map((r) => (
+            <TableBody><EmptyRow show={!repos.length} cols={9}>No repositories yet — add or import one.</EmptyRow>{repos.map((r) => (
               <TableRow key={r.full_name}>
                 <TableCell>{r.full_name}</TableCell>
                 <TableCell><Badge variant="outline">{r.private ? 'private' : 'public'}</Badge></TableCell>
@@ -485,7 +491,7 @@ function Policies() {
           </div>
           <Table>
             <TableHeader><TableRow><TableHead>Kind</TableHead><TableHead>Effect</TableHead><TableHead>Role</TableHead><TableHead>Action</TableHead><TableHead>Resource</TableHead><TableHead>Strict</TableHead><TableHead /></TableRow></TableHeader>
-            <TableBody>{rows.map((p) => (
+            <TableBody><EmptyRow show={!rows.length} cols={9}>Nothing here yet.</EmptyRow>{rows.map((p) => (
               <TableRow key={p.id}>
                 <TableCell><Badge variant="outline">{p.kind}</Badge></TableCell>
                 <TableCell>{p.kind === 'rule' ? <Badge variant={p.effect === 'deny' ? 'destructive' : 'secondary'}>{p.effect}</Badge> : <span className="mono">{p.content}</span>}</TableCell>
@@ -583,7 +589,7 @@ function Webhooks() {
         {secret && <p className="muted mono">signing secret (shown once): {secret}</p>}
         <Table>
           <TableHeader><TableRow><TableHead>URL</TableHead><TableHead>Events</TableHead><TableHead>Last</TableHead><TableHead /></TableRow></TableHeader>
-          <TableBody>{rows.map((w: any) => (
+          <TableBody><EmptyRow show={!rows.length} cols={9}>No proposals yet.</EmptyRow>{rows.map((w: any) => (
             <TableRow key={w.id}>
               <TableCell className="mono">{w.url}</TableCell>
               <TableCell className="mono">{(w.events || []).join(', ') || 'all'}</TableCell>
@@ -637,7 +643,7 @@ function Experiments() {
           </div>
           <Table>
             <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Layer</TableHead><TableHead>Hypothesis</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
-            <TableBody>{rows.map((e: any) => (
+            <TableBody><EmptyRow show={!rows.length} cols={9}>No pending invitations.</EmptyRow>{rows.map((e: any) => (
               <TableRow key={e.id} style={{ cursor: 'pointer', fontWeight: sel === e.id ? 600 : 400 }}
                         onClick={() => { setSel(e.id); setAnalysis(null) }}>
                 <TableCell>{e.name}</TableCell>
@@ -925,7 +931,7 @@ function Proposals({ me, roles, isAdmin }: any) {
             <TableHeader><TableRow>
               <TableHead>Change</TableHead><TableHead>Layer</TableHead><TableHead>Chain</TableHead>
               <TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
-            <TableBody>{rows.map((p: any) => (
+            <TableBody><EmptyRow show={!rows.length} cols={9}>No policies yet — add a rule or artifact above.</EmptyRow>{rows.map((p: any) => (
               <TableRow key={p.id}>
                 <TableCell className="mono">{p.target_kind === 'suggestion'
                   ? `suggestion · ${p.payload?.text ?? ''}`
@@ -1022,7 +1028,7 @@ function Governance() {
   )
 }
 
-function Packs({ me, roles }: any) {
+export function Packs({ me, roles }: any) {
   const { rows, load } = useList('/packs')
   const rank = (r: string) => roles.find((x: Role) => x.name === r)?.rank ?? 0
   const canManage = (packRole: string) => rank(me.role) >= rank(packRole)
@@ -1103,7 +1109,7 @@ function Invitations({ me, roles }: any) {
       <Card><CardContent>
         <Table>
           <TableHeader><TableRow><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Expires</TableHead><TableHead /></TableRow></TableHeader>
-          <TableBody>{rows.map((i) => (
+          <TableBody><EmptyRow show={!rows.length} cols={9}>No integrations connected.</EmptyRow>{rows.map((i) => (
             <TableRow key={i.id}>
               <TableCell>{i.email}</TableCell>
               <TableCell><Badge variant="secondary">{i.role}</Badge></TableCell>
@@ -1172,7 +1178,7 @@ function Targets() {
           </div>
           <Table>
             <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Endpoint</TableHead><TableHead /></TableRow></TableHeader>
-            <TableBody>{targets.map((t) => (
+            <TableBody><EmptyRow show={!targets.length} cols={9}>No targets yet — add a model, MCP, or API target.</EmptyRow>{targets.map((t) => (
               <TableRow key={t.id}>
                 <TableCell>{t.name}</TableCell>
                 <TableCell><Badge variant="secondary">{t.kind}</Badge></TableCell>
@@ -1210,7 +1216,7 @@ function Targets() {
           </div>
           <Table>
             <TableHeader><TableRow><TableHead>Process</TableHead><TableHead>Step</TableHead><TableHead>Target</TableHead><TableHead>Priority</TableHead></TableRow></TableHeader>
-            <TableBody>{routes.map((r) => (
+            <TableBody><EmptyRow show={!routes.length} cols={9}>No routes yet.</EmptyRow>{routes.map((r) => (
               <TableRow key={r.id}>
                 <TableCell>{procName(r.process_id)}</TableCell>
                 <TableCell>{r.step || <span className="muted">any</span>}</TableCell>
@@ -1236,7 +1242,7 @@ function Targets() {
           </div>
           <Table>
             <TableHeader><TableRow><TableHead>Target</TableHead><TableHead>Used / Limit</TableHead></TableRow></TableHeader>
-            <TableBody>{quotas.map((q) => (
+            <TableBody><EmptyRow show={!quotas.length} cols={9}>No quotas set.</EmptyRow>{quotas.map((q) => (
               <TableRow key={q.id}>
                 <TableCell>{targetName(q.target_id)}</TableCell>
                 <TableCell className="mono">{q.used} / {q.limit}</TableCell>
@@ -1368,7 +1374,7 @@ function Events({ isAdmin }: any) {
             <TableHead>When</TableHead><TableHead>Event</TableHead><TableHead>Actor</TableHead>
             <TableHead>Owner</TableHead><TableHead>Subject</TableHead>
           </TableRow></TableHeader>
-          <TableBody>{rows.map((e) => (
+          <TableBody><EmptyRow show={!rows.length} cols={9}>No audit events yet.</EmptyRow>{rows.map((e) => (
             <TableRow key={e.artifact_id}>
               <TableCell className="mono">{e.created_at.slice(0, 19)}</TableCell>
               <TableCell><Badge variant="secondary">{e.recipe}</Badge></TableCell>

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install ui ui-dev types apidocs test serve dev seed demo clean dist publish
+.PHONY: help install ui ui-dev ui-test types apidocs test serve dev seed demo clean dist publish
 
 # --- dev-only convenience (end users use `pip install open-refinery && open-refinery serve`) ---
 # Secrets live in .env (gitignored); `make dev` sources it. DB is a local file.
@@ -26,6 +26,9 @@ types: ## Generate TS types from the FastAPI OpenAPI schema (backend/frontend pa
 
 ui-dev: ## Run the Vite dev server (proxies API to :8000)
 	cd frontend && bun run dev
+
+ui-test: ## Run the frontend component tests (Vitest, mocked API)
+	cd frontend && bun run test
 
 test: ## Run the test suite
 	uv run pytest -q
