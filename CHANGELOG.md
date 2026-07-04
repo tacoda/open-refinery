@@ -3,6 +3,20 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.14] — 2026-07-03
+
+### Added
+- **More starter packs** — `tdd` (red/green/refactor), `atdd` (acceptance-first,
+  three amigos, given/when/then), `spec-driven` (spec-first, derive tests+impl,
+  keep in sync), `ui-verification` (headless Puppeteer/Playwright checks, visual
+  snapshots, state matrix), and `tech-debt` (identify/track, budget remediation,
+  boy-scout rule, a remediation-doctrine process). All developer-layer, enable
+  via the CLI or Packs tab.
+
+### Changed
+- **README value prop** refreshed to lead with the **governance policy layer**,
+  **configurable oversight strategy**, and **human approval gates**.
+
 ## [0.13.13] — 2026-07-03
 
 ### Added

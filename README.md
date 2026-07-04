@@ -19,15 +19,26 @@ with `pip install` and one command; manage everything from the web dashboard.
 
 ### What it does
 
+- **Governance policy layer** — org-wide `(effect, role, action, resource)`
+  rules with deny-overrides, plus **strict** rules a lower layer can't override.
+  Policies are authored *and* governed: a change to governance walks a
+  **per-layer approval workflow** (accept / deny / feedback). Packs seed starter
+  rules, skills, commands, and standards (TDD, ATDD, spec-driven, UI
+  verification, tech-debt, infrastructure, org policy…).
+- **Configurable oversight strategy** — a per-process human-oversight dial
+  (L0 manual → L4 fully dark) with a configurable risk profile: which steps are
+  **gated**, which **quality-gate attestations** must pass, and the minimum
+  approver role.
+- **Human approval gates** — gated steps need recorded sign-off: inline, or an
+  **async approval queue** with **chained approvals** (an ordered role chain,
+  distinct signer per slot) for higher-risk moves.
 - Ships work through **customizable processes** — ordered steps with feedback
   loops (board or doctrine archetypes).
-- Puts a **human-oversight dial** on every process (L0 manual → L4 fully dark),
-  with approvals and quality-gate attestations where you want them.
 - Records a **complete, attributed audit trail** — who did what, to which work
-  item, with what inputs — and derives **metrics** (WIP, lead time, throughput)
-  from it.
-- Enforces **ownership**: developers see their own work; platform sets org-wide
-  standards; admins audit everything.
+  item, with what inputs — fans it out to **webhooks**, and derives **metrics**
+  plus **debt-audit health scores** (factory / harness / charter) with insights.
+- Enforces **ownership** with **admin-configurable roles**: developers see their
+  own work; platform sets org-wide policy; admins audit everything.
 
 ### What it doesn't do
 
