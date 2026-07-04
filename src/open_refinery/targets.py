@@ -128,12 +128,13 @@ def resolve_target(session: Session, process_id: str, step: str | None = None) -
 
 # --- quotas ---------------------------------------------------------------
 
-def create_quota(session: Session, target_id: str, limit: int, owner_id: str) -> Quota:
+def create_quota(session: Session, target_id: str, limit: int, owner_id: str,
+                 *, window_seconds: int = 0) -> Quota:
     if session.get(Target, target_id) is None:
         raise ValueError(f"unknown target: {target_id!r}")
     if session.get(User, owner_id) is None:
         raise ValueError(f"unknown owner: {owner_id!r}")
-    quota = Quota(target_id=target_id, limit=limit, owner_id=owner_id)
+    quota = Quota(target_id=target_id, limit=limit, owner_id=owner_id, window_seconds=window_seconds)
     session.add(quota)
     session.commit()
     session.refresh(quota)
@@ -147,13 +148,27 @@ def list_quotas(session: Session, *, owner_id: str | None = None) -> list[Quota]
     return list(session.exec(stmt.order_by(Quota.created_at.desc())))
 
 
+def _elapsed_seconds(started_iso: str, now_iso_str: str) -> float:
+    from datetime import datetime
+    return (datetime.fromisoformat(now_iso_str) - datetime.fromisoformat(started_iso)).total_seconds()
+
+
 def consume_quota(session: Session, target_id: str, units: int = 1) -> None:
     """Enforce and record usage against every quota on a target.
 
-    Raises `QuotaExceeded` before consuming if any quota would be exceeded, so a
-    blocked call consumes nothing.
+    For windowed quotas (`window_seconds > 0`), usage resets once the rolling
+    window has elapsed — giving per-minute/hour rate caps. Raises `QuotaExceeded`
+    before consuming if any quota would be exceeded, so a blocked call consumes
+    nothing.
     """
+    from .models import now_iso
+    now = now_iso()
     quotas = list(session.exec(select(Quota).where(Quota.target_id == target_id)))
+    for q in quotas:  # roll the window before checking
+        if q.window_seconds:
+            if not q.window_started_at or _elapsed_seconds(q.window_started_at, now) >= q.window_seconds:
+                q.used = 0
+                q.window_started_at = now
     for q in quotas:
         if q.used + units > q.limit:
             raise QuotaExceeded(

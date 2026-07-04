@@ -70,3 +70,26 @@ def test_quota_enforced_before_consume():
     # a target with no quota is unlimited
     free = create_target(conn, "free", "api", "http://x", ian.id)
     consume_quota(conn, free.id, units=100)
+
+
+def test_quota_rate_window_resets():
+    from datetime import datetime, timedelta, timezone
+    from open_refinery.models import Quota
+    from sqlmodel import select
+
+    conn, ian = setup()
+    t = create_target(conn, "m", "model", "claude-opus-4-8", ian.id)
+    create_quota(conn, t.id, 2, ian.id, window_seconds=60)
+
+    consume_quota(conn, t.id)          # 1/2
+    consume_quota(conn, t.id)          # 2/2
+    with pytest.raises(QuotaExceeded):
+        consume_quota(conn, t.id)      # window not elapsed → blocked
+
+    # rewind the window start past its length → next consume resets usage
+    q = conn.exec(select(Quota).where(Quota.target_id == t.id)).first()
+    q.window_started_at = (datetime.now(timezone.utc) - timedelta(seconds=61)).isoformat()
+    conn.add(q); conn.commit()
+    consume_quota(conn, t.id)          # window rolled → allowed again
+    q = conn.exec(select(Quota).where(Quota.target_id == t.id)).first()
+    assert q.used == 1

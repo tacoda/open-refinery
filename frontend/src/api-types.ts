@@ -1436,6 +1436,11 @@ export interface components {
             target_id: string;
             /** Limit */
             limit: number;
+            /**
+             * Window Seconds
+             * @default 0
+             */
+            window_seconds: number;
         };
         /** NewRepo */
         NewRepo: {

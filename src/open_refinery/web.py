@@ -226,6 +226,7 @@ class NewRoute(BaseModel):
 class NewQuota(BaseModel):
     target_id: str
     limit: int
+    window_seconds: int = 0   # 0 = lifetime cap; >0 = rolling rate window
 
 
 class NewPolicy(BaseModel):
@@ -835,7 +836,8 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     @app.post("/quotas", status_code=201)
     def add_quota(body: NewQuota, session: Session = Depends(get_session),
                   user: User = Depends(current_user)):
-        return create_quota(session, body.target_id, body.limit, user.id)
+        return create_quota(session, body.target_id, body.limit, user.id,
+                            window_seconds=body.window_seconds)
 
     @app.get("/quotas")
     def get_quotas(session: Session = Depends(get_session), user: User = Depends(current_user)):

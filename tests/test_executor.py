@@ -79,6 +79,8 @@ def test_failover_to_next_route(monkeypatch):
     def boom(target, cred, payload):
         raise RuntimeError("provider down")
     monkeypatch.setitem(EXECUTORS, "model", boom)
+    # backup is a real 'api' backend now — stub it so failover has somewhere to land
+    monkeypatch.setitem(EXECUTORS, "api", lambda t, c, p: {"output": "ok", "units": 1})
 
     r = execute(conn, ian.id, proc.id, "hi", SqliteSink(conn))
     assert r["target"] == "backup"  # failed over

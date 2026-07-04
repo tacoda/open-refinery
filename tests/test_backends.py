@@ -143,3 +143,27 @@ def test_dispatch_falls_back_to_stub_without_credential(monkeypatch):
 def test_dispatch_unknown_provider_stubs(monkeypatch):
     out = model_backend(target(endpoint="mistral-large"), {"api_key": "sk-x"}, "hi")  # no backend
     assert out["output"].startswith("[model:mistral-large]")
+
+
+def test_api_backend_posts_and_parses(monkeypatch):
+    seen = {}
+
+    def post(url, body, headers):
+        seen["url"] = url
+        seen["body"] = body
+        seen["headers"] = headers
+        return 200, '{"ok": true}'
+
+    from open_refinery.executor import api_backend
+    schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]}
+    out = api_backend(Target(name="a", kind="api", endpoint="https://api/x", owner_id="o",
+                             output_schema=schema), {"token": "t"}, '{"q":1}', poster=post)
+    assert out["output"] == {"ok": True} and out["units"] == 1
+    assert seen["url"] == "https://api/x" and seen["headers"]["Authorization"] == "Bearer t"
+
+
+def test_api_backend_raises_on_http_error(monkeypatch):
+    from open_refinery.executor import api_backend
+    with pytest.raises(RuntimeError):
+        api_backend(Target(name="a", kind="api", endpoint="https://api/x", owner_id="o"),
+                    {}, "{}", poster=lambda u, b, h: (500, "boom"))

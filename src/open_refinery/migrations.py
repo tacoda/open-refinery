@@ -30,6 +30,9 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE policies ADD COLUMN kind TEXT NOT NULL DEFAULT 'rule';"
     "ALTER TABLE policies ADD COLUMN strict INTEGER NOT NULL DEFAULT 0;"
     "ALTER TABLE policies ADD COLUMN content TEXT NOT NULL DEFAULT '';",
+    # v6 (0.13.17): rolling rate windows on quotas
+    "ALTER TABLE quotas ADD COLUMN window_seconds INTEGER NOT NULL DEFAULT 0;"
+    "ALTER TABLE quotas ADD COLUMN window_started_at TEXT NOT NULL DEFAULT '';",
 ]
 
 

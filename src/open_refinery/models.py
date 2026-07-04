@@ -129,8 +129,10 @@ class Quota(SQLModel, table=True):
     __tablename__ = "quotas"
     id: str = Field(default_factory=new_id, primary_key=True)
     target_id: str = Field(foreign_key="targets.id", index=True)
-    limit: int                          # max units allowed
-    used: int = 0                       # units consumed so far
+    limit: int                          # max units per window (or lifetime if window_seconds=0)
+    used: int = 0                       # units consumed in the current window
+    window_seconds: int = 0             # rolling window length; 0 = lifetime cap
+    window_started_at: str = ""         # start of the current window (ISO); "" until first use
     owner_id: str = Field(foreign_key="users.id", index=True)
     created_at: str = Field(default_factory=now_iso)
 

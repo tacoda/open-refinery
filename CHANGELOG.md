@@ -3,6 +3,18 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.17] — 2026-07-03
+
+### Added
+- **Generic `api` target backend** — an `api` target now makes a real HTTP POST
+  of the payload to its endpoint (connects by API key or OAuth token; parses a
+  JSON response when `output_schema` is set). Registered as `EXECUTORS["api"]`
+  (was the stub); transport injectable.
+- **Quota rate windows** — a quota can carry `window_seconds`; usage resets once
+  the rolling window elapses, giving per-minute/hour rate caps (0 = lifetime cap,
+  as before). Enforced pre-call, so a blocked call still consumes nothing.
+  Targets tab quota form gains a window field.
+
 ## [0.13.16] — 2026-07-03
 
 ### Added

@@ -1131,8 +1131,10 @@ function Targets() {
   }).then(() => { setRStep(''); loadR() }).catch(fail)
 
   const [qTarget, setQTarget] = useState(''), [qLimit, setQLimit] = useState('')
-  const addQuota = () => post('/quotas', { target_id: qTarget, limit: Number(qLimit) || 0 })
-    .then(() => { setQLimit(''); loadQ() }).catch(fail)
+  const [qWindow, setQWindow] = useState('')
+  const addQuota = () => post('/quotas', {
+    target_id: qTarget, limit: Number(qLimit) || 0, window_seconds: Number(qWindow) || 0,
+  }).then(() => { setQLimit(''); setQWindow(''); loadQ() }).catch(fail)
 
   const targetName = (id: string) => targets.find((t) => t.id === id)?.name ?? id.slice(0, 8)
   const procName = (id: string) => procs.find((p) => p.id === id)?.name ?? id.slice(0, 8)
@@ -1214,6 +1216,7 @@ function Targets() {
               <SelectContent>{targets.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
             </Select>
             <Input className="field" placeholder="limit (units)" value={qLimit} onChange={(e) => setQLimit(e.target.value)} />
+            <Input className="field" placeholder="window secs (0 = lifetime)" value={qWindow} onChange={(e) => setQWindow(e.target.value)} />
             <Button onClick={addQuota}>Add quota</Button>
           </div>
           <Table>

@@ -214,7 +214,23 @@ def mcp_backend(target, credential: dict, payload: str, *, poster=None) -> dict:
     return {"output": out, "units": 1}
 
 
-EXECUTORS = {"model": model_backend, "mcp": mcp_backend, "api": stub_backend}
+def api_backend(target, credential: dict, payload: str, *, poster=None) -> dict:
+    """Generic HTTP API target — POST the payload to the endpoint. Connects by API
+    key or OAuth token; honors output_schema by parsing the JSON response."""
+    import json
+    poster = poster or _http_post
+    headers = {"Content-Type": "application/json"}
+    key = _key(credential)
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    status, text = poster(target.endpoint, payload.encode(), headers)
+    if status >= 400:
+        raise RuntimeError(f"API target returned HTTP {status}")
+    output = json.loads(text) if target.output_schema else text
+    return {"output": output, "units": 1}
+
+
+EXECUTORS = {"model": model_backend, "mcp": mcp_backend, "api": api_backend}
 
 
 def execute(session: Session, actor_id: str, process_id: str, payload: str, audit: AuditSink,
