@@ -837,15 +837,17 @@ function Proposals({ me, roles, isAdmin }: any) {
     layer: wfLayer, chain: wfChain.split(',').map((s) => s.trim()).filter(Boolean),
   }).then(() => { setWfChain(''); loadWf() }).catch(fail)
 
-  // propose a policy-create change
+  // propose a change (policy rule) or a free-text suggestion that cascades up
+  const [pkind, setPkind] = useState('policy')
   const [layer, setLayer] = useState(''), [effect, setEffect] = useState('deny')
   const [pAction, setPAction] = useState('invoke'), [resource, setResource] = useState('*')
-  const [strict, setStrict] = useState(false)
+  const [strict, setStrict] = useState(false), [idea, setIdea] = useState('')
   useEffect(() => { if (!layer && roleNames.length) setLayer(roleNames[0]) }, [roleNames, layer])
-  const propose = () => post('/proposals', {
-    target_kind: 'policy', action: 'create', layer,
-    payload: { effect, action: pAction, resource, strict, kind: 'rule' },
-  }).then(load).catch(fail)
+  const propose = () => post('/proposals', pkind === 'suggestion'
+    ? { target_kind: 'suggestion', action: 'adopt', layer, payload: { text: idea } }
+    : { target_kind: 'policy', action: 'create', layer,
+        payload: { effect, action: pAction, resource, strict, kind: 'rule' } })
+    .then(() => { setIdea(''); load() }).catch(fail)
 
   const act = (p: any, decision: string) =>
     post(`/proposals/${p.id}/review`, { decision, note: '' }).then(load).catch(fail)
@@ -880,24 +882,35 @@ function Proposals({ me, roles, isAdmin }: any) {
       )}
 
       <Card>
-        <CardHeader><CardTitle>Propose a policy rule</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Propose — a policy rule, or an idea that cascades up</CardTitle></CardHeader>
         <CardContent>
           <div className="toolbar">
+            <Select value={pkind} onValueChange={(v) => setPkind(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="policy">policy rule</SelectItem><SelectItem value="suggestion">suggestion</SelectItem></SelectContent>
+            </Select>
             <Select value={layer} onValueChange={(v) => setLayer(v ?? '')}>
               <SelectTrigger className="field"><SelectValue placeholder="layer…" /></SelectTrigger>
               <SelectContent>{roleNames.map((r: string) => <SelectItem key={r} value={r}>layer: {r}</SelectItem>)}</SelectContent>
             </Select>
-            <Select value={effect} onValueChange={(v) => setEffect(v ?? '')}>
-              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-              <SelectContent>{['deny', 'allow'].map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
-            </Select>
-            <Input className="field" placeholder="action" value={pAction} onChange={(e) => setPAction(e.target.value)} />
-            <Input className="field" placeholder="resource" value={resource} onChange={(e) => setResource(e.target.value)} />
-            <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <input type="checkbox" checked={strict} onChange={(e) => setStrict(e.target.checked)} /> strict
-            </label>
-            <Button onClick={propose}>Propose</Button>
+            {pkind === 'policy' ? (
+              <>
+                <Select value={effect} onValueChange={(v) => setEffect(v ?? '')}>
+                  <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                  <SelectContent>{['deny', 'allow'].map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
+                </Select>
+                <Input className="field" placeholder="action" value={pAction} onChange={(e) => setPAction(e.target.value)} />
+                <Input className="field" placeholder="resource" value={resource} onChange={(e) => setResource(e.target.value)} />
+                <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <input type="checkbox" checked={strict} onChange={(e) => setStrict(e.target.checked)} /> strict
+                </label>
+              </>
+            ) : (
+              <Input className="field" placeholder="your idea (escalates up the ladder)" value={idea} onChange={(e) => setIdea(e.target.value)} />
+            )}
+            <Button onClick={propose} disabled={pkind === 'suggestion' && !idea}>Propose</Button>
           </div>
+          <p className="muted">No configured workflow? A proposal cascades up the role ladder from your level (accept / deny / feedback at each step).</p>
         </CardContent>
       </Card>
 
@@ -909,7 +922,9 @@ function Proposals({ me, roles, isAdmin }: any) {
               <TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
             <TableBody>{rows.map((p: any) => (
               <TableRow key={p.id}>
-                <TableCell className="mono">{p.target_kind}/{p.action} · {p.payload?.effect} {p.payload?.action}/{p.payload?.resource}{p.payload?.strict ? ' (strict)' : ''}</TableCell>
+                <TableCell className="mono">{p.target_kind === 'suggestion'
+                  ? `suggestion · ${p.payload?.text ?? ''}`
+                  : `${p.target_kind}/${p.action} · ${p.payload?.effect} ${p.payload?.action}/${p.payload?.resource}${p.payload?.strict ? ' (strict)' : ''}`}</TableCell>
                 <TableCell>{p.layer}</TableCell>
                 <TableCell className="mono">{(p.chain || []).map((r: string, i: number) => i === p.current && p.status === 'pending' ? `[${r}]` : r).join(' → ')}</TableCell>
                 <TableCell><Badge variant={p.status === 'denied' ? 'destructive' : p.status === 'accepted' ? 'default' : 'secondary'}>{p.status}</Badge></TableCell>

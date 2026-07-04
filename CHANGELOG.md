@@ -3,6 +3,17 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.16] — 2026-07-03
+
+### Added
+- **Cascading suggestions.** When no approval workflow is configured for a
+  layer, a proposal now **cascades up the role ladder** from the proposer —
+  every role ranked above them, lowest first (a developer's idea escalates
+  dev → … → platform → admin), each step still accept / deny / feedback. Plus a
+  free-text **`suggestion`** proposal kind so anyone can send an idea up the
+  chain (adopted on full accept; no artifact created). Dashboard Proposals tab
+  gains a kind toggle (policy rule / suggestion).
+
 ## [0.13.15] — 2026-07-03
 
 ### Added

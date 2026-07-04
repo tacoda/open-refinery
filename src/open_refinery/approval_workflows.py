@@ -17,7 +17,7 @@ from .audit import AuditSink
 from .models import ApprovalWorkflow, ChangeProposal, User
 from .policies import PolicyDenied, create_policy
 from .provenance import Record
-from .users import at_least, valid_role
+from .users import at_least, list_roles, role_rank, valid_role
 
 DECISIONS = ("accept", "deny", "feedback")
 
@@ -49,22 +49,31 @@ def list_workflows(session: Session) -> list[ApprovalWorkflow]:
 
 # --- proposals -------------------------------------------------------------
 
-def _resolve_chain(session: Session, layer: str) -> list[str]:
+def _resolve_chain(session: Session, layer: str, proposer: User) -> list[str]:
+    """The approval chain for a proposal. An admin-configured workflow for the
+    layer wins; otherwise the suggestion **cascades up** the role ladder — every
+    role ranked above the proposer, lowest first (a dev's idea escalates
+    dev→…→platform→admin). Falls back to the layer role if the proposer is at the
+    top."""
     wf = get_workflow(session, layer)
-    return list(wf.chain) if wf and wf.chain else [layer]  # default: one approver at the layer
+    if wf and wf.chain:
+        return list(wf.chain)
+    up = [r.name for r in list_roles(session) if r.rank > role_rank(session, proposer.role)]
+    return up or [layer]
 
 
 def propose(session: Session, target_kind: str, action: str, payload: dict, layer: str,
             proposer_id: str) -> ChangeProposal:
     if (target_kind, action) not in _APPLIERS:
         raise ValueError(f"unsupported change: {target_kind!r}/{action!r}")
-    if session.get(User, proposer_id) is None:
+    proposer = session.get(User, proposer_id)
+    if proposer is None:
         raise ValueError(f"unknown proposer: {proposer_id!r}")
     if not valid_role(session, layer):
         raise ValueError(f"unknown layer role: {layer!r}")
     prop = ChangeProposal(target_kind=target_kind, action=action, payload=payload,
                           layer=layer, proposed_by=proposer_id,
-                          chain=_resolve_chain(session, layer))
+                          chain=_resolve_chain(session, layer, proposer))
     session.add(prop)
     session.commit()
     session.refresh(prop)
@@ -150,8 +159,15 @@ def _apply_policy_create(session: Session, prop: ChangeProposal) -> str:
     return policy.id
 
 
-# ponytail: policy-create is the first supported change; add (kind, action) pairs here.
-_APPLIERS = {("policy", "create"): _apply_policy_create}
+def _apply_suggestion(session: Session, prop: ChangeProposal) -> str:
+    # a free-text idea that cascaded up the ladder — adoption is the record itself;
+    # no artifact is created (the payload's "text" is the accepted suggestion).
+    return ""
+
+
+# ponytail: add (kind, action) pairs as more change types become applicable.
+_APPLIERS = {("policy", "create"): _apply_policy_create,
+             ("suggestion", "adopt"): _apply_suggestion}
 
 
 def _apply(session: Session, prop: ChangeProposal) -> str:
