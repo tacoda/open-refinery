@@ -234,7 +234,11 @@ EXECUTORS = {"model": model_backend, "mcp": mcp_backend, "api": api_backend}
 
 
 def execute(session: Session, actor_id: str, process_id: str, payload: str, audit: AuditSink,
-            *, step: str | None = None, work_item_id: str | None = None) -> dict:
+            *, step: str | None = None, work_item_id: str | None = None,
+            experiment_id: str | None = None, arm: str | None = None) -> dict:
+    """Run the governed outbound pipeline. When `experiment_id`+`arm` are set, the
+    run is tagged as an experiment: its `units` feed the experiment's control
+    (`arm="control"` → before) or treatment (`arm="treatment"` → after) eval."""
     actor = session.get(User, actor_id)
     if actor is None:
         raise ValueError(f"unknown actor: {actor_id!r}")
@@ -274,6 +278,13 @@ def execute(session: Session, actor_id: str, process_id: str, payload: str, audi
             inputs={"target": target.id, "step": step, "units": units,
                     "redactions": redactions, "structured": structured},
             output=clean_out, subject=work_item_id))
+        if experiment_id and arm:  # experiment-tagged: feed the control/treatment eval
+            from .experiments import add_sample
+            phase = "before" if arm == "control" else "after"
+            try:
+                add_sample(session, experiment_id, phase, "units", units)
+            except Exception:  # tagging is best-effort — never fail the run over it
+                pass
         return {"output": clean_out, "target": target.name, "kind": target.kind,
                 "units": units, "redactions": redactions, "structured": structured}
 

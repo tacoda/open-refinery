@@ -108,7 +108,7 @@ export default function App() {
               {canInvite && <TabsContent value="invitations"><Invitations me={me} roles={roles} /></TabsContent>}
               {isPlatform && <TabsContent value="settings"><Settings /></TabsContent>}
               {isAdmin && <TabsContent value="governance"><Governance /></TabsContent>}
-              <TabsContent value="events"><Events /></TabsContent>
+              <TabsContent value="events"><Events isAdmin={isAdmin} /></TabsContent>
               <TabsContent value="metrics"><Metrics /></TabsContent>
             </Tabs>
           </div>
@@ -1333,11 +1333,20 @@ function Approvals() {
   )
 }
 
-function Events() {
-  const { rows } = useList('/events?limit=100')
+function Events({ isAdmin }: any) {
+  const { rows, load } = useList('/events?limit=100')
+  const [days, setDays] = useState('90')
+  const purge = () => post(`/audit/purge?days=${Number(days) || 90}`, {})
+    .then((r) => { toast.success(`Purged ${r.purged} event(s)`); load() }).catch(fail)
   return (
     <section className="page">
       <h2 className="page-title">Audit trail</h2>
+      {isAdmin && (
+        <div className="toolbar">
+          <Input className="field" placeholder="retention days" value={days} onChange={(e) => setDays(e.target.value)} />
+          <Button variant="outline" onClick={purge}>Purge older than {days || '90'}d</Button>
+        </div>
+      )}
       <Card><CardContent>
         <Table>
           <TableHeader><TableRow>

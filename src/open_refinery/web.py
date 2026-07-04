@@ -76,7 +76,7 @@ from .processes import create_process, list_processes
 from .repo_governance import create_claim, delete_claim, list_claims, report as repo_report
 from .repositories import DuplicateRepository, create_repository, import_or_get, list_repositories
 from .settings import delete_setting, get_setting, list_setting_keys, set_setting
-from .store import DEFAULT_DATABASE_URL, SqliteSink, engine_for, query_events
+from .store import DEFAULT_DATABASE_URL, SqliteSink, engine_for, purge_events, query_events
 from .targets import (
     QuotaExceeded,
     create_quota,
@@ -295,6 +295,8 @@ class ExecuteRequest(BaseModel):
     payload: str
     step: str | None = None
     work_item_id: str | None = None
+    experiment_id: str | None = None   # tag this run as an experiment sample
+    arm: str | None = None             # control | treatment
 
 
 # --- app ------------------------------------------------------------------
@@ -704,6 +706,11 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         return query_events(session, owner=owner_scope(user), subject=subject,
                             actor=actor, limit=limit)
 
+    @app.post("/audit/purge")
+    def purge_audit(days: int, session: Session = Depends(get_session),
+                    _: User = Depends(require("admin"))):
+        return {"purged": purge_events(session, days)}  # retention: drop events older than `days`
+
     @app.get("/metrics")
     def metrics(session: Session = Depends(get_session), user: User = Depends(current_user)):
         return summary(session, owner_id=owner_scope(user))
@@ -870,7 +877,8 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def run_execute(body: ExecuteRequest, session: Session = Depends(get_session),
                     user: User = Depends(current_user)):
         return execute(session, user.id, body.process_id, body.payload, SqliteSink(session),
-                      step=body.step, work_item_id=body.work_item_id)
+                      step=body.step, work_item_id=body.work_item_id,
+                      experiment_id=body.experiment_id, arm=body.arm)
 
     # --- auth ---
     def _redirect_uri(request: Request) -> str:

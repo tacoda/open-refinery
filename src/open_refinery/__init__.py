@@ -19,7 +19,7 @@ from .processes import (
     get_process,
     list_processes,
 )
-from .store import SqliteSink, connect, query_events
+from .store import SqliteSink, connect, purge_events, query_events
 from .attestations import (
     AttestationFailed,
     AttestationMissing,
@@ -80,6 +80,7 @@ from .approval_workflows import (
 from .analysis import analyze
 from .debt import audit, health, list_audits, run_audit
 from .experiments import (
+    add_sample,
     analyze_experiment,
     conclude_experiment,
     create_experiment,
@@ -165,6 +166,7 @@ __all__ = [
     "SqliteSink",
     "connect",
     "query_events",
+    "purge_events",
     "User",
     "DEFAULT_ROLES",
     "role_rank",
@@ -262,6 +264,7 @@ __all__ = [
     "ingest",
     "create_experiment",
     "record_eval",
+    "add_sample",
     "analyze_experiment",
     "list_experiments",
     "conclude_experiment",

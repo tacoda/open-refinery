@@ -93,6 +93,17 @@ class SqlSink:
 SqliteSink = SqlSink
 
 
+def purge_events(session: Session, older_than_days: int) -> int:
+    """Delete audit events older than the retention window. Returns how many went."""
+    from datetime import datetime, timedelta, timezone
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=older_than_days)).isoformat()
+    rows = list(session.exec(select(Event).where(Event.created_at < cutoff)))
+    for e in rows:
+        session.delete(e)
+    session.commit()
+    return len(rows)
+
+
 def query_events(
     session: Session,
     *,

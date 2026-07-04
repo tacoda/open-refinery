@@ -796,6 +796,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/audit/purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Purge Audit */
+        post: operations["purge_audit_audit_purge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metrics": {
         parameters: {
             query?: never;
@@ -1282,6 +1299,10 @@ export interface components {
             step?: string | null;
             /** Work Item Id */
             work_item_id?: string | null;
+            /** Experiment Id */
+            experiment_id?: string | null;
+            /** Arm */
+            arm?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3427,6 +3448,39 @@ export interface operations {
                 subject?: string | null;
                 actor?: string | null;
                 limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purge_audit_audit_purge_post: {
+        parameters: {
+            query: {
+                days: number;
             };
             header?: {
                 authorization?: string | null;

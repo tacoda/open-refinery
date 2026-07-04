@@ -3,6 +3,20 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.18] — 2026-07-03
+
+### Added
+- **Audit retention / purge** — `POST /audit/purge?days=N` (admin) deletes audit
+  events older than the retention window; `purge_events` helper. Purge control on
+  the Audit tab. (Data **residency** is a self-hosted deploy concern — the DB
+  lives wherever you install it; documented, not code.)
+- **Experiment-tagged runs (control / treatment)** — `execute(...)` accepts
+  `experiment_id` + `arm` (`/execute` body too); a tagged run feeds its `units`
+  into the experiment's **control** (`arm="control"` → before) or **treatment**
+  (→ after) eval automatically (best-effort), so live work builds the before/after
+  samples without a manual `record_eval`. `add_sample` helper accumulates into the
+  matching eval run.
+
 ## [0.13.17] — 2026-07-03
 
 ### Added

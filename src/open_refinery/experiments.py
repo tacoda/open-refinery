@@ -57,6 +57,29 @@ def record_eval(session: Session, experiment_id: str, phase: str, metric: str,
     return run
 
 
+def add_sample(session: Session, experiment_id: str, phase: str, metric: str, value: float,
+               *, round: int = 1) -> EvalRun:
+    """Append one measurement to an experiment's eval (find-or-create the run).
+
+    Used by experiment-tagged live runs to auto-feed control (before) / treatment
+    (after) samples without a manual `record_eval`."""
+    if phase not in PHASES:
+        raise ValueError(f"unknown phase: {phase!r} (expected {PHASES})")
+    run = session.exec(select(EvalRun).where(
+        EvalRun.experiment_id == experiment_id, EvalRun.phase == phase,
+        EvalRun.metric == metric, EvalRun.round == round)).first()
+    if run is None:
+        run = EvalRun(experiment_id=experiment_id, round=round, phase=phase, metric=metric, samples=[])
+    run.samples = list(run.samples) + [float(value)]
+    run.n = len(run.samples)
+    run.mean = mean(run.samples)
+    run.std = stdev(run.samples) if run.n > 1 else 0.0
+    session.add(run)
+    session.commit()
+    session.refresh(run)
+    return run
+
+
 def list_experiments(session: Session, *, layer: str | None = None) -> list[Experiment]:
     stmt = select(Experiment)
     if layer is not None:
