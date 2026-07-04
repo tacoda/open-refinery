@@ -35,6 +35,10 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE quotas ADD COLUMN window_started_at TEXT NOT NULL DEFAULT '';",
     # v7 (0.13.19): packs can seed example processes (tagged for removal on disable)
     "ALTER TABLE processes ADD COLUMN pack TEXT NOT NULL DEFAULT '';",
+    # ── SCHEMA FROZEN AT 1.0.0 ──────────────────────────────────────────────
+    # Post-1.0 migrations are ADDITIVE ONLY: new tables, or new NULLable / DEFAULT
+    # columns. No column drops/renames, no table restructures — never edit or
+    # reorder the entries above. Append new additive migrations below this line.
 ]
 
 

@@ -3,6 +3,37 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.0.0] — 2026-07-03
+
+**First stable release. Schema is frozen — post-1.0 changes are additive only.**
+
+### Changed
+- **Version 1.0.0**; package classifier is now Production/Stable.
+- **Schema frozen** — the migration list is closed to restructures; future
+  migrations add tables or nullable/default columns only (marker in
+  `migrations.py`).
+
+### Docs
+- **docs/ARCHITECTURE.md** rewritten for the full platform — the transition loop,
+  the executor pipeline, the governance stack, ports & adapters, data/config, and
+  the embeddable library core.
+- **README** status refreshed to the 1.0 feature set.
+
+### The 1.0 surface (shipped across 0.1 → 0.13.x)
+Admin-configurable roles · customizable processes (board/doctrine) with a
+configurable oversight dial + quality-gate attestations · inline and async
+chained approvals · policy governance (rule/skill/command/agent, strict override,
+layered precedence) · per-layer approval workflows with auto-escalating
+accept/deny/feedback · a curated pack marketplace (standards + processes) ·
+targets/routing/windowed quotas with real Anthropic/OpenAI/MCP/API backends (API
+key or OAuth) · content filtering · structured output · governance landscape +
+poison/override analysis · repo coverage/drift + debt-audit health with GitHub
+ingest · evals & experiments · webhooks · integrations (GitHub/GitLab/Jira/Linear)
+· metrics · a complete attributed audit trail · a React/shadcn dashboard (grouped
+nav, marketplace, empty states, Vitest) bundled in the wheel · self-hosted API
+docs with live Try-it-out. Only `SECRET_KEY` in the environment; everything else
+encrypted in the DB. `pip install open-refinery && open-refinery serve`.
+
 ## [0.13.22] — 2026-07-03
 
 ### Changed

@@ -67,20 +67,21 @@ Man-Month* — is the condition under which adding effort actually adds
 throughput, whereas work requiring communication incurs overhead that a central
 agent bottleneck would impose.
 
-> Status: **0.13.0.** **Roles are admin-configurable** — a seeded
-> developer/platform/admin ladder that admins extend and re-rank via the UI
-> (`/roles`); rank comparisons, invitations, and approval chains resolve against
-> it. **Packs** — opt-in, role-gated starter bundles of guidance (enable via the
-> CLI or the Packs tab); the base install seeds almost nothing. **Policies are
-> authored harness artifacts** (rule / skill / command / agent) with a **strict**
-> override lock (default an admin setting). Configuration lives in the
-> **database, not the env** — OAuth provider creds
-> are UI-managed (platform/admin) and encrypted at rest, so **only `SECRET_KEY`
-> is required in the environment**. Atop role-gated invitations, structured
-> output, the async approval queue + chained approvals, the configurable risk
-> profile, the executor, policy governance, targets / routing / quotas,
-> integrations, oversight, metrics, and a full audit trail.
-> Self-hosted API docs at `/api-docs`. See [CHANGELOG.md](https://github.com/tacoda/open-refinery/blob/main/CHANGELOG.md).
+> Status: **1.0.0 — schema frozen** (post-1.0 changes are additive-only). The
+> full governed loop is in place: **admin-configurable roles**; **policies** as
+> authored harness artifacts (rule / skill / command / agent) with a **strict**
+> override lock and layered precedence; **packs** — a curated marketplace of
+> starter standards + processes (TDD, ATDD, spec-driven, code-review, CI/CD,
+> observability, tech-debt…); **per-layer approval workflows** (accept / deny /
+> feedback, auto-escalating) that govern changes to governance itself; the
+> **executor** with real **Anthropic / OpenAI / MCP / API** backends (API key or
+> OAuth), routing, and windowed quotas; **governance landscape + analysis**
+> (overrides, drift, poison flags); **repo coverage & debt-audit health** with
+> GitHub **ingest**; **evals & experiments**; **webhooks**; oversight, the async
+> approval queue + chained approvals, metrics, and a full audit trail. Config
+> lives in the **database, not the env** — encrypted, UI-managed, so **only
+> `SECRET_KEY` is required in the environment**. Self-hosted API docs with live
+> "Try it out" at `/api-docs`. See [CHANGELOG.md](https://github.com/tacoda/open-refinery/blob/main/CHANGELOG.md).
 
 ## Quickstart
 
