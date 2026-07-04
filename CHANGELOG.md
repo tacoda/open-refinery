@@ -3,6 +3,19 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.22] — 2026-07-03
+
+### Changed
+- **Grouped navigation + progressive disclosure.** The ~17 tabs are now organized
+  into groups — **Work · Governance · Platform · Insights · Admin** — with a group
+  selector in the header; only the active group's tabs are shown (one group at a
+  time). Empty/role-gated groups are hidden. **Admins land on Insights** (metrics
+  first — their high-level view); everyone else lands on Work. Completes the core
+  1.0 UI revamp (palette · marketplace · empty states · Vitest · grouped nav).
+
+### Note
+- Remaining for 1.0: full docs pass + **schema freeze**.
+
 ## [0.13.21] — 2026-07-03
 
 ### Added

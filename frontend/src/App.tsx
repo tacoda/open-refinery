@@ -17,6 +17,27 @@ type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'tar
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
+// Grouped navigation: one group is shown at a time (progressive disclosure).
+type NavTab = { value: View; label: string; gate?: 'admin' | 'invite' | 'platform' }
+const NAV: { group: string; tabs: NavTab[] }[] = [
+  { group: 'Work', tabs: [
+    { value: 'work', label: 'Work' }, { value: 'approvals', label: 'Approvals' },
+    { value: 'repos', label: 'Repos' }, { value: 'processes', label: 'Processes' } ] },
+  { group: 'Governance', tabs: [
+    { value: 'policies', label: 'Policies' }, { value: 'proposals', label: 'Proposals' },
+    { value: 'packs', label: 'Packs' },
+    { value: 'governance', label: 'Governance', gate: 'admin' } ] },
+  { group: 'Platform', tabs: [
+    { value: 'integrations', label: 'Integrations' }, { value: 'targets', label: 'Targets' } ] },
+  { group: 'Insights', tabs: [
+    { value: 'metrics', label: 'Metrics' }, { value: 'audits', label: 'Audits' },
+    { value: 'coverage', label: 'Coverage' }, { value: 'experiments', label: 'Experiments' },
+    { value: 'events', label: 'Audit log' } ] },
+  { group: 'Admin', tabs: [
+    { value: 'invitations', label: 'Invitations', gate: 'invite' },
+    { value: 'settings', label: 'Settings', gate: 'platform' } ] },
+]
+
 // Empty-state row for a list; render inside <TableBody> when there are no rows.
 export function EmptyRow({ show, cols, children }: { show: boolean; cols: number; children: any }) {
   if (!show) return null
@@ -55,12 +76,28 @@ export default function App() {
     document.title = me ? `Open Refinery · ${view[0].toUpperCase()}${view.slice(1)}` : 'Open Refinery'
   }, [view, me])
 
+  // Progressive disclosure: admins land on high-level Insights; everyone else on Work.
+  useEffect(() => {
+    if (!me) return
+    const g = me.role === 'admin' ? 'Insights' : 'Work'
+    setGroup(g)
+    setView((NAV.find((n) => n.group === g)!.tabs[0].value))
+  }, [me])
+
   const rank = (r: string) => roles.find((x) => x.name === r)?.rank ?? 0
   const minRank = roles.length ? Math.min(...roles.map((r) => r.rank)) : 0
   const canInvite = !!me && rank(me.role) > minRank  // has a lower role to invite
   // ponytail: Settings (org config) gated by name; backend enforces platform/admin.
   const isPlatform = !!me && ['platform', 'admin'].includes(me.role)
   const isAdmin = !!me && me.role === 'admin'
+  const [group, setGroup] = useState('Work')
+
+  const allow = (t: NavTab) =>
+    t.gate === 'admin' ? isAdmin : t.gate === 'invite' ? canInvite
+      : t.gate === 'platform' ? isPlatform : true
+  const tabsFor = (g: string) => (NAV.find((n) => n.group === g)?.tabs ?? []).filter(allow)
+  const groups = NAV.filter((n) => tabsFor(n.group).length > 0)
+  const openGroup = (g: string) => { setGroup(g); const t = tabsFor(g)[0]; if (t) setView(t.value) }
 
   return (
     <>
@@ -72,30 +109,13 @@ export default function App() {
             <Tabs value={view} onValueChange={(v) => setView(v as View)}>
               <header className="app-header">
                 <span className="app-brand">Open Refinery</span>
-                <TabsList>
-                  {/* Work */}
-                  <TabsTrigger value="work">Work</TabsTrigger>
-                  <TabsTrigger value="approvals">Approvals</TabsTrigger>
-                  <TabsTrigger value="repos">Repos</TabsTrigger>
-                  <TabsTrigger value="processes">Processes</TabsTrigger>
-                  {/* Governance */}
-                  <TabsTrigger value="policies">Policies</TabsTrigger>
-                  <TabsTrigger value="proposals">Proposals</TabsTrigger>
-                  <TabsTrigger value="packs">Packs</TabsTrigger>
-                  {isAdmin && <TabsTrigger value="governance">Governance</TabsTrigger>}
-                  {/* Platform */}
-                  <TabsTrigger value="integrations">Integrations</TabsTrigger>
-                  <TabsTrigger value="targets">Targets</TabsTrigger>
-                  {/* Insights */}
-                  <TabsTrigger value="coverage">Coverage</TabsTrigger>
-                  <TabsTrigger value="audits">Audits</TabsTrigger>
-                  <TabsTrigger value="experiments">Experiments</TabsTrigger>
-                  <TabsTrigger value="metrics">Metrics</TabsTrigger>
-                  <TabsTrigger value="events">Audit log</TabsTrigger>
-                  {/* People & config */}
-                  {canInvite && <TabsTrigger value="invitations">Invitations</TabsTrigger>}
-                  {isPlatform && <TabsTrigger value="settings">Settings</TabsTrigger>}
-                </TabsList>
+                <nav className="nav-group">
+                  {groups.map((n) => (
+                    <Button key={n.group} size="sm"
+                            variant={group === n.group ? 'default' : 'ghost'}
+                            onClick={() => openGroup(n.group)}>{n.group}</Button>
+                  ))}
+                </nav>
                 <span className="app-spacer" />
                 <ThemeToggle />
                 <span className="app-user">{me.email} · {me.role}</span>
@@ -104,6 +124,11 @@ export default function App() {
                   Sign out
                 </Button>
               </header>
+              <TabsList>
+                {tabsFor(group).map((t) => (
+                  <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
+                ))}
+              </TabsList>
               <TabsContent value="work"><Work /></TabsContent>
               <TabsContent value="approvals"><Approvals /></TabsContent>
               <TabsContent value="repos"><Repos /></TabsContent>
