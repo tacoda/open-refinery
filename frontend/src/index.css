@@ -25,6 +25,8 @@
     --color-input: var(--input);
     --color-border: var(--border);
     --color-destructive: var(--destructive);
+    --color-success: var(--success);
+    --color-highlight: var(--highlight);
     --color-accent-foreground: var(--accent-foreground);
     --color-accent: var(--accent);
     --color-muted-foreground: var(--muted-foreground);
@@ -48,7 +50,7 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Light = cream. Primary = blue; green / purple / orange as secondary highlights. */
+/* Light = cream. Primary = purple; yellow highlight, green success, red failure. */
 :root {
     --background: oklch(0.985 0.010 90);
     --foreground: oklch(0.235 0.010 70);
@@ -56,32 +58,34 @@
     --card-foreground: oklch(0.235 0.010 70);
     --popover: oklch(0.995 0.007 90);
     --popover-foreground: oklch(0.235 0.010 70);
-    --primary: oklch(0.55 0.17 255);
+    --primary: oklch(0.53 0.20 300);          /* purple */
     --primary-foreground: oklch(0.99 0.005 90);
     --secondary: oklch(0.945 0.012 90);
     --secondary-foreground: oklch(0.30 0.010 70);
     --muted: oklch(0.945 0.012 90);
     --muted-foreground: oklch(0.52 0.010 70);
-    --accent: oklch(0.93 0.030 255);
-    --accent-foreground: oklch(0.32 0.08 255);
-    --destructive: oklch(0.577 0.245 27.325);
+    --accent: oklch(0.93 0.035 300);
+    --accent-foreground: oklch(0.34 0.10 300);
+    --destructive: oklch(0.577 0.245 27.325); /* red — failures/blocking */
+    --success: oklch(0.60 0.15 150);          /* green — successes */
+    --highlight: oklch(0.80 0.15 95);         /* yellow — highlight */
     --border: oklch(0.905 0.012 88);
     --input: oklch(0.905 0.012 88);
-    --ring: oklch(0.55 0.17 255);
-    --chart-1: oklch(0.55 0.17 255);  /* blue */
-    --chart-2: oklch(0.60 0.15 150);  /* green */
-    --chart-3: oklch(0.55 0.19 300);  /* purple */
-    --chart-4: oklch(0.68 0.16 55);   /* orange */
+    --ring: oklch(0.53 0.20 300);
+    --chart-1: oklch(0.53 0.20 300);  /* purple (primary) */
+    --chart-2: oklch(0.60 0.15 150);  /* green (success) */
+    --chart-3: oklch(0.80 0.15 95);   /* yellow (highlight) */
+    --chart-4: oklch(0.577 0.245 27); /* red (failure) */
     --chart-5: oklch(0.52 0.010 70);
     --radius: 0.625rem;
     --sidebar: oklch(0.975 0.012 90);
     --sidebar-foreground: oklch(0.235 0.010 70);
-    --sidebar-primary: oklch(0.55 0.17 255);
+    --sidebar-primary: oklch(0.53 0.20 300);
     --sidebar-primary-foreground: oklch(0.99 0.005 90);
-    --sidebar-accent: oklch(0.93 0.030 255);
-    --sidebar-accent-foreground: oklch(0.32 0.08 255);
+    --sidebar-accent: oklch(0.93 0.035 300);
+    --sidebar-accent-foreground: oklch(0.34 0.10 300);
     --sidebar-border: oklch(0.905 0.012 88);
-    --sidebar-ring: oklch(0.55 0.17 255);
+    --sidebar-ring: oklch(0.53 0.20 300);
 }
 
 /* Dark = dark gray, brighter highlights. */
@@ -92,31 +96,33 @@
     --card-foreground: oklch(0.960 0.006 90);
     --popover: oklch(0.245 0.006 70);
     --popover-foreground: oklch(0.960 0.006 90);
-    --primary: oklch(0.66 0.16 255);
-    --primary-foreground: oklch(0.16 0.02 255);
+    --primary: oklch(0.70 0.17 300);          /* purple */
+    --primary-foreground: oklch(0.16 0.02 300);
     --secondary: oklch(0.285 0.006 70);
     --secondary-foreground: oklch(0.960 0.006 90);
     --muted: oklch(0.285 0.006 70);
     --muted-foreground: oklch(0.715 0.010 85);
-    --accent: oklch(0.32 0.05 255);
-    --accent-foreground: oklch(0.90 0.03 255);
-    --destructive: oklch(0.704 0.191 22.216);
+    --accent: oklch(0.33 0.06 300);
+    --accent-foreground: oklch(0.90 0.04 300);
+    --destructive: oklch(0.704 0.191 22.216); /* red */
+    --success: oklch(0.70 0.15 150);          /* green */
+    --highlight: oklch(0.83 0.15 95);         /* yellow */
     --border: oklch(1 0 0 / 12%);
     --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.66 0.16 255);
-    --chart-1: oklch(0.68 0.16 255);  /* blue */
+    --ring: oklch(0.70 0.17 300);
+    --chart-1: oklch(0.70 0.17 300);  /* purple */
     --chart-2: oklch(0.70 0.15 150);  /* green */
-    --chart-3: oklch(0.68 0.18 300);  /* purple */
-    --chart-4: oklch(0.74 0.15 55);   /* orange */
+    --chart-3: oklch(0.83 0.15 95);   /* yellow */
+    --chart-4: oklch(0.704 0.191 22); /* red */
     --chart-5: oklch(0.715 0.010 85);
     --sidebar: oklch(0.245 0.006 70);
     --sidebar-foreground: oklch(0.960 0.006 90);
-    --sidebar-primary: oklch(0.66 0.16 255);
-    --sidebar-primary-foreground: oklch(0.16 0.02 255);
-    --sidebar-accent: oklch(0.32 0.05 255);
-    --sidebar-accent-foreground: oklch(0.90 0.03 255);
+    --sidebar-primary: oklch(0.70 0.17 300);
+    --sidebar-primary-foreground: oklch(0.16 0.02 300);
+    --sidebar-accent: oklch(0.33 0.06 300);
+    --sidebar-accent-foreground: oklch(0.90 0.04 300);
     --sidebar-border: oklch(1 0 0 / 12%);
-    --sidebar-ring: oklch(0.66 0.16 255);
+    --sidebar-ring: oklch(0.70 0.17 300);
 }
 
 @layer base {
@@ -159,9 +165,22 @@
   .login-tagline { @apply text-sm text-muted-foreground; }
   .stack { @apply flex flex-col gap-2 text-left; }
 
-  /* the four highlight colors, surfaced on metric cards */
+  /* accent borders on cards — semantic names (purple/green/yellow/red) */
+  .accent-primary   { border-left: 3px solid var(--chart-1); } /* purple */
+  .accent-success   { border-left: 3px solid var(--chart-2); } /* green */
+  .accent-highlight  { border-left: 3px solid var(--chart-3); } /* yellow */
+  .accent-danger    { border-left: 3px solid var(--chart-4); } /* red */
+  /* legacy aliases (pre-revamp names) → new palette */
   .accent-blue   { border-left: 3px solid var(--chart-1); }
   .accent-green  { border-left: 3px solid var(--chart-2); }
   .accent-purple { border-left: 3px solid var(--chart-3); }
   .accent-orange { border-left: 3px solid var(--chart-4); }
+
+  /* marketplace grid for the Packs page */
+  .market-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .market-card { @apply flex flex-col justify-between h-full; }
+
+  /* grouped tab nav */
+  .nav-group { @apply flex items-center gap-1; }
+  .nav-group-label { @apply text-xs uppercase tracking-wide text-muted-foreground px-1; }
 }

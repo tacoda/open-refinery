@@ -67,23 +67,28 @@ export default function App() {
               <header className="app-header">
                 <span className="app-brand">Open Refinery</span>
                 <TabsList>
+                  {/* Work */}
                   <TabsTrigger value="work">Work</TabsTrigger>
                   <TabsTrigger value="approvals">Approvals</TabsTrigger>
                   <TabsTrigger value="repos">Repos</TabsTrigger>
                   <TabsTrigger value="processes">Processes</TabsTrigger>
+                  {/* Governance */}
+                  <TabsTrigger value="policies">Policies</TabsTrigger>
+                  <TabsTrigger value="proposals">Proposals</TabsTrigger>
+                  <TabsTrigger value="packs">Packs</TabsTrigger>
+                  {isAdmin && <TabsTrigger value="governance">Governance</TabsTrigger>}
+                  {/* Platform */}
                   <TabsTrigger value="integrations">Integrations</TabsTrigger>
                   <TabsTrigger value="targets">Targets</TabsTrigger>
-                  <TabsTrigger value="policies">Policies</TabsTrigger>
-                  <TabsTrigger value="packs">Packs</TabsTrigger>
-                  <TabsTrigger value="proposals">Proposals</TabsTrigger>
+                  {/* Insights */}
                   <TabsTrigger value="coverage">Coverage</TabsTrigger>
                   <TabsTrigger value="audits">Audits</TabsTrigger>
                   <TabsTrigger value="experiments">Experiments</TabsTrigger>
+                  <TabsTrigger value="metrics">Metrics</TabsTrigger>
+                  <TabsTrigger value="events">Audit log</TabsTrigger>
+                  {/* People & config */}
                   {canInvite && <TabsTrigger value="invitations">Invitations</TabsTrigger>}
                   {isPlatform && <TabsTrigger value="settings">Settings</TabsTrigger>}
-                  {isAdmin && <TabsTrigger value="governance">Governance</TabsTrigger>}
-                  <TabsTrigger value="events">Audit</TabsTrigger>
-                  <TabsTrigger value="metrics">Metrics</TabsTrigger>
                 </TabsList>
                 <span className="app-spacer" />
                 <ThemeToggle />
@@ -1024,33 +1029,43 @@ function Packs({ me, roles }: any) {
   const toggle = (p: any) =>
     api(`/packs/${p.key}/${p.enabled ? 'disable' : 'enable'}`, { method: 'POST' })
       .then(load).catch(fail)
+
+  const layers = Array.from(new Set(rows.map((p: any) => p.role)))
+    .sort((a: any, b: any) => rank(a) - rank(b))
+  const enabledCount = rows.filter((p: any) => p.enabled).length
+
   return (
     <section className="page">
-      <h2 className="page-title">Packs</h2>
-      <p className="muted">Opt-in topic bundles of starter standards. Enable/disable per your role level.</p>
-      <Card>
-        <CardContent>
-          <Table>
-            <TableHeader><TableRow>
-              <TableHead>Pack</TableHead><TableHead>Layer</TableHead>
-              <TableHead>Description</TableHead><TableHead>State</TableHead><TableHead /></TableRow></TableHeader>
-            <TableBody>{rows.map((p: any) => (
-              <TableRow key={p.key}>
-                <TableCell>{p.title}</TableCell>
-                <TableCell><Badge variant="secondary">{p.role}</Badge></TableCell>
-                <TableCell>{p.description}</TableCell>
-                <TableCell>{p.enabled ? <Badge>enabled</Badge> : <Badge variant="outline">off</Badge>}</TableCell>
-                <TableCell>
-                  <Button size="sm" variant={p.enabled ? 'outline' : 'default'}
-                          disabled={!canManage(p.role)} onClick={() => toggle(p)}>
-                    {p.enabled ? 'Disable' : 'Enable'}
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}</TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <h2 className="page-title">Pack marketplace</h2>
+      <p className="muted">
+        Browse starter bundles of standards & processes — the modern software / platform / team-workflow
+        canon. Enable what fits your team ({enabledCount}/{rows.length} enabled).
+      </p>
+      {layers.map((layer: any) => (
+        <div key={layer}>
+          <h3 className="nav-group-label">{layer} packs</h3>
+          <div className="market-grid">
+            {rows.filter((p: any) => p.role === layer).map((p: any) => (
+              <Card key={p.key} className={p.enabled ? 'accent-success market-card' : 'market-card'}>
+                <CardHeader>
+                  <CardTitle>{p.title} {p.enabled && <Badge>enabled</Badge>}</CardTitle>
+                </CardHeader>
+                <CardContent className="market-card">
+                  <p className="muted">{p.description}</p>
+                  <div className="work-actions">
+                    <Badge variant="secondary">{p.role}</Badge>
+                    <span className="app-spacer" />
+                    <Button size="sm" variant={p.enabled ? 'outline' : 'default'}
+                            disabled={!canManage(p.role)} onClick={() => toggle(p)}>
+                      {p.enabled ? 'Disable' : 'Enable'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      ))}
     </section>
   )
 }

@@ -3,6 +3,21 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.20] — 2026-07-03
+
+### Changed
+- **UI revamp (part 1).** New **palette** — purple primary, yellow highlight,
+  green success, red failure/blocking (replaces blue/green/purple/orange).
+  **Pack marketplace** — the Packs page is now a browsable card grid grouped by
+  layer, with enable/disable and an enabled count. **Decluttered tab nav** —
+  tabs regrouped (Work · Governance · Platform · Insights · People/Config) and
+  the audit-trail tab relabeled **Audit log** (distinct from **Audits**).
+
+### Note
+- UI revamp continues: grouped-nav labels / progressive disclosure, graceful
+  empty states, and **Vitest** component tests (mocked API) are the remaining
+  1.0 UI work.
+
 ## [0.13.19] — 2026-07-03
 
 ### Changed
