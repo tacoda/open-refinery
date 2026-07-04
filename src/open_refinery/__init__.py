@@ -48,6 +48,7 @@ from .targets import (
     list_routes,
     list_targets,
     resolve_target,
+    set_target_credential,
     target_credential,
 )
 from .approvals import (
@@ -221,6 +222,7 @@ __all__ = [
     "list_targets",
     "delete_target",
     "target_credential",
+    "set_target_credential",
     "create_route",
     "list_routes",
     "delete_route",

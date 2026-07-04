@@ -3,6 +3,17 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.13] — 2026-07-03
+
+### Added
+- **Target OAuth handshake** — connect a target by **OAuth** as well as API key
+  (parity with integrations). `POST /targets/{id}/oauth/{provider}/start` →
+  authorize URL; `GET /targets/{id}/oauth/{provider}/callback` exchanges the code
+  (reusing the configured provider's client creds + `oauth.PROVIDERS`) and stores
+  `{"provider", "access_token"}` in the target's encrypted credential — which the
+  model/MCP backends already read. `set_target_credential` added. Dashboard: per-
+  target **OAuth: <provider>** connect buttons for each configured provider.
+
 ## [0.13.12] — 2026-07-03
 
 ### Changed

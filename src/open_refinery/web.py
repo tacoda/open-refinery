@@ -80,6 +80,7 @@ from .targets import (
     list_quotas,
     list_routes,
     list_targets,
+    set_target_credential,
 )
 from .users import (
     DEFAULT_MIN_APPROVER_ROLE,
@@ -738,6 +739,34 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
                       _: User = Depends(current_user)):
         delete_target(session, target_id)
         return {"status": "deleted"}
+
+    # --- connect a target via OAuth (token stored in its credential) ---
+    def _target_oauth_redirect(request: Request, target_id: str, provider: str) -> str:
+        return f"{_base(request)}/targets/{target_id}/oauth/{provider}/callback"
+
+    @app.post("/targets/{target_id}/oauth/{provider}/start")
+    def target_oauth_start(target_id: str, provider: str, request: Request,
+                           session: Session = Depends(get_session), user: User = Depends(current_user)):
+        creds = provider_creds(session, provider)
+        if not oauth.is_enabled(creds):
+            raise HTTPException(status_code=404, detail=f"{provider} oauth not configured")
+        state = create_connect_state(session, user.id, provider)
+        scope = oauth.PROVIDERS[provider]["connect_scope"]
+        url = oauth.authorize_url(provider, state, _target_oauth_redirect(request, target_id, provider),
+                                  scope, creds["client_id"])
+        return {"authorize_url": url}
+
+    @app.get("/targets/{target_id}/oauth/{provider}/callback")
+    def target_oauth_callback(target_id: str, provider: str, request: Request,
+                              code: str = "", state: str = "",
+                              session: Session = Depends(get_session)):
+        if pop_connect_state(session, state) is None:   # validates + consumes (CSRF, one-time)
+            return RedirectResponse(_home(request) + "#target_error=state")
+        creds = provider_creds(session, provider)
+        token = oauth.exchange_code(provider, code, _target_oauth_redirect(request, target_id, provider),
+                                    creds["client_id"], creds["client_secret"])
+        set_target_credential(session, target_id, {"provider": provider, "access_token": token})
+        return RedirectResponse(_home(request) + f"#connected={provider}")
 
     @app.post("/routes", status_code=201)
     def add_route(body: NewRoute, session: Session = Depends(get_session),

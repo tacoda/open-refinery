@@ -1004,7 +1004,14 @@ function Targets() {
   const { rows: routes, load: loadR } = useList('/routes')
   const { rows: quotas, load: loadQ } = useList('/quotas')
   const [procs, setProcs] = useState<any[]>([])
-  useEffect(() => { api('/processes').then(setProcs).catch(() => {}) }, [])
+  const [oauthProviders, setOauthProviders] = useState<string[]>([])
+  useEffect(() => {
+    api('/processes').then(setProcs).catch(() => {})
+    api('/auth/providers').then((p) => setOauthProviders(Object.keys(p).filter((k) => p[k]))).catch(() => {})
+  }, [])
+  const connectOauth = (targetId: string, provider: string) =>
+    post(`/targets/${targetId}/oauth/${provider}/start`, {})
+      .then((r) => { window.location.href = r.authorize_url }).catch(fail)
 
   const [name, setName] = useState(''), [kind, setKind] = useState('model')
   const [endpoint, setEndpoint] = useState(''), [token, setToken] = useState('')
@@ -1050,10 +1057,18 @@ function Targets() {
                 <TableCell>{t.name}</TableCell>
                 <TableCell><Badge variant="secondary">{t.kind}</Badge></TableCell>
                 <TableCell className="mono">{t.endpoint}</TableCell>
-                <TableCell><Button variant="outline" size="sm" onClick={() => delTarget(t.id)}>Delete</Button></TableCell>
+                <TableCell>
+                  <span style={{ display: 'flex', gap: '0.3rem' }}>
+                    {oauthProviders.map((p) => (
+                      <Button key={p} variant="outline" size="sm" onClick={() => connectOauth(t.id, p)}>OAuth: {p}</Button>
+                    ))}
+                    <Button variant="outline" size="sm" onClick={() => delTarget(t.id)}>Delete</Button>
+                  </span>
+                </TableCell>
               </TableRow>
             ))}</TableBody>
           </Table>
+          <p className="muted">Connect a target by API key (token above) or OAuth (buttons per configured provider).</p>
         </CardContent>
       </Card>
 

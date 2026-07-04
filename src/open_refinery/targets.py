@@ -57,6 +57,18 @@ def delete_target(session: Session, target_id: str) -> None:
         session.commit()
 
 
+def set_target_credential(session: Session, target_id: str, credential: dict) -> Target:
+    """Replace a target's stored credential (e.g. after an OAuth handshake)."""
+    target = session.get(Target, target_id)
+    if target is None:
+        raise ValueError(f"unknown target: {target_id!r}")
+    target.secret = encrypt(json.dumps(credential)) if credential else ""
+    session.add(target)
+    session.commit()
+    session.refresh(target)
+    return target
+
+
 def target_credential(session: Session, target_id: str) -> dict:
     """Decrypt a target's credential ({} when none) — for the executor/caller."""
     target = session.get(Target, target_id)
