@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Open Refinery — govern AI-driven software work</title>
+<meta name="description" content="Open Refinery is the self-hosted platform layer that governs AI-driven software work: authorized, owned, provenanced, quota'd, filtered, and audited — every step." />
+<meta property="og:title" content="Open Refinery" />
+<meta property="og:description" content="An open factory to shine light into the dark. Govern AI-driven software work — every step authorized, owned, provenanced, and audited." />
+<style>
+  :root{
+    --bg:#F6F3EC; --card:#Fffdf8; --fg:#2b2622; --muted:#6b635a; --border:#e6e0d4;
+    --primary:#6d28d9;      /* purple */
+    --primary-2:#8b5cf6;
+    --highlight:#eab308;    /* yellow */
+    --success:#16a34a;      /* green */
+    --danger:#dc2626;       /* red */
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#1c1a18; --card:#252220; --fg:#f2ede6; --muted:#a89f93; --border:#38332e;
+           --primary:#a78bfa; --primary-2:#c4b5fd; }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  a{color:var(--primary);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 24px}
+  .btn{display:inline-block;padding:.7rem 1.2rem;border-radius:.6rem;font-weight:600;border:1px solid transparent}
+  .btn-primary{background:var(--primary);color:#fff}
+  .btn-primary:hover{background:var(--primary-2);text-decoration:none}
+  .btn-ghost{border-color:var(--border);color:var(--fg)}
+  .btn-ghost:hover{border-color:var(--primary);text-decoration:none}
+  .tag{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--primary);background:color-mix(in oklab,var(--primary) 12%,transparent);
+    padding:.25rem .6rem;border-radius:999px}
+  header.hero{padding:84px 0 56px;text-align:center;border-bottom:1px solid var(--border)}
+  .brand{font-weight:800;font-size:1.05rem;letter-spacing:-.01em}
+  h1{font-size:clamp(2.1rem,5vw,3.4rem);line-height:1.08;margin:.6rem 0 .4rem;letter-spacing:-.02em}
+  h1 .accent{color:var(--primary)}
+  .lede{font-size:1.2rem;color:var(--muted);max-width:720px;margin:0 auto 1.6rem}
+  .cta{display:flex;gap:.7rem;justify-content:center;flex-wrap:wrap;margin-top:.4rem}
+  code.inline{background:color-mix(in oklab,var(--fg) 8%,transparent);padding:.12rem .4rem;border-radius:.35rem;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em}
+  section{padding:56px 0;border-bottom:1px solid var(--border)}
+  h2{font-size:1.7rem;letter-spacing:-.01em;margin:0 0 .4rem}
+  h2 .bar{display:inline-block;width:.5rem;height:1.1rem;border-radius:2px;margin-right:.5rem;vertical-align:baseline;background:var(--highlight)}
+  .sub{color:var(--muted);margin:0 0 1.8rem;max-width:720px}
+  .grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:.8rem;padding:1.1rem 1.2rem}
+  .card h3{margin:.1rem 0 .35rem;font-size:1.05rem}
+  .card p{margin:0;color:var(--muted);font-size:.95rem}
+  .card.problem{border-left:3px solid var(--danger)}
+  .card.feature{border-left:3px solid var(--primary)}
+  .flow{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;font-weight:600}
+  .flow .step{background:var(--card);border:1px solid var(--border);border-radius:.6rem;padding:.5rem .8rem}
+  .flow .arrow{color:var(--primary);font-weight:800}
+  pre{background:#141210;color:#f2ede6;border-radius:.7rem;padding:1rem 1.2rem;overflow:auto;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92rem;line-height:1.5}
+  pre .c{color:#9aa0a6}
+  .two{display:grid;gap:1.4rem;grid-template-columns:1fr 1fr}
+  @media(max-width:760px){.two{grid-template-columns:1fr}}
+  ul.check{list-style:none;padding:0;margin:0}
+  ul.check li{padding:.3rem 0 .3rem 1.6rem;position:relative;color:var(--fg)}
+  ul.check li::before{content:"✓";position:absolute;left:0;color:var(--success);font-weight:800}
+  footer{padding:48px 0;text-align:center;color:var(--muted);font-size:.9rem}
+  .pills{display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;margin-top:1rem}
+  .pill{border:1px solid var(--border);border-radius:999px;padding:.2rem .7rem;font-size:.8rem;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="brand">◆ Open Refinery</div>
+    <div style="margin:1.2rem 0 .2rem"><span class="tag">Open source · self-hosted · v1.0</span></div>
+    <h1>An open factory to<br><span class="accent">shine light into the dark.</span></h1>
+    <p class="lede">The self-hosted platform layer that governs AI-driven software work —
+      so every change is <strong>authorized, owned, provenanced, and audited</strong>.
+      Lights-out automation you can actually trust, because you can see it.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://pypi.org/project/open-refinery/">pip install open-refinery</a>
+      <a class="btn btn-ghost" href="https://github.com/tacoda/open-refinery">View on GitHub</a>
+    </div>
+    <div class="pills">
+      <span class="pill">Only SECRET_KEY in the env</span>
+      <span class="pill">SQLite built-in</span>
+      <span class="pill">React dashboard bundled</span>
+      <span class="pill">MIT licensed</span>
+    </div>
+  </div>
+</header>
+
+<section id="problem">
+  <div class="wrap">
+    <h2><span class="bar"></span>The problem</h2>
+    <p class="sub">AI ships code faster than teams can govern it. The "dark factory" runs
+      lights-out — and that's exactly the danger: opaque, un-owned, unaccountable.</p>
+    <div class="grid">
+      <div class="card problem"><h3>Who authorized this?</h3>
+        <p>Agents and pipelines act, but nothing records who owned the change, under what policy, or with which inputs.</p></div>
+      <div class="card problem"><h3>Automation you can't audit</h3>
+        <p>No oversight dial, no approval trail, no way to prove — after the fact — that a lights-out run was safe.</p></div>
+      <div class="card problem"><h3>Standards that drift</h3>
+        <p>Charters and harness configs claim behavior the code doesn't actually enforce — <em>imitation surfaces</em> that read as governed but aren't.</p></div>
+      <div class="card problem"><h3>No safe way to change the rules</h3>
+        <p>Governance itself has no workflow, and no way to test whether a change actually helped.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="solution">
+  <div class="wrap">
+    <h2><span class="bar"></span>The platform layer</h2>
+    <p class="sub">Open Refinery sits between your <strong>harnesses</strong> (agents, scripts, CI)
+      and your <strong>targets</strong> (repos, models, MCP servers, APIs). It governs
+      <em>how work reaches those targets</em> — and records everything.</p>
+    <div class="two">
+      <div>
+        <div class="flow">
+          <span class="step">authorize</span><span class="arrow">→</span>
+          <span class="step">quota · secrets · filter</span><span class="arrow">→</span>
+          <span class="step">act</span><span class="arrow">→</span>
+          <span class="step">record</span><span class="arrow">→</span>
+          <span class="step">audit</span>
+        </div>
+        <p class="sub" style="margin-top:1.2rem">The orchestrator is a <strong>deterministic queue</strong>, not an agent:
+          cheap, reproducible, and auditable. The agent's judgment stays inside a step;
+          sequencing stays plain software.</p>
+      </div>
+      <ul class="check">
+        <li>Identity, <strong>admin-configurable roles</strong>, and authorization on every action</li>
+        <li>A <strong>human-oversight dial</strong> per process (manual → fully dark)</li>
+        <li>Immutable provenance and a <strong>complete, attributed audit trail</strong></li>
+        <li>Quotas, content filtering, and structured output at the call site</li>
+        <li>Self-hosted, single-tenant — <code class="inline">pip install</code> + one command</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2><span class="bar"></span>What it does</h2>
+    <p class="sub">One governed loop, end to end — from a work item on a board to a real model call.</p>
+    <div class="grid">
+      <div class="card feature"><h3>Policy governance</h3>
+        <p>Authored artifacts — rule / skill / command / agent — with deny-overrides and a <strong>strict</strong> lock a lower layer can't override.</p></div>
+      <div class="card feature"><h3>Per-layer approval workflows</h3>
+        <p>Changes to governance itself walk an accept / deny / feedback chain that auto-escalates up the role ladder.</p></div>
+      <div class="card feature"><h3>Pack marketplace</h3>
+        <p>Enable curated canon — TDD, ATDD, spec-driven, code review, CI/CD, observability, tech-debt — as standards and ready-made processes.</p></div>
+      <div class="card feature"><h3>Real target backends</h3>
+        <p>Anthropic, OpenAI, MCP, and generic API targets — connect by API key or OAuth, with routing, failover, and windowed rate quotas.</p></div>
+      <div class="card feature"><h3>Coverage &amp; drift</h3>
+        <p>Ingest a repo's charter/harness/code, then surface coverage, drift, and <strong>imitation surfaces</strong> with 0–100 health scores.</p></div>
+      <div class="card feature"><h3>Governance analysis</h3>
+        <p>Flag the poison: dead rules, contradictions, redundancy, and prompt injection — per role level, with insights.</p></div>
+      <div class="card feature"><h3>Evals &amp; experiments</h3>
+        <p>State a hypothesis, run before/after evals, and get a real significance verdict — control vs. treatment.</p></div>
+      <div class="card feature"><h3>Oversight &amp; approvals</h3>
+        <p>Inline sign-off or an async queue with chained approvals — an ordered role chain, a distinct signer per slot.</p></div>
+      <div class="card feature"><h3>Debt audits &amp; health</h3>
+        <p>Score factory / harness / charter debt, track it over time, and get concrete "what to try next" insights.</p></div>
+      <div class="card feature"><h3>Webhooks &amp; audit trail</h3>
+        <p>HMAC-signed event fan-out and a complete, queryable, attributed audit trail — with metrics derived from it.</p></div>
+      <div class="card feature"><h3>Integrations</h3>
+        <p>GitHub, GitLab, Jira, Linear — import repos and sync work items, connect by token or OAuth, credentials encrypted at rest.</p></div>
+      <div class="card feature"><h3>Bundled dashboard + API docs</h3>
+        <p>A React dashboard ships in the wheel; self-hosted API docs with live "Try it out" at <code class="inline">/api-docs</code>.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <h2><span class="bar"></span>Get started</h2>
+    <p class="sub">Python 3.11+. SQLite ships with Python — nothing else to install.
+      Only <code class="inline">SECRET_KEY</code> is required in the environment; everything else is UI-managed and encrypted in the database.</p>
+<pre><span class="c"># install + run — server and dashboard on :8000</span>
+pip install open-refinery
+open-refinery serve
+
+<span class="c"># open http://your-host:8000 — the dashboard walks you through</span>
+<span class="c"># creating the first admin, then signing you in.</span></pre>
+    <div class="cta" style="justify-content:flex-start;margin-top:1.4rem">
+      <a class="btn btn-primary" href="https://pypi.org/project/open-refinery/">PyPI</a>
+      <a class="btn btn-ghost" href="https://github.com/tacoda/open-refinery">GitHub</a>
+      <a class="btn btn-ghost" href="https://github.com/tacoda/open-refinery/blob/main/docs/ARCHITECTURE.md">Architecture</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p><strong>Open Refinery</strong> — automation you can't audit isn't trustworthy.<br>
+      MIT © Ian Johnson · <a href="https://github.com/tacoda/open-refinery">github.com/tacoda/open-refinery</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
