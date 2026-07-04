@@ -247,6 +247,20 @@ class Standard(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
+class Webhook(SQLModel, table=True):
+    """A registered endpoint that receives HMAC-signed audit events."""
+    __tablename__ = "webhooks"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    url: str
+    events: list = Field(default_factory=list, sa_column=Column(JSON))  # recipe filter; [] = all
+    secret: str                       # encrypted signing secret
+    active: bool = True
+    last_status: int | None = None    # HTTP status of the last delivery
+    last_at: str | None = None
+    owner_id: str = Field(foreign_key="users.id", index=True)
+    created_at: str = Field(default_factory=now_iso)
+
+
 class Audit(SQLModel, table=True):
     """A recorded debt-audit run for one area — health score + findings + insights."""
     __tablename__ = "audits"

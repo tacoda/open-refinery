@@ -3,6 +3,20 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.10] — 2026-07-03
+
+### Added
+- **Webhooks.** Register an endpoint with an optional **event filter** (recipe
+  names; blank = all) and a generated **signing secret** (shown once, stored
+  encrypted). Audit events fan out to matching active endpoints as a JSON POST
+  with an `X-OpenRefinery-Signature: sha256=<hmac>` header; the last delivery
+  status is recorded. `GET/POST/DELETE /webhooks` (platform/admin). Dashboard:
+  a **Webhooks** card in Settings. Delivery is synchronous best-effort today
+  (errors swallowed) — a background runner is the post-1.0 job-queue item.
+- **Swagger "Try it out" is now authenticated.** The OpenAPI schema declares a
+  Bearer security scheme, so `/api-docs` shows an **Authorize** button — paste a
+  token once and call any endpoint live from the browser.
+
 ## [0.13.9] — 2026-07-03
 
 ### Added

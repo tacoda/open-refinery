@@ -551,7 +551,42 @@ function Settings() {
           </Table>
         </CardContent>
       </Card>
+      <Webhooks />
     </section>
+  )
+}
+
+function Webhooks() {
+  const { rows, load } = useList('/webhooks')
+  const [url, setUrl] = useState(''), [events, setEvents] = useState('')
+  const [secret, setSecret] = useState('')
+  const add = () => post('/webhooks', {
+    url, events: events.split(',').map((s) => s.trim()).filter(Boolean),
+  }).then((r) => { setSecret(r.secret); setUrl(''); setEvents(''); load() }).catch(fail)
+  const del = (id: string) => api(`/webhooks/${id}`, { method: 'DELETE' }).then(load).catch(fail)
+  return (
+    <Card>
+      <CardHeader><CardTitle>Webhooks — fan audit events out (HMAC-signed)</CardTitle></CardHeader>
+      <CardContent>
+        <div className="toolbar">
+          <Input className="field" placeholder="https://your-endpoint" value={url} onChange={(e) => setUrl(e.target.value)} />
+          <Input className="field" placeholder="events filter (comma; blank = all)" value={events} onChange={(e) => setEvents(e.target.value)} />
+          <Button onClick={add} disabled={!url}>Register</Button>
+        </div>
+        {secret && <p className="muted mono">signing secret (shown once): {secret}</p>}
+        <Table>
+          <TableHeader><TableRow><TableHead>URL</TableHead><TableHead>Events</TableHead><TableHead>Last</TableHead><TableHead /></TableRow></TableHeader>
+          <TableBody>{rows.map((w: any) => (
+            <TableRow key={w.id}>
+              <TableCell className="mono">{w.url}</TableCell>
+              <TableCell className="mono">{(w.events || []).join(', ') || 'all'}</TableCell>
+              <TableCell>{w.last_status != null ? <Badge variant={w.last_status >= 200 && w.last_status < 300 ? 'default' : 'destructive'}>{w.last_status}</Badge> : '—'}</TableCell>
+              <TableCell><Button variant="outline" size="sm" onClick={() => del(w.id)}>Delete</Button></TableCell>
+            </TableRow>
+          ))}</TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   )
 }
 

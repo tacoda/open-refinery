@@ -79,6 +79,7 @@ from .approval_workflows import (
 from .analysis import analyze
 from .debt import audit, health, list_audits, run_audit
 from .ingest import ingest
+from .webhooks import create_webhook, delete_webhook, deliver, list_webhooks, sign
 from .repo_governance import (
     create_claim,
     delete_claim,
@@ -250,6 +251,11 @@ __all__ = [
     "list_audits",
     "health",
     "ingest",
+    "create_webhook",
+    "list_webhooks",
+    "delete_webhook",
+    "deliver",
+    "sign",
     "set_workflow",
     "list_workflows",
     "propose",

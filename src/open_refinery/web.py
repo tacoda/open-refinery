@@ -55,6 +55,7 @@ from .approval_workflows import (
 from .analysis import analyze
 from .debt import health, list_audits, run_audit
 from .ingest import ingest
+from .webhooks import create_webhook, delete_webhook, list_webhooks
 from .governance import landscape
 from .packs import disable_pack, enable_pack, list_packs, list_standards
 from .policies import (
@@ -257,6 +258,11 @@ class NewClaim(BaseModel):
     has_gate: bool = False
 
 
+class NewWebhook(BaseModel):
+    url: str
+    events: list[str] = []   # recipe filter; [] = all events
+
+
 class ScanRequest(BaseModel):
     text: str
 
@@ -275,6 +281,22 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     app = FastAPI(title="open-refinery", docs_url=None, redoc_url=None)
     engine = session.get_bind() if session is not None else engine_for(database_url)
     app.state.engine = engine
+
+    # Declare Bearer auth in the schema so Swagger UI's Authorize + "Try it out"
+    # can call the live API with a token. (Auth itself is enforced per-route.)
+    def _openapi():
+        if app.openapi_schema:
+            return app.openapi_schema
+        from fastapi.openapi.utils import get_openapi
+        schema = get_openapi(title="open-refinery", version="1.0", routes=app.routes,
+                             description="Self-hosted governance platform API. "
+                                         "Click **Authorize** and paste your token to try calls here.")
+        schema.setdefault("components", {})["securitySchemes"] = {
+            "bearerAuth": {"type": "http", "scheme": "bearer"}}
+        schema["security"] = [{"bearerAuth": []}]
+        app.openapi_schema = schema
+        return schema
+    app.openapi = _openapi
 
     # Dev only: the Vite dev server (localhost) calls the API cross-origin.
     # In production the SPA is served same-origin from _STATIC, so this is a no-op.
@@ -397,6 +419,24 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def get_governance(session: Session = Depends(get_session),
                        _: User = Depends(require("admin"))):
         return landscape(session)
+
+    # --- webhooks (fan audit events out; HMAC-signed) ---
+    @app.get("/webhooks")
+    def get_webhooks(session: Session = Depends(get_session),
+                     _: User = Depends(require("platform", "admin"))):
+        return list_webhooks(session)  # secret is encrypted, never returned
+
+    @app.post("/webhooks", status_code=201)
+    def add_webhook(body: NewWebhook, session: Session = Depends(get_session),
+                    user: User = Depends(require("platform", "admin"))):
+        wh, secret = create_webhook(session, body.url, body.events, user.id)
+        return {"webhook": wh, "secret": secret}  # secret shown once
+
+    @app.delete("/webhooks/{webhook_id}")
+    def remove_webhook(webhook_id: str, session: Session = Depends(get_session),
+                       _: User = Depends(require("platform", "admin"))):
+        delete_webhook(session, webhook_id)
+        return {"status": "deleted"}
 
     # --- debt audits & health ---
     @app.get("/health/areas")

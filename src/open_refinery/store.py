@@ -85,6 +85,8 @@ class SqlSink:
     def write(self, record: Record) -> None:
         self._session.add(Event(**record.to_dict()))
         self._session.commit()
+        from .webhooks import deliver
+        deliver(self._session, record)  # fan out to registered endpoints (best-effort)
 
 
 # Backwards-compatible alias — the SQL-backed sink used to be SqliteSink.
