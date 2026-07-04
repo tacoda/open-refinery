@@ -3,6 +3,26 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.19] — 2026-07-03
+
+### Changed
+- **`seed` is now minimal** — three role users, one repo, one board process, two
+  work items: enough to sign in and see the app working. A fresh production
+  install still seeds nothing and goes to the setup wizard / `create-admin`.
+
+### Added
+- **Packs seed example processes** — enabling a pack can create process
+  templates (removed on disable). The **workflows** pack ships **Bug Fix**,
+  **Feature**, and **Spec-driven Delivery**; **tech-debt** ships a **Debt
+  Remediation** doctrine. (`Process.pack` tag added.)
+- **Expanded the canon** — new packs **code-review** and **agile** (developer),
+  **ci-cd** and **observability** (platform), and broader **software-general**,
+  **platform-engineering**, and **infrastructure** standards.
+
+### Note
+- Pack catalog is curated canon — modern team-workflow, software-engineering, and
+  platform-engineering standards; expansion is ongoing.
+
 ## [0.13.18] — 2026-07-03
 
 ### Added

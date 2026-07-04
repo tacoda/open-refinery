@@ -10,20 +10,19 @@ from open_refinery import (
 )
 
 
-def test_seed_populates_a_usable_dataset():
+def test_seed_populates_a_minimal_dataset():
     conn = connect("sqlite:///:memory:")
     data = seed(conn)
 
     assert set(data["users"]) == {"admin", "platform", "developer"}
     assert all(tok for _, tok in data["users"].values())
-    assert len(list_processes(conn)) == 2
-    assert len(list_work_items(conn)) == 3
+    assert len(list_processes(conn)) == 1          # minimal: one board process
+    assert len(list_work_items(conn)) == 2
 
-    # the closed CVE item has transitions, approvals, and attestations recorded
-    cve = next(w for w in list_work_items(conn) if w.title.startswith("CVE"))
-    recipes = {e.recipe for e in query_events(conn, subject=cve.id)}
-    assert {"transition", "approval", "attestation"} <= recipes
-    assert cve.current_stage == "close"
+    # the moved item recorded a transition
+    login = next(w for w in list_work_items(conn) if w.title == "Add login page")
+    assert login.current_stage == "in-progress"
+    assert any(e.recipe == "transition" for e in query_events(conn, subject=login.id))
 
 
 def test_seed_refuses_non_empty_db():

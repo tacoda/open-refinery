@@ -37,6 +37,7 @@ def create_process(
     checks: dict[str, list[str]] | None = None,
     min_approver_role: str = DEFAULT_MIN_APPROVER_ROLE,
     approval_chain: list[str] | None = None,
+    pack: str = "",
 ) -> Process:
     if archetype not in ARCHETYPES:
         raise ValueError(f"unknown archetype: {archetype!r} (expected {ARCHETYPES})")
@@ -76,7 +77,7 @@ def create_process(
     process = Process(name=name, archetype=archetype, owner_id=owner_id, initial=initial,
                       oversight=oversight, min_approver_role=min_approver_role,
                       approval_chain=chain, stages=stages, transitions=trans,
-                      gates=gates, checks=checks)
+                      gates=gates, checks=checks, pack=pack)
     session.add(process)
     session.commit()
     session.refresh(process)

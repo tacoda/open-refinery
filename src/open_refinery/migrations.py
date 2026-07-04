@@ -33,6 +33,8 @@ MIGRATIONS: list[str] = [
     # v6 (0.13.17): rolling rate windows on quotas
     "ALTER TABLE quotas ADD COLUMN window_seconds INTEGER NOT NULL DEFAULT 0;"
     "ALTER TABLE quotas ADD COLUMN window_started_at TEXT NOT NULL DEFAULT '';",
+    # v7 (0.13.19): packs can seed example processes (tagged for removal on disable)
+    "ALTER TABLE processes ADD COLUMN pack TEXT NOT NULL DEFAULT '';",
 ]
 
 

@@ -59,3 +59,15 @@ def test_unknown_pack():
     conn, dev, *_ = setup()
     with pytest.raises(ValueError):
         enable_pack(conn, "nope", dev)
+
+
+def test_pack_seeds_and_removes_example_processes():
+    from open_refinery import list_processes
+    conn, dev, *_ = setup()
+    enable_pack(conn, "workflows", dev)
+    names = {p.name for p in list_processes(conn)}
+    assert {"Bug Fix", "Feature", "Spec-driven Delivery"} <= names
+    bug = next(p for p in list_processes(conn) if p.name == "Bug Fix")
+    assert bug.archetype == "doctrine" and "close" in bug.gates and bug.pack == "workflows"
+    disable_pack(conn, "workflows", dev)
+    assert not any(p.pack == "workflows" for p in list_processes(conn))
