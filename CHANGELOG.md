@@ -3,6 +3,17 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.11] — 2026-07-03
+
+### Added
+- **Real MCP target backend.** `mcp` targets now make a JSON-RPC **`tools/call`**
+  over HTTP (Streamable-HTTP SSE replies tolerated). Payload is
+  `{"tool": name, "arguments": {...}}` (a bare string is the tool name); connects
+  by API key or OAuth token; honors a target's `output_schema` via the server's
+  `structuredContent`. Registered as `EXECUTORS["mcp"]` (was the stub). Transport
+  is injectable, so request shaping, auth, SSE parsing, structured output, and
+  error handling are covered offline.
+
 ## [0.13.10] — 2026-07-03
 
 ### Added

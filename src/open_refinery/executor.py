@@ -162,7 +162,59 @@ def model_backend(target, credential: dict, payload: str) -> dict:
     return backend(target, credential, payload)
 
 
-EXECUTORS = {"model": model_backend, "mcp": stub_backend, "api": stub_backend}
+def _http_post(url: str, body: bytes, headers: dict) -> tuple[int, str]:
+    import urllib.request
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return r.status, r.read().decode("utf-8", "replace")
+
+
+def _parse_jsonrpc(text: str) -> dict:
+    """Parse a JSON-RPC reply, tolerating SSE framing (Streamable HTTP)."""
+    import json
+    if "data:" in text:  # SSE: take the last data line
+        data = [ln[5:].strip() for ln in text.splitlines() if ln.startswith("data:")]
+        if data:
+            text = data[-1]
+    return json.loads(text)
+
+
+def mcp_backend(target, credential: dict, payload: str, *, poster=None) -> dict:
+    """Call an MCP server's `tools/call` (JSON-RPC over HTTP). Payload is JSON
+    `{"tool": name, "arguments": {...}}` (a bare string is treated as the tool
+    name). Connects by API key or OAuth token. Honors output_schema when the
+    server returns structuredContent."""
+    import json
+    poster = poster or _http_post
+    try:
+        req = json.loads(payload)
+    except (ValueError, TypeError):
+        req = {"tool": payload, "arguments": {}}
+
+    rpc = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+           "params": {"name": req.get("tool") or req.get("name"),
+                      "arguments": req.get("arguments", {})}}
+    headers = {"Content-Type": "application/json",
+               "Accept": "application/json, text/event-stream"}
+    key = _key(credential)
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+
+    _, text = poster(target.endpoint, json.dumps(rpc).encode(), headers)
+    msg = _parse_jsonrpc(text)
+    if "error" in msg:
+        raise RuntimeError(f"MCP error: {msg['error'].get('message', 'unknown')}")
+
+    result = msg.get("result", {})
+    if target.output_schema and isinstance(result.get("structuredContent"), dict):
+        return {"output": result["structuredContent"], "units": 1}
+    content = result.get("content", [])
+    out = ("".join(c.get("text", "") for c in content if c.get("type") == "text")
+           if isinstance(content, list) else str(result))
+    return {"output": out, "units": 1}
+
+
+EXECUTORS = {"model": model_backend, "mcp": mcp_backend, "api": stub_backend}
 
 
 def execute(session: Session, actor_id: str, process_id: str, payload: str, audit: AuditSink,
