@@ -46,7 +46,7 @@ export default function App() {
   }, [token])
 
   useEffect(() => {
-    document.title = me ? `open refinery · ${view[0].toUpperCase()}${view.slice(1)}` : 'open refinery'
+    document.title = me ? `Open Refinery · ${view[0].toUpperCase()}${view.slice(1)}` : 'Open Refinery'
   }, [view, me])
 
   const rank = (r: string) => roles.find((x) => x.name === r)?.rank ?? 0
@@ -65,7 +65,7 @@ export default function App() {
           <div className="app-shell">
             <Tabs value={view} onValueChange={(v) => setView(v as View)}>
               <header className="app-header">
-                <span className="app-brand">open refinery</span>
+                <span className="app-brand">Open Refinery</span>
                 <TabsList>
                   <TabsTrigger value="work">Work</TabsTrigger>
                   <TabsTrigger value="approvals">Approvals</TabsTrigger>
@@ -154,13 +154,13 @@ function AcceptInvite({ token, onToken }: { token: string; onToken: (t: string) 
     try {
       const r = await post('/invitations/accept', { token, password: pw })
       setToken(r.token); onToken(r.token); history.replaceState(null, '', '/')
-      toast.success('Welcome to open refinery')
+      toast.success('Welcome to Open Refinery')
     } catch (e) { fail(e) }
   }
   return (
     <div className="login-screen">
       <div className="login-card">
-        <h1 className="app-brand">open refinery</h1>
+        <h1 className="app-brand">Open Refinery</h1>
         <p className="login-tagline">
           {email ? `Set a password to join as ${email}.` : 'This invitation is invalid or expired.'}
         </p>
@@ -186,7 +186,7 @@ function SetupWizard({ onToken }: { onToken: (t: string) => void }) {
   return (
     <div className="login-screen">
       <div className="login-card">
-        <h1 className="app-brand">Welcome to open refinery</h1>
+        <h1 className="app-brand">Welcome to Open Refinery</h1>
         <p className="login-tagline">Create the first admin account to get started.</p>
         <Input placeholder="admin email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <Input placeholder="password" type="password" value={pw}
@@ -213,7 +213,7 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
   return (
     <div className="login-screen">
       <div className="login-card">
-        <h1 className="app-brand">open refinery</h1>
+        <h1 className="app-brand">Open Refinery</h1>
         <p className="login-tagline">An open factory to shine light into the dark.</p>
         <Input placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <Input placeholder="password" type="password" value={pw}

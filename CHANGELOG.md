@@ -3,6 +3,13 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.12] — 2026-07-03
+
+### Changed
+- **Brand is "Open Refinery"** (title case) across the UI — the header, the
+  login / setup / accept-invite screens, the welcome toast, and the browser tab
+  title (both the dynamic `Open Refinery · <page>` and the `index.html` title).
+
 ## [0.13.11] — 2026-07-03
 
 ### Added
