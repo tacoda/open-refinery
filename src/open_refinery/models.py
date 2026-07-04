@@ -247,6 +247,34 @@ class Standard(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
+class Experiment(SQLModel, table=True):
+    """A scientific experiment at a layer: a hypothesis, a change, before/after evals."""
+    __tablename__ = "experiments"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    name: str
+    hypothesis: str
+    change: str                       # the change under test
+    layer: str                        # project | platform | harness | charter
+    status: str = Field(default="running")  # running | concluded
+    owner_id: str = Field(foreign_key="users.id", index=True)
+    created_at: str = Field(default_factory=now_iso)
+
+
+class EvalRun(SQLModel, table=True):
+    """A measured metric for an experiment, before or after the change, per round."""
+    __tablename__ = "eval_runs"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    experiment_id: str = Field(foreign_key="experiments.id", index=True)
+    round: int = 1
+    phase: str                        # before | after
+    metric: str
+    samples: list = Field(default_factory=list, sa_column=Column(JSON))
+    n: int = 0
+    mean: float = 0.0
+    std: float = 0.0
+    created_at: str = Field(default_factory=now_iso)
+
+
 class Webhook(SQLModel, table=True):
     """A registered endpoint that receives HMAC-signed audit events."""
     __tablename__ = "webhooks"

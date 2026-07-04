@@ -54,6 +54,13 @@ from .approval_workflows import (
 )
 from .analysis import analyze
 from .debt import health, list_audits, run_audit
+from .experiments import (
+    analyze_experiment,
+    conclude_experiment,
+    create_experiment,
+    list_experiments,
+    record_eval,
+)
 from .ingest import ingest
 from .webhooks import create_webhook, delete_webhook, list_webhooks
 from .governance import landscape
@@ -264,6 +271,20 @@ class NewWebhook(BaseModel):
     events: list[str] = []   # recipe filter; [] = all events
 
 
+class NewExperiment(BaseModel):
+    name: str
+    hypothesis: str
+    change: str
+    layer: str
+
+
+class NewEval(BaseModel):
+    phase: str               # before | after
+    metric: str
+    samples: list[float]
+    round: int = 1
+
+
 class ScanRequest(BaseModel):
     text: str
 
@@ -420,6 +441,33 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def get_governance(session: Session = Depends(get_session),
                        _: User = Depends(require("admin"))):
         return landscape(session)
+
+    # --- evals & experiments (test if a change's effect is real) ---
+    @app.get("/experiments")
+    def get_experiments(layer: str | None = None, session: Session = Depends(get_session),
+                        _: User = Depends(current_user)):
+        return list_experiments(session, layer=layer)
+
+    @app.post("/experiments", status_code=201)
+    def add_experiment(body: NewExperiment, session: Session = Depends(get_session),
+                       user: User = Depends(current_user)):
+        return create_experiment(session, body.name, body.hypothesis, body.change, body.layer, user.id)
+
+    @app.post("/experiments/{experiment_id}/evals", status_code=201)
+    def add_eval(experiment_id: str, body: NewEval, session: Session = Depends(get_session),
+                 _: User = Depends(current_user)):
+        return record_eval(session, experiment_id, body.phase, body.metric, body.samples,
+                           round=body.round)
+
+    @app.get("/experiments/{experiment_id}/analysis")
+    def get_analysis(experiment_id: str, metric: str | None = None, round: int | None = None,
+                     session: Session = Depends(get_session), _: User = Depends(current_user)):
+        return analyze_experiment(session, experiment_id, metric=metric, round=round)
+
+    @app.post("/experiments/{experiment_id}/conclude")
+    def end_experiment(experiment_id: str, session: Session = Depends(get_session),
+                       _: User = Depends(current_user)):
+        return conclude_experiment(session, experiment_id)
 
     # --- webhooks (fan audit events out; HMAC-signed) ---
     @app.get("/webhooks")

@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics'
+type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
@@ -78,6 +78,7 @@ export default function App() {
                   <TabsTrigger value="proposals">Proposals</TabsTrigger>
                   <TabsTrigger value="coverage">Coverage</TabsTrigger>
                   <TabsTrigger value="audits">Audits</TabsTrigger>
+                  <TabsTrigger value="experiments">Experiments</TabsTrigger>
                   {canInvite && <TabsTrigger value="invitations">Invitations</TabsTrigger>}
                   {isPlatform && <TabsTrigger value="settings">Settings</TabsTrigger>}
                   {isAdmin && <TabsTrigger value="governance">Governance</TabsTrigger>}
@@ -103,6 +104,7 @@ export default function App() {
               <TabsContent value="proposals"><Proposals me={me} roles={roles} isAdmin={isAdmin} /></TabsContent>
               <TabsContent value="coverage"><Coverage /></TabsContent>
               <TabsContent value="audits"><Audits /></TabsContent>
+              <TabsContent value="experiments"><Experiments /></TabsContent>
               {canInvite && <TabsContent value="invitations"><Invitations me={me} roles={roles} /></TabsContent>}
               {isPlatform && <TabsContent value="settings"><Settings /></TabsContent>}
               {isAdmin && <TabsContent value="governance"><Governance /></TabsContent>}
@@ -587,6 +589,92 @@ function Webhooks() {
         </Table>
       </CardContent>
     </Card>
+  )
+}
+
+function Experiments() {
+  const { rows, load } = useList('/experiments')
+  const [name, setName] = useState(''), [hyp, setHyp] = useState('')
+  const [change, setChange] = useState(''), [layer, setLayer] = useState('harness')
+  const create = () => post('/experiments', { name, hypothesis: hyp, change, layer })
+    .then(() => { setName(''); setHyp(''); setChange(''); load() }).catch(fail)
+
+  const [sel, setSel] = useState('')
+  const [phase, setPhase] = useState('before'), [metric, setMetric] = useState('score')
+  const [samples, setSamples] = useState(''), [round, setRound] = useState('1')
+  const [analysis, setAnalysis] = useState<any>(null)
+  const nums = (s: string) => s.split(',').map((x) => Number(x.trim())).filter((x) => !Number.isNaN(x))
+  const rec = () => post(`/experiments/${sel}/evals`, {
+    phase, metric, samples: nums(samples), round: Number(round) || 1,
+  }).then(() => { setSamples(''); analyze() }).catch(fail)
+  const analyze = () => api(`/experiments/${sel}/analysis?metric=${encodeURIComponent(metric)}`)
+    .then(setAnalysis).catch(fail)
+  const conclude = (id: string) => post(`/experiments/${id}/conclude`, {}).then(load).catch(fail)
+
+  const verdictBadge = (v: string) =>
+    v === 'significant improvement' ? 'default' : v === 'significant regression' ? 'destructive' : 'secondary'
+
+  return (
+    <section className="page">
+      <h2 className="page-title">Evals & experiments</h2>
+      <Card>
+        <CardHeader><CardTitle>New experiment (hypothesis → change → before/after evals)</CardTitle></CardHeader>
+        <CardContent>
+          <div className="toolbar">
+            <Input className="field" placeholder="name" value={name} onChange={(e) => setName(e.target.value)} />
+            <Select value={layer} onValueChange={(v) => setLayer(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+              <SelectContent>{['project', 'platform', 'harness', 'charter'].map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+            </Select>
+            <Input className="field" placeholder="hypothesis" value={hyp} onChange={(e) => setHyp(e.target.value)} />
+            <Input className="field" placeholder="change under test" value={change} onChange={(e) => setChange(e.target.value)} />
+            <Button onClick={create} disabled={!name}>Create</Button>
+          </div>
+          <Table>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Layer</TableHead><TableHead>Hypothesis</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>{rows.map((e: any) => (
+              <TableRow key={e.id} style={{ cursor: 'pointer', fontWeight: sel === e.id ? 600 : 400 }}
+                        onClick={() => { setSel(e.id); setAnalysis(null) }}>
+                <TableCell>{e.name}</TableCell>
+                <TableCell><Badge variant="secondary">{e.layer}</Badge></TableCell>
+                <TableCell className="muted">{e.hypothesis}</TableCell>
+                <TableCell>{e.status}</TableCell>
+                <TableCell>{e.status === 'running' && <Button size="sm" variant="outline" onClick={(ev) => { ev.stopPropagation(); conclude(e.id) }}>Conclude</Button>}</TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {sel && (
+        <Card>
+          <CardHeader><CardTitle>Record eval + analyze</CardTitle></CardHeader>
+          <CardContent>
+            <div className="toolbar">
+              <Select value={phase} onValueChange={(v) => setPhase(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                <SelectContent>{['before', 'after'].map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+              </Select>
+              <Input className="field" placeholder="metric" value={metric} onChange={(e) => setMetric(e.target.value)} />
+              <Input className="field" placeholder="samples (comma numbers)" value={samples} onChange={(e) => setSamples(e.target.value)} />
+              <Input className="field" placeholder="round" value={round} onChange={(e) => setRound(e.target.value)} />
+              <Button onClick={rec} disabled={!samples}>Record</Button>
+              <Button variant="outline" onClick={analyze}>Analyze</Button>
+            </div>
+            {analysis && (analysis.verdict === 'insufficient data'
+              ? <p className="muted">Insufficient data — record both a before and an after eval.</p>
+              : (
+                <div>
+                  <div className="kv-row"><span>verdict</span><Badge variant={verdictBadge(analysis.verdict)}>{analysis.verdict}</Badge></div>
+                  <div className="kv-row"><span className="muted">before → after</span><span className="mono">{analysis.before?.toFixed?.(2)} → {analysis.after?.toFixed?.(2)} (Δ {analysis.delta?.toFixed?.(2)})</span></div>
+                  <div className="kv-row"><span className="muted">effect (Cohen's d)</span><span className="mono">{analysis.cohen_d?.toFixed?.(2)}</span></div>
+                  <div className="kv-row"><span className="muted">p-value</span><span className="mono">{analysis.p_value?.toFixed?.(4)}</span></div>
+                </div>
+              ))}
+          </CardContent>
+        </Card>
+      )}
+    </section>
   )
 }
 

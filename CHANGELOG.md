@@ -3,6 +3,25 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.13.15] — 2026-07-03
+
+### Added
+- **Evals & experiments.** Run a change as an `Experiment` at a layer
+  (project / platform / harness / charter): state a **hypothesis** + the
+  **change**, record **before/after** eval samples per metric and round, and
+  `analyze` compares them — **delta**, effect size (**Cohen's d**), a
+  significance test on the difference of means (stdlib `NormalDist` z-test, no
+  scipy), and a plain **verdict** (significant improvement / regression / no
+  effect / insufficient data). Iterate by recording another round (analysis uses
+  the latest). `GET/POST /experiments`, `POST /experiments/{id}/evals`,
+  `GET /experiments/{id}/analysis`, `POST /experiments/{id}/conclude`. Dashboard
+  **Experiments** tab. Results stored structured (samples + summary), not prose.
+
+### Note
+- Significance is a normal-approximation z-test — fine for reasonable n; use a
+  proper t-test/scipy offline for small samples. Tagging live work runs *as*
+  experiments (isolated from normal metrics) is a follow-up.
+
 ## [0.13.14] — 2026-07-03
 
 ### Added
