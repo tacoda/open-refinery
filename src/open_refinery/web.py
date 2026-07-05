@@ -174,7 +174,7 @@ class NewWorkItem(BaseModel):
 class Move(BaseModel):
     to: str
     approve: bool = False  # current user signs off, if the process requires it
-    changes: dict | None = None  # PR change set: code/migrations/config/env/libraries/data/services/secrets (secret refs only)
+    changes: dict | None = None  # PR change set: code/migrations + open {name:{old,new}} maps (config/env/libraries/data/services/secrets/infra/dns/…); refs only, never material
 
 
 class RequestApproval(BaseModel):

@@ -118,10 +118,11 @@ class StageHistory(SQLModel, table=True):
     kind: str = "transition"          # initial | transition | rollback
     actor_id: str | None = None
     # forward change set this transition applied, categorized so a rollback can
-    # reverse each kind: {"code": {"commit","prev"}, "migrations": [id,...],
-    # "config"/"env"/"libraries"/"data"/"services"/"secrets": {name:{"old","new"}}
-    # SECURITY: `secrets` old/new are credential *references* (version/rotation id,
-    # vault path) only — never secret material (this column is plaintext + audited).
+    # reverse each kind: {"code": {"commit","prev"}, "migrations": [id,...]} plus
+    # any number of open {name: {"old","new"}} maps (config, env, libraries, data,
+    # services, secrets, infra, dns, …). SECURITY: this column is plaintext +
+    # audited — carry *references* only (e.g. secret = version/vault ref), never
+    # material.
     changes: dict = Field(default_factory=dict, sa_column=Column(JSON))
     created_at: str = Field(default_factory=now_iso)
 

@@ -3,6 +3,23 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.13.0] — 2026-07-05
+
+### Added
+- **Infrastructure + DNS rollback, and the reverse engine is now open-ended.**
+  `infra` (restore prior infra state/version) and `dns` (restore prior record)
+  join the change set. More importantly, `reverse_plan` no longer whitelists
+  categories: `code` and `migrations` keep their bespoke reversals, and **every
+  other `{name: {"old","new"}}` map is reversed generically** (restore each name
+  to its first-seen `old`). Any deployment surface the harness reports — queues,
+  CDN, certs, IAM, cron, or one not yet named — rolls back with no code change.
+  The dashboard renders whatever categories a plan contains.
+
+### Security
+- The material-safety rule now spans **all** categories: `StageHistory.changes`
+  is plaintext and digested into the audit trail, so every category carries
+  *references* only (e.g. a secret's version/vault ref), never material.
+
 ## [1.12.0] — 2026-07-05
 
 ### Added
