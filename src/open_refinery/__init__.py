@@ -10,6 +10,7 @@ from .repositories import (
     create_repository,
     get_repository,
     import_or_get,
+    link_integration,
     list_repositories,
 )
 from .processes import (
@@ -157,7 +158,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 __all__ = [
     "Factory",
@@ -192,6 +193,7 @@ __all__ = [
     "create_repository",
     "get_repository",
     "list_repositories",
+    "link_integration",
     "Process",
     "ARCHETYPES",
     "create_process",

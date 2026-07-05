@@ -81,7 +81,13 @@ from .systems import (
     set_system_repos,
     system_coverage,
 )
-from .repositories import DuplicateRepository, create_repository, import_or_get, list_repositories
+from .repositories import (
+    DuplicateRepository,
+    create_repository,
+    import_or_get,
+    link_integration,
+    list_repositories,
+)
 from .settings import delete_setting, get_setting, list_setting_keys, set_setting
 from .store import DEFAULT_DATABASE_URL, SqliteSink, engine_for, purge_events, query_events
 from .targets import (
@@ -276,6 +282,10 @@ class NewSystem(BaseModel):
 
 class SystemRepos(BaseModel):
     repo_ids: list[str]
+
+
+class RepoLink(BaseModel):
+    integration_id: str | None = None
 
 
 class NewClaim(BaseModel):
@@ -563,7 +573,12 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     @app.post("/repositories/{repo_id}/ingest")
     def ingest_repo(repo_id: str, session: Session = Depends(get_session),
                     user: User = Depends(current_user)):
-        return ingest(session, repo_id, user.id)  # reads real surfaces via the GitHub integration
+        return ingest(session, repo_id, user.id)  # reads real surfaces via the source integration
+
+    @app.post("/repositories/{repo_id}/integration")
+    def link_repo_integration(repo_id: str, body: RepoLink, session: Session = Depends(get_session),
+                              _: User = Depends(current_user)):
+        return link_integration(session, repo_id, body.integration_id)
 
     @app.post("/repositories/{repo_id}/claims", status_code=201)
     def add_claim(repo_id: str, body: NewClaim, session: Session = Depends(get_session),

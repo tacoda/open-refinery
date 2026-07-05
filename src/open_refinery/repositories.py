@@ -41,3 +41,15 @@ def list_repositories(session: Session, *, owner_id: str | None = None) -> list[
     if owner_id is not None:
         stmt = stmt.where(Repository.owner_id == owner_id)
     return list(session.exec(stmt.order_by(Repository.created_at.desc())))
+
+
+def link_integration(session: Session, repo_id: str, integration_id: str | None) -> Repository:
+    """Set the source integration a repo ingests from (None = fall back by host)."""
+    repo = session.get(Repository, repo_id)
+    if repo is None:
+        raise ValueError(f"unknown repository: {repo_id!r}")
+    repo.integration_id = integration_id
+    session.add(repo)
+    session.commit()
+    session.refresh(repo)
+    return repo

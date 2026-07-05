@@ -279,9 +279,13 @@ function useList(path: string) {
 
 function Repos() {
   const { rows, load } = useList('/repositories')
+  const { rows: integs } = useList('/integrations')
   const [name, setName] = useState(''), [url, setUrl] = useState('')
   const add = () => post('/repositories', { name, git_url: url })
     .then(() => { setName(''); setUrl(''); load() }).catch(fail)
+  const linkIntegration = (repoId: string, choice: string) =>
+    post(`/repositories/${repoId}/integration`, { integration_id: choice === 'auto' ? null : choice })
+      .then(load).catch(fail)
   return (
     <section className="page">
       <h2 className="page-title">Repositories</h2>
@@ -292,10 +296,25 @@ function Repos() {
       </div>
       <Card><CardContent>
         <Table>
-          <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Git URL</TableHead></TableRow></TableHeader>
-          <TableBody>{rows.map((r) => (
-            <TableRow key={r.id}><TableCell>{r.name}</TableCell><TableCell className="mono">{r.git_url}</TableCell></TableRow>
-          ))}</TableBody>
+          <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Git URL</TableHead><TableHead>Ingest source</TableHead></TableRow></TableHeader>
+          <TableBody>
+            <EmptyRow show={!rows.length} cols={9}>No repositories yet — add or import one.</EmptyRow>
+            {rows.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell>{r.name}</TableCell>
+                <TableCell className="mono">{r.git_url}</TableCell>
+                <TableCell>
+                  <Select value={r.integration_id ?? 'auto'} onValueChange={(v) => linkIntegration(r.id, v ?? 'auto')}>
+                    <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">auto (by host)</SelectItem>
+                      {integs.map((i: any) => <SelectItem key={i.id} value={i.id}>{i.kind} · {i.account}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
         </Table>
       </CardContent></Card>
     </section>

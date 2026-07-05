@@ -33,10 +33,30 @@ def test_extract_headings_and_bullets():
     assert got == ["Title", "first rule", "second rule", "Section head"]
 
 
-def test_parse_repo_ssh_and_https():
+def test_parse_repo_github_and_gitlab():
     assert _parse_repo("git@github.com:acme/app.git") == ("acme", "app")
     assert _parse_repo("https://github.com/acme/app") == ("acme", "app")
-    assert _parse_repo("git@gitlab.com:acme/app.git") is None
+    assert _parse_repo("git@gitlab.com:acme/app.git") == ("acme", "app")
+    assert _parse_repo("git@bitbucket.org:acme/app.git") is None
+
+
+def test_integration_resolution_prefers_explicit_link(monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+    from open_refinery import create_integration, link_integration
+    from open_refinery.ingest import _integration_for
+    from open_refinery.models import Repository
+    import open_refinery.integrations as integrations
+    monkeypatch.setitem(integrations.ADAPTERS["github"], "verify", lambda cred: {"account": "acme"})
+
+    conn = connect("sqlite:///:memory:")
+    dev, _ = create_user(conn, "dev@x.dev", "pw", "developer")
+    repo = create_repository(conn, "app", "git@github.com:acme/app.git", dev.id)
+    create_integration(conn, "github", {"token": "t1"}, dev.id)
+    i2 = create_integration(conn, "github", {"token": "t2"}, dev.id)
+
+    assert _integration_for(conn, repo).kind == "github"   # falls back by host
+    link_integration(conn, repo.id, i2.id)
+    assert _integration_for(conn, conn.get(Repository, repo.id)).id == i2.id  # explicit link wins
 
 
 def test_ingest_creates_claims_per_surface():

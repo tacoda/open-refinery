@@ -3,6 +3,18 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.4.0] — 2026-07-05
+
+### Added
+- **Ingest polish.** A **GitLab reader** (parity with GitHub — reads `.claude/`,
+  `CLAUDE.md`/`AGENTS.md`, and code signals via the GitLab API). **Per-repo
+  integration linking** — `Repository.integration_id` + `POST
+  /repositories/{id}/integration` pick the exact source integration to ingest
+  from (Repos tab source-picker); with no link, ingest falls back to the owner's
+  first integration matching the repo's host. **Richer code signals** — CI
+  (GitHub Actions / GitLab CI), Dockerfile, Makefile, docs dir, pre-commit.
+  Readers are dispatched by integration kind. Additive migration v10.
+
 ## [1.3.0] — 2026-07-05
 
 ### Added

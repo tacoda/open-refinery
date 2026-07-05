@@ -54,6 +54,7 @@ class Repository(SQLModel, table=True):
     name: str
     git_url: str = Field(unique=True, index=True)
     owner_id: str = Field(foreign_key="users.id", index=True)
+    integration_id: str | None = None  # explicit source integration for ingest
     created_at: str = Field(default_factory=now_iso)
 
 

@@ -44,6 +44,8 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE policies ADD COLUMN pack TEXT NOT NULL DEFAULT '';",
     # v9 (1.2.0): governance layer graph — artifact axis (factory>harness>charter)
     "ALTER TABLE policies ADD COLUMN layer TEXT NOT NULL DEFAULT 'charter';",
+    # v10 (1.4.0): explicit source integration per repo (for ingest)
+    "ALTER TABLE repositories ADD COLUMN integration_id TEXT;",
 ]
 
 

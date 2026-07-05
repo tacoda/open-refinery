@@ -67,61 +67,120 @@ def _backed_by_instruction(text: str, blob: str) -> bool:
 
 # --- readers ---------------------------------------------------------------
 
+def _host(git_url: str) -> str:
+    for h in ("github.com", "gitlab.com"):
+        if h in git_url:
+            return h
+    return ""
+
+
 def _parse_repo(git_url: str) -> tuple[str, str] | None:
-    """owner, repo from a GitHub git URL (ssh or https)."""
+    """owner, repo from a GitHub/GitLab git URL (ssh or https)."""
     u = git_url.strip()
-    if "github.com" not in u:
+    host = _host(u)
+    if not host:
         return None
-    tail = u.split("github.com", 1)[1].lstrip(":/")
+    tail = u.split(host, 1)[1].lstrip(":/")
     tail = tail[:-4] if tail.endswith(".git") else tail
     parts = tail.split("/")
     return (parts[0], parts[1]) if len(parts) >= 2 else None
 
 
-def github_reader(session: Session, repo: Repository) -> dict:
-    """Best-effort read of a repo's surfaces via a connected GitHub integration."""
-    from .integrations import _credential, _gh, list_integrations
+# root entries → code-surface signals
+_CODE_SIGNALS = {
+    "tests": "Has a tests directory", "test": "Has a tests directory",
+    ".github": "Has CI configuration (GitHub Actions)",
+    ".gitlab-ci.yml": "Has CI configuration (GitLab CI)",
+    "Dockerfile": "Has a Dockerfile", "Makefile": "Has a Makefile",
+    "docs": "Has a docs directory", ".pre-commit-config.yaml": "Has pre-commit hooks",
+}
+
+
+def _surfaces_from(list_dir, read_text) -> dict:
+    """Extract the three surfaces given a dir-lister and a file-reader (per host)."""
+    charter: list[str] = []
     try:
-        integ = next((i for i in list_integrations(session, owner_id=repo.owner_id)
-                      if i.kind == "github"), None)
-        if integ is None:
-            return {}
-        cred = _credential(session, integ.id)
+        for entry in list_dir(".claude"):
+            if entry.endswith(".md"):
+                charter += _extract(read_text(f".claude/{entry}"))
+    except Exception:
+        pass
+    harness: list[str] = []
+    for cfg in ("CLAUDE.md", "AGENTS.md"):
+        try:
+            harness += _extract(read_text(cfg))
+        except Exception:
+            continue
+    code: list[str] = []
+    try:
+        root = set(list_dir(""))
+        for name, label in _CODE_SIGNALS.items():
+            if name in root and label not in code:
+                code.append(label)
+    except Exception:
+        pass
+    return {"charter": charter, "harness": harness, "code": code}
+
+
+def _github_surfaces(cred: dict, owner: str, name: str) -> dict:
+    from .integrations import _gh
+    base = f"/repos/{owner}/{name}/contents"
+
+    def ld(path):
+        return [e.get("name", "") for e in _gh(cred, f"{base}/{path}" if path else base)]
+
+    def rt(path):
+        item = _gh(cred, f"{base}/{path}")
+        return base64.b64decode(item.get("content", "")).decode("utf-8", "replace")
+
+    return _surfaces_from(ld, rt)
+
+
+def _gitlab_surfaces(cred: dict, owner: str, name: str) -> dict:
+    import urllib.parse
+    from .integrations import _gl
+    pid = urllib.parse.quote(f"{owner}/{name}", safe="")
+
+    def ld(path):
+        q = f"/projects/{pid}/repository/tree?ref=main"
+        if path:
+            q += "&path=" + urllib.parse.quote(path)
+        return [e.get("name", "") for e in _gl(cred, q)]
+
+    def rt(path):
+        fp = urllib.parse.quote(path, safe="")
+        item = _gl(cred, f"/projects/{pid}/repository/files/{fp}?ref=main")
+        return base64.b64decode(item.get("content", "")).decode("utf-8", "replace")
+
+    return _surfaces_from(ld, rt)
+
+
+READERS = {"github": _github_surfaces, "gitlab": _gitlab_surfaces}
+
+
+def _integration_for(session: Session, repo: Repository):
+    """The repo's linked integration, else the owner's first integration matching
+    the repo's host (GitHub/GitLab)."""
+    from .integrations import get_integration, list_integrations
+    if repo.integration_id:
+        integ = get_integration(session, repo.integration_id)
+        if integ is not None:
+            return integ
+    kind = "gitlab" if _host(repo.git_url) == "gitlab.com" else "github"
+    return next((i for i in list_integrations(session, owner_id=repo.owner_id) if i.kind == kind), None)
+
+
+def default_reader(session: Session, repo: Repository) -> dict:
+    """Best-effort surface read via the repo's source integration (GitHub or GitLab)."""
+    from .integrations import _credential
+    try:
+        integ = _integration_for(session, repo)
         parsed = _parse_repo(repo.git_url)
-        if parsed is None:
+        surfaces = READERS.get(integ.kind) if integ else None
+        if integ is None or parsed is None or surfaces is None:
             return {}
         owner, name = parsed
-
-        def _text(path: str) -> str:
-            item = _gh(cred, f"/repos/{owner}/{name}/contents/{path}")
-            return base64.b64decode(item.get("content", "")).decode("utf-8", "replace")
-
-        charter: list[str] = []
-        try:
-            for entry in _gh(cred, f"/repos/{owner}/{name}/contents/.claude"):
-                if entry.get("name", "").endswith(".md"):
-                    charter += _extract(_text(entry["path"]))
-        except Exception:
-            pass
-
-        harness: list[str] = []
-        for cfg in ("CLAUDE.md", "AGENTS.md"):
-            try:
-                harness += _extract(_text(cfg))
-            except Exception:
-                continue
-
-        code: list[str] = []
-        try:
-            root = {e.get("name") for e in _gh(cred, f"/repos/{owner}/{name}/contents")}
-            if "tests" in root or "test" in root:
-                code.append("Has a tests directory")
-            if ".github" in root:
-                code.append("Has CI configuration")
-        except Exception:
-            pass
-
-        return {"charter": charter, "harness": harness, "code": code}
+        return surfaces(_credential(session, integ.id), owner, name)
     except Exception:
         return {}  # ingest is best-effort — never fail the request on a read error
 
@@ -132,7 +191,7 @@ def ingest(session: Session, repo_id: str, actor_id: str, *, reader=None) -> dic
     repo = session.get(Repository, repo_id)
     if repo is None:
         raise ValueError(f"unknown repository: {repo_id!r}")
-    reader = reader or github_reader
+    reader = reader or default_reader
     surfaces = reader(session, repo)
 
     existing = {(c.surface, _norm(c.text)) for c in list_claims(session, repo_id)}
