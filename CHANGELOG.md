@@ -3,6 +3,17 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.8.0] — 2026-07-05
+
+### Added
+- **Scheduled ingest.** A repo can auto-ingest on a cadence
+  (`ingest_interval_hours`; 0 = manual). An in-process scheduler (daemon thread,
+  started on `serve`) enqueues a **background ingest job** for each due repo and
+  stamps `last_ingest_at`. `POST /repositories/{id}/schedule`; the Repos tab gains
+  an **Auto-ingest (h)** field. Due-logic is pure/tested; the loop is thin, so a
+  cron/Celery-beat backend can replace it later. Additive migration v12 (+ its
+  downgrade). Built on the 1.7 job runner.
+
 ## [1.7.0] — 2026-07-05
 
 ### Added

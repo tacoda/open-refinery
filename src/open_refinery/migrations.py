@@ -60,6 +60,9 @@ MIGRATIONS: list[str] = [
     # only makes indexes on *new* tables, so upgraded installs missed these).
     "CREATE INDEX IF NOT EXISTS ix_policies_pack ON policies (pack);"
     "CREATE INDEX IF NOT EXISTS ix_processes_pack ON processes (pack);",
+    # v12 (1.8.0): scheduled ingest cadence per repo
+    "ALTER TABLE repositories ADD COLUMN ingest_interval_hours INTEGER NOT NULL DEFAULT 0;"
+    "ALTER TABLE repositories ADD COLUMN last_ingest_at TEXT NOT NULL DEFAULT '';",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -82,6 +85,8 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE repositories DROP COLUMN integration_id;",                              # v10
     "DROP INDEX IF EXISTS ix_policies_pack;"
     "DROP INDEX IF EXISTS ix_processes_pack;",                                           # v11
+    "ALTER TABLE repositories DROP COLUMN ingest_interval_hours;"
+    "ALTER TABLE repositories DROP COLUMN last_ingest_at;",                              # v12
 ]
 
 

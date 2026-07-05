@@ -53,3 +53,15 @@ def link_integration(session: Session, repo_id: str, integration_id: str | None)
     session.commit()
     session.refresh(repo)
     return repo
+
+
+def set_ingest_schedule(session: Session, repo_id: str, interval_hours: int) -> Repository:
+    """Set the auto-ingest cadence in hours (0 = manual only)."""
+    repo = session.get(Repository, repo_id)
+    if repo is None:
+        raise ValueError(f"unknown repository: {repo_id!r}")
+    repo.ingest_interval_hours = max(0, int(interval_hours))
+    session.add(repo)
+    session.commit()
+    session.refresh(repo)
+    return repo

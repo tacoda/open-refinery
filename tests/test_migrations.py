@@ -54,6 +54,8 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
             "ALTER TABLE policies DROP COLUMN pack",
             "ALTER TABLE policies DROP COLUMN layer",
             "ALTER TABLE repositories DROP COLUMN integration_id",
+            "ALTER TABLE repositories DROP COLUMN ingest_interval_hours",
+            "ALTER TABLE repositories DROP COLUMN last_ingest_at",
             "DROP TABLE systems",
             "PRAGMA user_version = 7",   # pretend this is a 1.0-era install (schema v7)
         ):

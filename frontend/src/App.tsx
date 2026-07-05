@@ -286,6 +286,8 @@ function Repos() {
   const linkIntegration = (repoId: string, choice: string) =>
     post(`/repositories/${repoId}/integration`, { integration_id: choice === 'auto' ? null : choice })
       .then(load).catch(fail)
+  const schedule = (repoId: string, interval_hours: number) =>
+    post(`/repositories/${repoId}/schedule`, { interval_hours }).then(load).catch(fail)
   return (
     <section className="page">
       <h2 className="page-title">Repositories</h2>
@@ -296,7 +298,7 @@ function Repos() {
       </div>
       <Card><CardContent>
         <Table>
-          <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Git URL</TableHead><TableHead>Ingest source</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Git URL</TableHead><TableHead>Ingest source</TableHead><TableHead>Auto-ingest (h)</TableHead></TableRow></TableHeader>
           <TableBody>
             <EmptyRow show={!rows.length} cols={9}>No repositories yet — add or import one.</EmptyRow>
             {rows.map((r) => (
@@ -311,6 +313,11 @@ function Repos() {
                       {integs.map((i: any) => <SelectItem key={i.id} value={i.id}>{i.kind} · {i.account}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                </TableCell>
+                <TableCell>
+                  <Input className="field" type="number" defaultValue={r.ingest_interval_hours ?? 0}
+                         title="0 = manual"
+                         onBlur={(e) => schedule(r.id, Number(e.target.value) || 0)} />
                 </TableCell>
               </TableRow>
             ))}

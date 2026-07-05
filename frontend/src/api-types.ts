@@ -468,6 +468,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/repositories/{repo_id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Schedule Repo Ingest */
+        post: operations["schedule_repo_ingest_repositories__repo_id__schedule_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/claims/{claim_id}": {
         parameters: {
             query?: never;
@@ -1711,6 +1728,14 @@ export interface components {
             /** Integration Id */
             integration_id?: string | null;
         };
+        /** RepoSchedule */
+        RepoSchedule: {
+            /**
+             * Interval Hours
+             * @default 0
+             */
+            interval_hours: number;
+        };
         /** RequestApproval */
         RequestApproval: {
             /** To */
@@ -2814,6 +2839,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RepoLink"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    schedule_repo_ingest_repositories__repo_id__schedule_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                repo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepoSchedule"];
             };
         };
         responses: {
