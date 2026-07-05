@@ -308,6 +308,18 @@ class Webhook(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
+class Job(SQLModel, table=True):
+    """A background task — long work (audits, ingest) run off the request path."""
+    __tablename__ = "jobs"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    kind: str
+    status: str = Field(default="pending", index=True)  # pending | running | done | failed
+    result: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    error: str = ""
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: str = Field(default_factory=now_iso)
+
+
 class Audit(SQLModel, table=True):
     """A recorded debt-audit run for one area — health score + findings + insights."""
     __tablename__ = "audits"

@@ -62,6 +62,7 @@ from .experiments import (
     record_eval,
 )
 from .ingest import ingest
+from .jobs import enqueue, get_job, list_jobs
 from .webhooks import create_webhook, delete_webhook, list_webhooks
 from .governance import landscape
 from .packs import disable_pack, enable_pack, list_packs, list_standards
@@ -530,9 +531,24 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         return list_audits(session, area=area)
 
     @app.post("/audits/run", status_code=201)
-    def run_audits(area: str = "all", session: Session = Depends(get_session),
-                   user: User = Depends(current_user)):
+    def run_audits(area: str = "all", background: bool = False,
+                   session: Session = Depends(get_session), user: User = Depends(current_user)):
+        if background:  # run off the request path; poll /jobs/{id}
+            return enqueue(session, engine, f"audit:{area}",
+                           lambda s: {"audits": [a.id for a in run_audit(s, area, user.id)]})
         return run_audit(session, area, user.id)
+
+    # --- background jobs ---
+    @app.get("/jobs")
+    def get_jobs(session: Session = Depends(get_session), _: User = Depends(current_user)):
+        return list_jobs(session)
+
+    @app.get("/jobs/{job_id}")
+    def get_one_job(job_id: str, session: Session = Depends(get_session), _: User = Depends(current_user)):
+        job = get_job(session, job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="unknown job")
+        return job
 
     # --- systems (compose repos into services) ---
     @app.get("/systems")
@@ -572,8 +588,10 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         return list_claims(session, repo_id)
 
     @app.post("/repositories/{repo_id}/ingest")
-    def ingest_repo(repo_id: str, session: Session = Depends(get_session),
-                    user: User = Depends(current_user)):
+    def ingest_repo(repo_id: str, background: bool = False,
+                    session: Session = Depends(get_session), user: User = Depends(current_user)):
+        if background:  # network read off the request path; poll /jobs/{id}
+            return enqueue(session, engine, f"ingest:{repo_id}", lambda s: ingest(s, repo_id, user.id))
         return ingest(session, repo_id, user.id)  # reads real surfaces via the source integration
 
     @app.post("/repositories/{repo_id}/integration")

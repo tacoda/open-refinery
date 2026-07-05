@@ -81,6 +81,7 @@ from .approval_workflows import (
 from .analysis import analyze
 from .debt import audit, health, list_audits, run_audit
 from .postmortem import postmortem
+from .jobs import create_job, enqueue, get_job, list_jobs, run_job
 from .experiments import (
     add_sample,
     analyze_experiment,
@@ -160,7 +161,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "1.6.0"
+__version__ = "1.7.0"
 
 __all__ = [
     "Factory",
@@ -280,6 +281,11 @@ __all__ = [
     "list_audits",
     "health",
     "postmortem",
+    "enqueue",
+    "run_job",
+    "create_job",
+    "get_job",
+    "list_jobs",
     "ingest",
     "create_experiment",
     "record_eval",

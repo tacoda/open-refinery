@@ -3,6 +3,23 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.7.0] — 2026-07-05
+
+### Added
+- **Background job runner.** Long work can run **off the request path** to keep
+  the UI responsive — an in-process, thread-based runner with **zero new
+  dependencies** (the single `serve` process handles it). `enqueue` records a
+  `Job`, returns immediately, and runs the work in a daemon thread with its own
+  DB session; poll `GET /jobs/{id}` (or `GET /jobs`). Opt in per call:
+  `POST /audits/run?background=true` and `POST /repositories/{id}/ingest?background=true`.
+  New `jobs` table (additive). The runner is a **port** — a Celery/RQ backend can
+  slot in later for horizontal scale without changing the `enqueue`/`get_job` API.
+
+### Note
+- In-process is the deliberate default (keeps deployment to one command). Scaling
+  onto an external queue is opt-in, later. Unblocks scheduled ingest + a future
+  WebSocket progress stream.
+
 ## [1.6.0] — 2026-07-05
 
 ### Added
