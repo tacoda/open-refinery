@@ -71,3 +71,14 @@ def test_pack_seeds_and_removes_example_processes():
     assert bug.archetype == "doctrine" and "close" in bug.gates and bug.pack == "workflows"
     disable_pack(conn, "workflows", dev)
     assert not any(p.pack == "workflows" for p in list_processes(conn))
+
+
+def test_pack_seeds_and_removes_artifacts():
+    from open_refinery import list_policies
+    conn, dev, *_ = setup()
+    enable_pack(conn, "tdd", dev)
+    arts = [p for p in list_policies(conn) if p.pack == "tdd"]
+    assert len(arts) == 1 and arts[0].kind == "command" and arts[0].namespace == "canon/tdd"
+    assert "red" in arts[0].content
+    disable_pack(conn, "tdd", dev)
+    assert not any(p.pack == "tdd" for p in list_policies(conn))

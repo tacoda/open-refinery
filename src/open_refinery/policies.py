@@ -37,7 +37,8 @@ POLICY_KINDS = ("rule", "skill", "command", "agent")  # what a governed harness 
 
 def create_policy(session: Session, effect: str, owner_id: str, *, role: str = "*",
                   action: str = "*", resource: str = "*", strict: bool | None = None,
-                  kind: str = "rule", content: str = "") -> Policy:
+                  kind: str = "rule", content: str = "", namespace: str = "",
+                  pack: str = "") -> Policy:
     if effect not in EFFECTS:
         raise ValueError(f"unknown effect: {effect!r} (expected {EFFECTS})")
     if kind not in POLICY_KINDS:
@@ -47,7 +48,8 @@ def create_policy(session: Session, effect: str, owner_id: str, *, role: str = "
     if strict is None:
         strict = strict_default(session)  # admin-configured default (off unless set)
     policy = Policy(effect=effect, role=role, action=action, resource=resource,
-                    strict=strict, kind=kind, content=content, owner_id=owner_id)
+                    strict=strict, kind=kind, content=content, namespace=namespace,
+                    pack=pack, owner_id=owner_id)
     session.add(policy)
     session.commit()
     session.refresh(policy)

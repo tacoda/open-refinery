@@ -148,6 +148,8 @@ class Policy(SQLModel, table=True):
     resource: str = "*"          # step name, target kind, or "*"
     strict: bool = False         # a lower layer may not override a strict rule
     content: str = ""            # body for skill/command/agent kinds
+    namespace: str = ""          # company/dept/team/project scope (blank = global)
+    pack: str = Field(default="", index=True)  # source pack key when seeded by a pack
     owner_id: str = Field(foreign_key="users.id", index=True)
     created_at: str = Field(default_factory=now_iso)
 

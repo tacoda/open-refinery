@@ -39,6 +39,9 @@ MIGRATIONS: list[str] = [
     # Post-1.0 migrations are ADDITIVE ONLY: new tables, or new NULLable / DEFAULT
     # columns. No column drops/renames, no table restructures — never edit or
     # reorder the entries above. Append new additive migrations below this line.
+    # v8 (1.1.0): packs can seed policy artifacts; policies carry a namespace
+    "ALTER TABLE policies ADD COLUMN namespace TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE policies ADD COLUMN pack TEXT NOT NULL DEFAULT '';",
 ]
 
 

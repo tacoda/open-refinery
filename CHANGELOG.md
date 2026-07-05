@@ -3,6 +3,17 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.1.0] — 2026-07-05
+
+### Added
+- **Packs bundle harness artifacts.** A pack can now seed governed **`Policy`
+  artifacts** — rule / skill / command / agent — not just prose standards and
+  processes. Seeded artifacts are **pack-tagged** (removed on disable) and
+  **namespaced** (`Policy.namespace`, e.g. `canon/tdd`, `org`). Starter artifacts:
+  a `tdd` command (tdd pack), a `review` command (code-review pack), and an org
+  compliance-reviewer agent (org-policy pack). Additive migration v8 adds
+  `policies.namespace` + `policies.pack` (schema stays frozen — additive only).
+
 ## [1.0.0] — 2026-07-03
 
 **First stable release. Schema is frozen — post-1.0 changes are additive only.**

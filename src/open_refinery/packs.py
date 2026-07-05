@@ -14,8 +14,8 @@ from dataclasses import dataclass
 
 from sqlmodel import Session, select
 
-from .models import PackState, Process, Standard, User
-from .policies import PolicyDenied
+from .models import PackState, Policy, Process, Standard, User
+from .policies import PolicyDenied, create_policy
 from .processes import create_process
 from .users import at_least
 
@@ -28,6 +28,7 @@ class Pack:
     description: str
     standards: tuple[tuple[str, str, str], ...]  # (topic, title, body)
     processes: tuple[dict, ...] = ()             # example process templates to seed
+    artifacts: tuple[dict, ...] = ()             # governed Policy artifacts (rule/skill/command/agent)
 
 
 # The catalog. Bodies are short starters — orgs edit them after enabling.
@@ -61,6 +62,11 @@ PACKS: tuple[Pack, ...] = (
                "Mark comments as blocking or nit; don't block a merge on style preferences."),
               ("review-sla", "Review SLA",
                "Review within one business day; a stalled PR is work-in-progress that isn't shipping."),
+          ),
+          artifacts=(
+              {"kind": "command", "namespace": "canon/code-review", "content":
+               "review: check correctness, tests, readability, security, and performance; "
+               "mark each comment blocking or nit; approve or request changes."},
           )),
     Pack("agile", "developer", "Team workflow (agile)",
           "Modern team-workflow canon.", (
@@ -86,6 +92,11 @@ PACKS: tuple[Pack, ...] = (
               "Write the test before the implementation. Prove a bug with a failing test before fixing it."),
              ("small-steps", "Small steps",
               "One behavior per test; keep the red-to-green loop short so a failure points at one change."),
+         ),
+         artifacts=(
+             {"kind": "command", "namespace": "canon/tdd", "content":
+              "tdd: write a failing test for the next behavior, run it (red), write the "
+              "minimum code to pass (green), then refactor with the test green."},
          )),
     Pack("atdd", "developer", "ATDD",
          "Acceptance-test-driven development.", (
@@ -201,6 +212,11 @@ PACKS: tuple[Pack, ...] = (
          "High-level organization policies.", (
              ("compliance", "Compliance example",
               "Example: all code must adhere to HIPAA. Replace with your organization's binding policies."),
+         ),
+         artifacts=(
+             {"kind": "agent", "namespace": "org", "content":
+              "compliance-reviewer: before close, confirm the change meets the org's binding "
+              "policies (e.g. HIPAA); flag anything that doesn't."},
          )),
 )
 
@@ -242,6 +258,13 @@ def enable_pack(session: Session, key: str, user: User) -> dict:
                            transitions=spec.get("transitions"), gates=spec.get("gates"),
                            oversight=spec.get("oversight", "supervised"), pack=key)
 
+    if not session.exec(select(Policy).where(Policy.pack == key)).first():  # idempotent
+        for a in pack.artifacts:
+            create_policy(session, a.get("effect", "allow"), user.id, kind=a.get("kind", "rule"),
+                          role=a.get("role", "*"), action=a.get("action", "*"),
+                          resource=a.get("resource", "*"), strict=a.get("strict", False),
+                          content=a.get("content", ""), namespace=a.get("namespace", ""), pack=key)
+
     state = session.get(PackState, key) or PackState(key=key, updated_by=user.id)
     state.enabled = True
     state.updated_by = user.id
@@ -260,6 +283,8 @@ def disable_pack(session: Session, key: str, user: User) -> dict:
         session.delete(std)
     for proc in session.exec(select(Process).where(Process.pack == key)):
         session.delete(proc)
+    for pol in session.exec(select(Policy).where(Policy.pack == key)):
+        session.delete(pol)
     state = session.get(PackState, key) or PackState(key=key, updated_by=user.id)
     state.enabled = False
     state.updated_by = user.id
