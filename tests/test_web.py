@@ -108,6 +108,29 @@ def test_end_to_end_transition_and_audit(ctx):
     assert len(events) == 1 and events[0]["recipe"] == "transition"
 
 
+def test_authorize_gate_allows_and_denies(ctx):
+    conn, client, admin, admin_token = ctx
+    from open_refinery import create_policy, query_events
+    h = auth(admin_token)
+    # audit mode (default): an unlisted egress is allowed
+    ok = client.post("/authorize", headers=h,
+                     json={"action": "egress", "resource": "api.example.com", "intent": "fetch"})
+    assert ok.status_code == 200 and ok.json()["allowed"] is True
+
+    # deny egress in the payments namespace → 403, and the refusal is audited with intent
+    create_policy(conn, "deny", admin.id, action="egress", resource="*", namespace="payments")
+    blocked = client.post("/authorize", headers=h,
+                          json={"action": "egress", "resource": "api.stripe.com",
+                                "namespace": "payments", "intent": "exfiltrate"})
+    assert blocked.status_code == 403
+    denied = [e for e in query_events(conn) if e.recipe == "denied"]
+    assert len(denied) == 1
+    # a different namespace is not gated
+    other = client.post("/authorize", headers=h,
+                        json={"action": "egress", "resource": "api.stripe.com", "namespace": "research"})
+    assert other.status_code == 200
+
+
 def test_oversight_approval_flow(ctx):
     _, client, _, admin_token = ctx
     h = auth(admin_token)

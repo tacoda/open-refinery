@@ -17,9 +17,10 @@ from open_refinery import (
 )
 
 
-def make_policy(effect, role="*", action="*", resource="*", strict=False, kind="rule", layer="charter"):
+def make_policy(effect, role="*", action="*", resource="*", strict=False, kind="rule",
+                layer="charter", namespace=""):
     return Policy(effect=effect, role=role, action=action, resource=resource,
-                  strict=strict, kind=kind, layer=layer, owner_id="x")
+                  strict=strict, kind=kind, layer=layer, namespace=namespace, owner_id="x")
 
 
 def test_layer_axis_breaks_ties_when_ranks_equal():
@@ -113,6 +114,25 @@ def test_decide_default_allow_and_deny_overrides():
 def test_wildcards_match():
     ps = [make_policy("deny", role="developer", action="transition", resource="*")]
     assert decide(ps, "developer", "transition", "anything") is False
+
+
+def test_namespaced_policy_gates_only_its_namespace():
+    ps = [make_policy("deny", action="egress", resource="*", namespace="payments")]
+    # gates a request in that namespace, not others, and not an unscoped request
+    assert decide(ps, "developer", "egress", "api.stripe.com", namespace="payments") is False
+    assert decide(ps, "developer", "egress", "api.stripe.com", namespace="marketing") is True
+    assert decide(ps, "developer", "egress", "api.stripe.com") is True
+    # a blank-namespace (global) policy gates every namespace
+    g = [make_policy("deny", action="egress", resource="*")]
+    assert decide(g, "developer", "egress", "x", namespace="payments") is False
+
+
+def test_per_namespace_whitelist_under_default_deny():
+    # strict/default-deny: only an explicit allow in the namespace lets it through
+    ps = [make_policy("allow", action="tool", resource="search", namespace="research")]
+    assert decide(ps, "developer", "tool", "search", namespace="research", default_allow=False) is True
+    assert decide(ps, "developer", "tool", "search", namespace="ops", default_allow=False) is False
+    assert decide(ps, "developer", "tool", "delete", namespace="research", default_allow=False) is False
 
 
 def setup():

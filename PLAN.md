@@ -386,6 +386,26 @@ env var or config file.
 Distributed as a pip/uv package; a single `open-refinery serve` process serves
 API + SPA. Ships as a PyPI release — no container or orchestration required.
 
+## Road to 2.0 (sequenced)
+
+Ordered milestones from 1.13.0 → 2.0.0. Focus is **feature coverage**. Deferred
+to 2.x infra (may revisit): **Postgres**, **MFA**, **Celery/Redis scale-out** —
+not feature gaps, so out of the 2.0 line. One slot reserved for a to-be-recalled
+item. Each milestone is a shippable minor; 2.0.0 is the cut.
+
+| # | Target | Milestone | Notes / scope |
+|---|--------|-----------|---------------|
+| M1 ✅ | 1.14.0 | **Enforcement v2** | `POST /authorize` pre-action seam (harness verifies identity + intent before a tool/command/host-egress action; denials 403 + audited); **per-namespace whitelists** in `decide`/`enforce`. Completes the security thesis (v1 = 1.5.0). |
+| M2 | 1.15.0 | **Teams + usage ledger + concurrency caps** | `Team` model; **usage ledger** (units on events); **cost attribution by team**; live in-flight **concurrency caps** (in-process, pairs with job runner). Closes the rate/concurrency + cost ◐ items. |
+| M3 | 1.16.0 | **Routing policy inputs + traffic graph** | cost / region / compliance **inputs to route resolution**; cross-agent **traffic/correlation graph** (metrics + audit → graph). Closes the remaining platform-concern ◐ rows. |
+| M4 | 1.17.0 | **Live logs + rollback apply-side** | per-run **live log streaming** over the WS hub; **rollback apply-status** — harness reports the reverse plan applied; platform records + audits it (closes the "we only emit the plan" gap). |
+| M5 | 1.18.0 | **UI/UX revamp round 2** | The visibility-first, workflow-oriented revamp: drop the CRUD wall, right-hand **detail/action drawer**, highlight the few actionable things, plain language, progressive disclosure. Folds in **Admin overview UX** + broader Vitest. Placed late so it designs around the full 1.x surface. |
+| M? | — | **(reserved)** | Item the user will recall — slot before 2.0. |
+| M6 | 2.0.0 | **Cut 2.0** | Docs + upgrade pass covering 1.1–1.19 (packs, governance graph, systems, ingest, enforcement, post-mortem, jobs, scheduler, WS, rollbacks, teams, traffic graph); final polish; tag 2.0.0. |
+
+**2.0-defining:** M1 (security) + M5 (visibility). Rest rounds out the ◐ table.
+**Deferred to 2.x (infra):** Postgres, MFA, Celery/Redis scale-out.
+
 ## Roadmap
 
 | Version | Deliverable                                                          |

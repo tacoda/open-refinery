@@ -80,14 +80,24 @@ def delete_policy(session: Session, policy_id: str) -> None:
         session.commit()
 
 
+def _ns_match(policy_ns: str, request_ns: str) -> bool:
+    """A policy scopes to a namespace: blank policy_ns is global (gates any
+    request); a namespaced policy gates only requests in that namespace."""
+    return policy_ns == "" or policy_ns == request_ns
+
+
 def decide(policies: list[Policy], role: str, action: str, resource: str,
-           *, rank_of=None, default_allow: bool = True) -> bool:
+           *, rank_of=None, default_allow: bool = True, namespace: str = "") -> bool:
     """Decide whether an action is permitted by the rule set.
 
     Only `rule` policies gate. **Layer graph:** precedence resolves on the lattice
     of (author role rank, artifact layer) — role axis dominant, artifact axis
     (factory > harness > charter) as tiebreak; a **strict** rule locks the
     decision at the highest lattice point (ties deny-override).
+
+    **Namespace:** a namespaced policy gates only requests in that namespace; a
+    blank-namespace policy is global. So a per-namespace whitelist is a set of
+    namespaced `allow` rules under strict/default-deny mode.
 
     `default_allow=True` (audit mode): allow unless a matching rule denies.
     `default_allow=False` (**whitelist / default-deny**): deny unless a matching
@@ -97,7 +107,8 @@ def decide(policies: list[Policy], role: str, action: str, resource: str,
     rank_of = rank_of or (lambda _p: 0)
     key = lambda p: (rank_of(p), layer_rank(p.layer))
     matches = [p for p in policies if p.kind == "rule"
-               and _match(p.role, role) and _match(p.action, action) and _match(p.resource, resource)]
+               and _match(p.role, role) and _match(p.action, action) and _match(p.resource, resource)
+               and _ns_match(p.namespace, namespace)]
     if not matches:
         return default_allow
     strict = [p for p in matches if p.strict]
@@ -119,9 +130,15 @@ def enforcement_mode(session: Session) -> str:
 
 
 def enforce(session: Session, role: str, action: str, resource: str, *,
-            audit=None, actor_id: str | None = None, subject: str | None = None) -> None:
+            audit=None, actor_id: str | None = None, subject: str | None = None,
+            namespace: str = "", intent: str = "") -> None:
     """Proactively gate an action: raise `PolicyDenied` if not permitted, and
     **record the refusal in the audit log** (when an audit sink is given).
+
+    Generic over the action boundary — the same gate covers transitions, executor
+    invokes, and (enforcement v2) tool/command/host-egress checks a harness makes
+    *before acting*. `namespace` scopes to per-namespace whitelists; `intent` (the
+    declared purpose) is recorded on the refusal for verification/audit.
 
     Honors the org enforcement mode — `audit` (default-allow) or `strict`
     (whitelist / default-deny). Resolves each rule's layer from its author's role
@@ -133,12 +150,16 @@ def enforce(session: Session, role: str, action: str, resource: str, *,
              for oid in owners if (u := session.get(User, oid)) is not None}
     rank_of = lambda p: ranks.get(p.owner_id, 0)
     allow_default = enforcement_mode(session) == "audit"
-    if not decide(policies, role, action, resource, rank_of=rank_of, default_allow=allow_default):
+    if not decide(policies, role, action, resource, rank_of=rank_of,
+                  default_allow=allow_default, namespace=namespace):
         reason = f"policy denies {role!r} {action!r} on {resource!r}"
+        if namespace:
+            reason += f" in {namespace!r}"
         if audit is not None:  # every refused attempt is auditable
             from .provenance import Record
             audit.write(Record.of(recipe="denied", actor=actor_id or role, owner=actor_id or role,
                                   inputs={"role": role, "action": action, "resource": resource,
+                                          "namespace": namespace, "intent": intent,
                                           "mode": enforcement_mode(session)},
                                   output=reason, subject=subject))
         raise PolicyDenied(reason)

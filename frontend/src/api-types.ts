@@ -865,6 +865,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Authorize
+         * @description Pre-action gate for an out-of-process harness: verify the caller's
+         *     identity + declared intent against policy **before** it runs a tool,
+         *     command, or host-egress action. Denials raise 403 and are audited.
+         */
+        post: operations["authorize_authorize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/work-items/{item_id}/attest": {
         parameters: {
             query?: never;
@@ -1470,6 +1492,23 @@ export interface components {
              */
             passed: boolean;
         };
+        /** AuthorizeReq */
+        AuthorizeReq: {
+            /** Action */
+            action: string;
+            /** Resource */
+            resource: string;
+            /**
+             * Namespace
+             * @default
+             */
+            namespace: string;
+            /**
+             * Intent
+             * @default
+             */
+            intent: string;
+        };
         /** Credentials */
         Credentials: {
             /** Email */
@@ -1613,6 +1652,11 @@ export interface components {
              * @default charter
              */
             layer: string;
+            /**
+             * Namespace
+             * @default
+             */
+            namespace: string;
         };
         /** NewProcess */
         NewProcess: {
@@ -3852,6 +3896,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["Move"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    authorize_authorize_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthorizeReq"];
             };
         };
         responses: {

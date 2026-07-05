@@ -527,8 +527,8 @@ function Policies() {
   const [effect, setEffect] = useState('deny'), [role, setRole] = useState('*')
   const [action, setAction] = useState('transition'), [resource, setResource] = useState('*')
   const [strict, setStrict] = useState(false), [content, setContent] = useState('')
-  const [layer, setLayer] = useState('charter')
-  const add = () => post('/policies', { kind, effect, role, action, resource, strict, content, layer })
+  const [layer, setLayer] = useState('charter'), [namespace, setNamespace] = useState('')
+  const add = () => post('/policies', { kind, effect, role, action, resource, strict, content, layer, namespace })
     .then(load).catch(fail)
   const del = (id: string) => api(`/policies/${id}`, { method: 'DELETE' }).then(load).catch(fail)
 
@@ -555,6 +555,7 @@ function Policies() {
                 <Input className="field" placeholder="role (* = any)" value={role} onChange={(e) => setRole(e.target.value)} />
                 <Input className="field" placeholder="action (transition / *)" value={action} onChange={(e) => setAction(e.target.value)} />
                 <Input className="field" placeholder="resource (step / *)" value={resource} onChange={(e) => setResource(e.target.value)} />
+                <Input className="field" placeholder="namespace (blank = global)" value={namespace} onChange={(e) => setNamespace(e.target.value)} />
               </>
             ) : (
               <Input className="field" placeholder={`${kind} content`} value={content} onChange={(e) => setContent(e.target.value)} />
@@ -570,8 +571,8 @@ function Policies() {
             <Button onClick={add}>Add</Button>
           </div>
           <Table>
-            <TableHeader><TableRow><TableHead>Kind</TableHead><TableHead>Layer</TableHead><TableHead>Effect</TableHead><TableHead>Role</TableHead><TableHead>Action</TableHead><TableHead>Resource</TableHead><TableHead>Strict</TableHead><TableHead /></TableRow></TableHeader>
-            <TableBody><EmptyRow show={!rows.length} cols={9}>Nothing here yet.</EmptyRow>{rows.map((p) => (
+            <TableHeader><TableRow><TableHead>Kind</TableHead><TableHead>Layer</TableHead><TableHead>Effect</TableHead><TableHead>Role</TableHead><TableHead>Action</TableHead><TableHead>Resource</TableHead><TableHead>Namespace</TableHead><TableHead>Strict</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody><EmptyRow show={!rows.length} cols={10}>Nothing here yet.</EmptyRow>{rows.map((p) => (
               <TableRow key={p.id}>
                 <TableCell><Badge variant="outline">{p.kind}</Badge></TableCell>
                 <TableCell className="mono">{p.layer}</TableCell>
@@ -579,6 +580,7 @@ function Policies() {
                 <TableCell className="mono">{p.role}</TableCell>
                 <TableCell className="mono">{p.action}</TableCell>
                 <TableCell className="mono">{p.resource}</TableCell>
+                <TableCell className="mono">{p.namespace || '—'}</TableCell>
                 <TableCell>{p.strict ? <Badge>strict</Badge> : ''}</TableCell>
                 <TableCell><Button variant="outline" size="sm" onClick={() => del(p.id)}>Delete</Button></TableCell>
               </TableRow>

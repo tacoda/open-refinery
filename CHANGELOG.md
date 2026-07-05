@@ -3,6 +3,22 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.14.0] — 2026-07-05
+
+### Added
+- **Enforcement v2 (M1 on the road to 2.0).** The proactive gate now covers any
+  action boundary, not just transitions and executor invokes:
+  - **Pre-action authorize seam** — `POST /authorize` lets an out-of-process
+    harness verify **identity + declared intent** against policy *before* it runs
+    a **tool / command / host-egress** action (`{action, resource, namespace,
+    intent}`). Permitted → `{"allowed": true, "mode": …}`; denied → `403`, and the
+    refusal is audited (`denied` event) with the intent recorded.
+  - **Per-namespace whitelists** — `decide`/`enforce` now honor a policy's
+    `namespace`: a namespaced rule gates only requests in that namespace, a
+    blank-namespace rule is global. Under strict/default-deny that gives a
+    per-namespace whitelist (a set of namespaced `allow` rules). Policy form +
+    table expose the namespace.
+
 ## [1.13.0] — 2026-07-05
 
 ### Added

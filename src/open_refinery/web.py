@@ -73,6 +73,8 @@ from .policies import (
     PolicyDenied,
     create_policy,
     delete_policy,
+    enforce as enforce_policy,
+    enforcement_mode,
     list_policies,
     scan_content,
 )
@@ -171,6 +173,13 @@ class NewWorkItem(BaseModel):
     title: str
 
 
+class AuthorizeReq(BaseModel):
+    action: str                 # e.g. tool | command | egress | transition | invoke
+    resource: str               # tool name / command / host / target kind / step
+    namespace: str = ""         # per-namespace whitelist scope (blank = global)
+    intent: str = ""            # declared purpose, recorded for verification/audit
+
+
 class Move(BaseModel):
     to: str
     approve: bool = False  # current user signs off, if the process requires it
@@ -257,6 +266,7 @@ class NewPolicy(BaseModel):
     kind: str = "rule"
     content: str = ""
     layer: str = "charter"       # factory | harness | charter
+    namespace: str = ""          # per-namespace scope (blank = global)
 
 
 class WorkflowBody(BaseModel):
@@ -798,6 +808,17 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
                       user: User = Depends(current_user)):
         return rollback_work_item(session, item_id, body.to, user.id, SqliteSink(session))
 
+    @app.post("/authorize")
+    def authorize(body: AuthorizeReq, session: Session = Depends(get_session),
+                  user: User = Depends(current_user)):
+        """Pre-action gate for an out-of-process harness: verify the caller's
+        identity + declared intent against policy **before** it runs a tool,
+        command, or host-egress action. Denials raise 403 and are audited."""
+        enforce_policy(session, user.role, body.action, body.resource,
+                       audit=SqliteSink(session), actor_id=user.id, subject=body.resource,
+                       namespace=body.namespace, intent=body.intent)
+        return {"allowed": True, "mode": enforcement_mode(session)}
+
     @app.post("/work-items/{item_id}/attest", status_code=201)
     def add_attestation(item_id: str, body: Attest, session: Session = Depends(get_session),
                         user: User = Depends(current_user)):
@@ -989,7 +1010,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         return create_policy(session, body.effect, user.id, role=body.role,
                            action=body.action, resource=body.resource,
                            strict=body.strict, kind=body.kind, content=body.content,
-                           layer=body.layer)
+                           layer=body.layer, namespace=body.namespace)
 
     @app.get("/policies")
     def get_policies(session: Session = Depends(get_session), _: User = Depends(current_user)):
