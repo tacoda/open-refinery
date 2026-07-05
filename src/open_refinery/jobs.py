@@ -46,6 +46,8 @@ def run_job(engine: Engine, job_id: str, fn) -> None:
         job.updated_at = now_iso()
         session.add(job)
         session.commit()
+        from .live import HUB
+        HUB.publish({"type": "job", "id": job.id, "kind": job.kind, "status": job.status})
 
 
 def enqueue(session: Session, engine: Engine, kind: str, fn) -> Job:

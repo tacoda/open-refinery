@@ -3,6 +3,20 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.9.0] — 2026-07-05
+
+### Added
+- **Live UI via WebSockets.** A `/ws` channel (bearer token via query param)
+  streams real-time updates — **background job** status changes and **new audit
+  events** — so the dashboard reflects activity without polling. An in-process
+  pub/sub **hub** fans events out from any thread (job runner, audit sink) via the
+  server loop; the dashboard shows a **● live** indicator and toasts job
+  completions. Adds the `websockets` dependency (WS transport for uvicorn).
+
+### Note
+- In-process hub (same ethos as the job runner / scheduler); a Redis/pub-sub
+  backend can replace it for multi-process later, same `HUB.publish` API.
+
 ## [1.8.0] — 2026-07-05
 
 ### Added

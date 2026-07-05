@@ -1,6 +1,6 @@
 [project]
 name = "open-refinery"
-version = "1.8.0"
+version = "1.9.0"
 description = "A factory for producing artifacts under governance — provenance, ownership, authorization, and an append-only audit trail on every output."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,6 +17,7 @@ classifiers = [
 dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
+    "websockets>=12",       # WebSocket transport for uvicorn (live UI channel)
     "cryptography>=43",
     "sqlmodel>=0.0.24",
 ]

@@ -17,7 +17,10 @@ def _now(offset_h=0):
 
 
 def setup():
-    engine = engine_for("sqlite:///:memory:")
+    import tempfile, os
+    # a file DB (not :memory:) so the background ingest thread gets its own connection
+    path = os.path.join(tempfile.mkdtemp(), "sched.db")
+    engine = engine_for(f"sqlite:///{path}")
     from sqlmodel import Session
     conn = Session(engine)
     dev, _ = create_user(conn, "dev@x.dev", "pw", "developer")

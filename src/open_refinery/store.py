@@ -87,6 +87,9 @@ class SqlSink:
         self._session.commit()
         from .webhooks import deliver
         deliver(self._session, record)  # fan out to registered endpoints (best-effort)
+        from .live import HUB
+        HUB.publish({"type": "event", "recipe": record.recipe, "actor": record.actor,
+                     "subject": record.subject, "at": record.created_at})
 
 
 # Backwards-compatible alias — the SQL-backed sink used to be SqliteSink.

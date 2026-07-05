@@ -12,7 +12,7 @@ import os
 import secrets
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -63,6 +63,7 @@ from .experiments import (
 )
 from .ingest import ingest
 from .jobs import enqueue, get_job, list_jobs
+from .live import HUB
 from .webhooks import create_webhook, delete_webhook, list_webhooks
 from .governance import landscape
 from .packs import disable_pack, enable_pack, list_packs, list_standards
@@ -338,7 +339,15 @@ class ExecuteRequest(BaseModel):
 
 def create_app(session: Session | None = None, database_url: str = DEFAULT_DATABASE_URL) -> FastAPI:
     # Self-host API docs at /api-docs (assets bundled at build time — no CDN).
-    app = FastAPI(title="open-refinery", docs_url=None, redoc_url=None)
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def _lifespan(_app):
+        import asyncio
+        HUB.bind_loop(asyncio.get_running_loop())  # enable cross-thread publish → WS
+        yield
+
+    app = FastAPI(title="open-refinery", docs_url=None, redoc_url=None, lifespan=_lifespan)
     engine = session.get_bind() if session is not None else engine_for(database_url)
     app.state.engine = engine
 
@@ -370,6 +379,23 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def get_session():
         with Session(engine) as s:
             yield s
+
+    @app.websocket("/ws")
+    async def live_ws(websocket: WebSocket, token: str = ""):
+        with Session(engine) as s:  # bearer token via query param (browsers can't set WS headers)
+            user = (user_by_token(s, token) or session_user(s, token)) if token else None
+        if user is None:
+            await websocket.close(code=1008)  # policy violation / unauthorized
+            return
+        await websocket.accept()
+        q = HUB.subscribe()
+        try:
+            while True:
+                await websocket.send_json(await q.get())
+        except WebSocketDisconnect:
+            pass
+        finally:
+            HUB.unsubscribe(q)
 
     def current_user(
         session: Session = Depends(get_session),

@@ -67,10 +67,31 @@ export default function App() {
     }
   }, [])
 
+  const [live, setLive] = useState(false)
   useEffect(() => {
     if (!token) return
     api('/me').then(setMe).catch(() => { clearToken(); setTok(''); setMe(null) })
     api('/roles').then(setRoles).catch(() => {})
+  }, [token])
+
+  // live channel: real-time job + audit updates (no polling)
+  useEffect(() => {
+    if (!token) return
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+    let ws: WebSocket | null = null
+    try {
+      ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`)
+      ws.onopen = () => setLive(true)
+      ws.onclose = () => setLive(false)
+      ws.onerror = () => setLive(false)
+      ws.onmessage = (e) => {
+        const m = JSON.parse(e.data)
+        if (m.type === 'job' && m.status !== 'running') {
+          toast(m.status === 'done' ? `Job ${m.kind} finished` : `Job ${m.kind} ${m.status}`)
+        }
+      }
+    } catch { setLive(false) }
+    return () => ws?.close()
   }, [token])
 
   useEffect(() => {
@@ -119,6 +140,7 @@ export default function App() {
                 </nav>
                 <span className="app-spacer" />
                 <ThemeToggle />
+                {live && <Badge variant="outline" title="live updates connected">● live</Badge>}
                 <span className="app-user">{me.email} · {me.role}</span>
                 <Button variant="outline" size="sm"
                         onClick={() => { clearToken(); setTok(''); setMe(null) }}>
