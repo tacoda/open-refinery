@@ -22,7 +22,7 @@ import re
 from sqlmodel import Session, select
 
 from .models import Policy, User
-from .policies import list_policies
+from .policies import layer_rank, list_policies
 from .users import role_rank
 
 SEVERITY = {"prompt_injection": "high", "contradiction": "high",
@@ -59,7 +59,9 @@ def analyze(session: Session, *, viewer_rank: int | None = None) -> dict:
     author_role = {u.id: u.role for u in session.exec(select(User))}
     rank = {p.id: role_rank(session, author_role.get(p.owner_id, "")) for p in policies}
 
-    def layer(p: Policy) -> dict:
+    key = lambda p: (rank[p.id], layer_rank(p.layer))  # lattice: role rank, then artifact layer
+
+    def author(p: Policy) -> dict:
         return {"role": author_role.get(p.owner_id, ""), "rank": rank[p.id]}
 
     findings: list[dict] = []
@@ -74,21 +76,21 @@ def analyze(session: Session, *, viewer_rank: int | None = None) -> dict:
         for win in rules:
             if win is lose or not win.strict or win.effect == lose.effect:
                 continue
-            if rank[win.id] > rank[lose.id] \
+            if key(win) > key(lose) \
                     and _overlap(win.action, lose.action) and _overlap(win.resource, lose.resource):
                 add("dead", lose,
-                    f"shadowed by a strict {layer(win)['role']} rule on {win.action}/{win.resource}",
+                    f"shadowed by a strict {author(win)['role']} {win.layer} rule on {win.action}/{win.resource}",
                     "remove it, or raise its layer above the strict rule")
                 break
 
-    # contradiction: same-rank opposite-effect overlapping rules
+    # contradiction: same lattice point (rank + layer), opposite effect, overlapping
     for i, a in enumerate(rules):
         for b in rules[i + 1:]:
-            if a.effect != b.effect and rank[a.id] == rank[b.id] \
+            if a.effect != b.effect and key(a) == key(b) \
                     and _overlap(a.role, b.role) and _overlap(a.action, b.action) \
                     and _overlap(a.resource, b.resource):
                 add("contradiction", a,
-                    f"conflicts with a {layer(b)['role']} rule on {b.action}/{b.resource} (deny wins)",
+                    f"conflicts with a {author(b)['role']} {b.layer} rule on {b.action}/{b.resource} (deny wins)",
                     "reconcile the two rules or make one strict")
 
     # redundant: covered by a broader same-effect rule

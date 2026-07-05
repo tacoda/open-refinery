@@ -237,6 +237,7 @@ class NewPolicy(BaseModel):
     strict: bool | None = None   # None → admin-configured default
     kind: str = "rule"
     content: str = ""
+    layer: str = "charter"       # factory | harness | charter
 
 
 class WorkflowBody(BaseModel):
@@ -856,7 +857,8 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
                    user: User = Depends(require("platform", "admin"))):
         return create_policy(session, body.effect, user.id, role=body.role,
                            action=body.action, resource=body.resource,
-                           strict=body.strict, kind=body.kind, content=body.content)
+                           strict=body.strict, kind=body.kind, content=body.content,
+                           layer=body.layer)
 
     @app.get("/policies")
     def get_policies(session: Session = Depends(get_session), _: User = Depends(current_user)):

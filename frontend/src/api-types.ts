@@ -1416,6 +1416,11 @@ export interface components {
              * @default
              */
             content: string;
+            /**
+             * Layer
+             * @default charter
+             */
+            layer: string;
         };
         /** NewProcess */
         NewProcess: {

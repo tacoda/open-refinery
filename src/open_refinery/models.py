@@ -147,6 +147,7 @@ class Policy(SQLModel, table=True):
     action: str = "*"            # e.g. "transition", "invoke", or "*"
     resource: str = "*"          # step name, target kind, or "*"
     strict: bool = False         # a lower layer may not override a strict rule
+    layer: str = "charter"       # artifact axis: factory > harness > charter
     content: str = ""            # body for skill/command/agent kinds
     namespace: str = ""          # company/dept/team/project scope (blank = global)
     pack: str = Field(default="", index=True)  # source pack key when seeded by a pack

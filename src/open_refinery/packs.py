@@ -64,7 +64,7 @@ PACKS: tuple[Pack, ...] = (
                "Review within one business day; a stalled PR is work-in-progress that isn't shipping."),
           ),
           artifacts=(
-              {"kind": "command", "namespace": "canon/code-review", "content":
+              {"kind": "command", "layer": "harness", "namespace": "canon/code-review", "content":
                "review: check correctness, tests, readability, security, and performance; "
                "mark each comment blocking or nit; approve or request changes."},
           )),
@@ -94,7 +94,7 @@ PACKS: tuple[Pack, ...] = (
               "One behavior per test; keep the red-to-green loop short so a failure points at one change."),
          ),
          artifacts=(
-             {"kind": "command", "namespace": "canon/tdd", "content":
+             {"kind": "command", "layer": "harness", "namespace": "canon/tdd", "content":
               "tdd: write a failing test for the next behavior, run it (red), write the "
               "minimum code to pass (green), then refactor with the test green."},
          )),
@@ -214,7 +214,7 @@ PACKS: tuple[Pack, ...] = (
               "Example: all code must adhere to HIPAA. Replace with your organization's binding policies."),
          ),
          artifacts=(
-             {"kind": "agent", "namespace": "org", "content":
+             {"kind": "agent", "layer": "factory", "namespace": "org", "content":
               "compliance-reviewer: before close, confirm the change meets the org's binding "
               "policies (e.g. HIPAA); flag anything that doesn't."},
          )),
@@ -263,7 +263,8 @@ def enable_pack(session: Session, key: str, user: User) -> dict:
             create_policy(session, a.get("effect", "allow"), user.id, kind=a.get("kind", "rule"),
                           role=a.get("role", "*"), action=a.get("action", "*"),
                           resource=a.get("resource", "*"), strict=a.get("strict", False),
-                          content=a.get("content", ""), namespace=a.get("namespace", ""), pack=key)
+                          content=a.get("content", ""), namespace=a.get("namespace", ""),
+                          layer=a.get("layer", "charter"), pack=key)
 
     state = session.get(PackState, key) or PackState(key=key, updated_by=user.id)
     state.enabled = True

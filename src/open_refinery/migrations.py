@@ -42,6 +42,8 @@ MIGRATIONS: list[str] = [
     # v8 (1.1.0): packs can seed policy artifacts; policies carry a namespace
     "ALTER TABLE policies ADD COLUMN namespace TEXT NOT NULL DEFAULT '';"
     "ALTER TABLE policies ADD COLUMN pack TEXT NOT NULL DEFAULT '';",
+    # v9 (1.2.0): governance layer graph — artifact axis (factory>harness>charter)
+    "ALTER TABLE policies ADD COLUMN layer TEXT NOT NULL DEFAULT 'charter';",
 ]
 
 

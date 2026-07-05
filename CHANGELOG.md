@@ -3,6 +3,18 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.2.0] — 2026-07-05
+
+### Added
+- **Governance layer graph.** Policies now carry an explicit **artifact layer** —
+  `factory` > `harness` > `charter` (`Policy.layer`). Strict-override precedence
+  resolves on the **lattice** of (author role rank, artifact layer): the role
+  axis dominates, the artifact axis breaks ties. `decide`/`enforce`, the
+  governance landscape's overrides, and the poison analysis (dead / contradiction)
+  all resolve on the combined key. Pack-seeded artifacts are tagged with a layer
+  (canon commands → `harness`, org agent → `factory`). Policies form + landscape
+  show the layer. Additive migration v9 adds `policies.layer` (schema stays frozen).
+
 ## [1.1.0] — 2026-07-05
 
 ### Added

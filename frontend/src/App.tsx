@@ -477,7 +477,8 @@ function Policies() {
   const [effect, setEffect] = useState('deny'), [role, setRole] = useState('*')
   const [action, setAction] = useState('transition'), [resource, setResource] = useState('*')
   const [strict, setStrict] = useState(false), [content, setContent] = useState('')
-  const add = () => post('/policies', { kind, effect, role, action, resource, strict, content })
+  const [layer, setLayer] = useState('charter')
+  const add = () => post('/policies', { kind, effect, role, action, resource, strict, content, layer })
     .then(load).catch(fail)
   const del = (id: string) => api(`/policies/${id}`, { method: 'DELETE' }).then(load).catch(fail)
 
@@ -508,6 +509,10 @@ function Policies() {
             ) : (
               <Input className="field" placeholder={`${kind} content`} value={content} onChange={(e) => setContent(e.target.value)} />
             )}
+            <Select value={layer} onValueChange={(v) => setLayer(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+              <SelectContent>{['factory', 'harness', 'charter'].map((l) => <SelectItem key={l} value={l}>layer: {l}</SelectItem>)}</SelectContent>
+            </Select>
             <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <input type="checkbox" checked={strict} onChange={(e) => setStrict(e.target.checked)} />
               strict (no lower-layer override)
@@ -515,10 +520,11 @@ function Policies() {
             <Button onClick={add}>Add</Button>
           </div>
           <Table>
-            <TableHeader><TableRow><TableHead>Kind</TableHead><TableHead>Effect</TableHead><TableHead>Role</TableHead><TableHead>Action</TableHead><TableHead>Resource</TableHead><TableHead>Strict</TableHead><TableHead /></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Kind</TableHead><TableHead>Layer</TableHead><TableHead>Effect</TableHead><TableHead>Role</TableHead><TableHead>Action</TableHead><TableHead>Resource</TableHead><TableHead>Strict</TableHead><TableHead /></TableRow></TableHeader>
             <TableBody><EmptyRow show={!rows.length} cols={9}>Nothing here yet.</EmptyRow>{rows.map((p) => (
               <TableRow key={p.id}>
                 <TableCell><Badge variant="outline">{p.kind}</Badge></TableCell>
+                <TableCell className="mono">{p.layer}</TableCell>
                 <TableCell>{p.kind === 'rule' ? <Badge variant={p.effect === 'deny' ? 'destructive' : 'secondary'}>{p.effect}</Badge> : <span className="mono">{p.content}</span>}</TableCell>
                 <TableCell className="mono">{p.role}</TableCell>
                 <TableCell className="mono">{p.action}</TableCell>

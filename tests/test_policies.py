@@ -17,9 +17,28 @@ from open_refinery import (
 )
 
 
-def make_policy(effect, role="*", action="*", resource="*", strict=False, kind="rule"):
+def make_policy(effect, role="*", action="*", resource="*", strict=False, kind="rule", layer="charter"):
     return Policy(effect=effect, role=role, action=action, resource=resource,
-                  strict=strict, kind=kind, owner_id="x")
+                  strict=strict, kind=kind, layer=layer, owner_id="x")
+
+
+def test_layer_axis_breaks_ties_when_ranks_equal():
+    # same author rank (flat 0), different artifact layer → factory beats charter
+    ps = [make_policy("allow", strict=True, layer="factory"),
+          make_policy("deny", strict=True, layer="charter")]
+    assert decide(ps, "developer", "transition", "done") is True   # factory strict allow wins
+    ps = [make_policy("deny", strict=True, layer="factory"),
+          make_policy("allow", strict=True, layer="harness")]
+    assert decide(ps, "developer", "transition", "done") is False  # factory deny wins over harness
+
+
+def test_role_rank_dominates_layer():
+    rank = {"plat": 2, "dev": 1}
+    rank_of = lambda p: rank.get(p.owner_id, 0)
+    # developer at factory layer vs platform at charter layer → role rank dominates
+    dev_factory = Policy(effect="deny", strict=True, kind="rule", layer="factory", owner_id="dev")
+    plat_charter = Policy(effect="allow", strict=True, kind="rule", layer="charter", owner_id="plat")
+    assert decide([dev_factory, plat_charter], "developer", "t", "d", rank_of=rank_of) is True
 
 
 def test_strict_rule_cannot_be_overridden():

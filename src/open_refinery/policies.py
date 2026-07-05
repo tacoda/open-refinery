@@ -17,7 +17,16 @@ from .settings import get_setting
 from .users import role_rank
 
 EFFECTS = ("allow", "deny")
+# Artifact axis of the governance layer graph: factory (org service) > harness
+# (agent tooling) > charter (repo/project). Precedence resolves on the lattice
+# (author role rank, then layer).
+LAYERS = ("factory", "harness", "charter")
+LAYER_RANK = {"charter": 1, "harness": 2, "factory": 3}
 STRICT_DEFAULT_KEY = "policy.strict_default"  # admin setting; "true"/"false"
+
+
+def layer_rank(layer: str) -> int:
+    return LAYER_RANK.get(layer, 0)
 
 
 def strict_default(session: Session) -> bool:
@@ -38,18 +47,20 @@ POLICY_KINDS = ("rule", "skill", "command", "agent")  # what a governed harness 
 def create_policy(session: Session, effect: str, owner_id: str, *, role: str = "*",
                   action: str = "*", resource: str = "*", strict: bool | None = None,
                   kind: str = "rule", content: str = "", namespace: str = "",
-                  pack: str = "") -> Policy:
+                  pack: str = "", layer: str = "charter") -> Policy:
     if effect not in EFFECTS:
         raise ValueError(f"unknown effect: {effect!r} (expected {EFFECTS})")
     if kind not in POLICY_KINDS:
         raise ValueError(f"unknown policy kind: {kind!r} (expected {POLICY_KINDS})")
+    if layer not in LAYERS:
+        raise ValueError(f"unknown layer: {layer!r} (expected {LAYERS})")
     if session.get(User, owner_id) is None:
         raise ValueError(f"unknown owner: {owner_id!r}")
     if strict is None:
         strict = strict_default(session)  # admin-configured default (off unless set)
     policy = Policy(effect=effect, role=role, action=action, resource=resource,
                     strict=strict, kind=kind, content=content, namespace=namespace,
-                    pack=pack, owner_id=owner_id)
+                    pack=pack, layer=layer, owner_id=owner_id)
     session.add(policy)
     session.commit()
     session.refresh(policy)
@@ -72,20 +83,22 @@ def decide(policies: list[Policy], role: str, action: str, resource: str,
            *, rank_of=None) -> bool:
     """Allow unless a matching rule denies (deny-overrides; default allow).
 
-    Only `rule` policies gate. **Layer graph:** a policy's layer is the rank of
-    its author's role (`rank_of(policy)`). A **strict** rule locks the decision
-    against *lower* layers — the highest-ranked strict rule wins, and lower rules
-    can't override it; ties at that rank deny-override. With no strict rule,
-    plain deny-overrides applies. `rank_of` defaults to a flat 0 (single layer),
-    so callers that don't supply ranks keep the pre-graph behavior.
+    Only `rule` policies gate. **Layer graph:** precedence resolves on the lattice
+    of (author role rank, artifact layer) — role axis dominant, artifact axis
+    (factory > harness > charter) as tiebreak. A **strict** rule locks the
+    decision against lower points on the lattice: the highest-key strict rule
+    wins; ties at that key deny-override. With no strict rule, plain deny-overrides
+    applies. `rank_of` defaults to a flat 0, so the layer axis alone orders when
+    no author ranks are supplied.
     """
     rank_of = rank_of or (lambda _p: 0)
+    key = lambda p: (rank_of(p), layer_rank(p.layer))
     matches = [p for p in policies if p.kind == "rule"
                and _match(p.role, role) and _match(p.action, action) and _match(p.resource, resource)]
     strict = [p for p in matches if p.strict]
     if strict:
-        top = max(rank_of(p) for p in strict)          # highest layer that locked
-        pool = [p for p in strict if rank_of(p) == top]
+        top = max(key(p) for p in strict)              # highest lattice point that locked
+        pool = [p for p in strict if key(p) == top]
         return not any(p.effect == "deny" for p in pool)
     return not any(p.effect == "deny" for p in matches)
 
