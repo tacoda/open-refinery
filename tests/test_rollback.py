@@ -62,12 +62,16 @@ def test_reverse_plan_undoes_code_migrations_config_and_libraries():
         "code": {"commit": "c2", "prev": "c1"},
         "migrations": ["003_add_orders"],
         "config": {"FEATURE_X": {"old": "off", "new": "on"}},
+        "env": {"LOG_LEVEL": {"old": "info", "new": "debug"}},
         "libraries": {"requests": {"old": "2.30", "new": "2.31"}},
+        "data": {"orders": {"old": "snap-1", "new": "snap-2"}},
+        "services": {"payments": {"old": "stripe", "new": "adyen"}},
     })
     transition(conn, item.id, "review", dev.id, audit, changes={
         "code": {"commit": "c3", "prev": "c2"},
         "migrations": ["004_index_orders"],
         "config": {"FEATURE_X": {"old": "on", "new": "audit"}},
+        "data": {"orders": {"old": "snap-2", "new": "snap-3"}},
     })
 
     plan = rollback_work_item(conn, item.id, "backlog", dev.id, audit)["plan"]
@@ -76,7 +80,10 @@ def test_reverse_plan_undoes_code_migrations_config_and_libraries():
     assert plan["migrations"] == [{"downgrade": "004_index_orders"},
                                   {"downgrade": "003_add_orders"}]
     assert plan["config"] == {"FEATURE_X": "off"}              # first-seen old
+    assert plan["env"] == {"LOG_LEVEL": "info"}                # restore prior env var
     assert plan["libraries"] == {"requests": "2.30"}
+    assert plan["data"] == {"orders": "snap-1"}                # restore pre-update snapshot
+    assert plan["services"] == {"payments": "stripe"}          # restore prior vendor
 
 
 def test_cannot_rollback_to_unvisited_or_current_stage():

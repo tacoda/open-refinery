@@ -119,7 +119,7 @@ class StageHistory(SQLModel, table=True):
     actor_id: str | None = None
     # forward change set this transition applied, categorized so a rollback can
     # reverse each kind: {"code": {"commit","prev"}, "migrations": [id,...],
-    # "config": {KEY: {"old","new"}}, "libraries": {pkg: {"old","new"}}}
+    # "config"/"env"/"libraries"/"data"/"services": {name: {"old","new"}}}
     changes: dict = Field(default_factory=dict, sa_column=Column(JSON))
     created_at: str = Field(default_factory=now_iso)
 

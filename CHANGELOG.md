@@ -3,6 +3,18 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.11.0] — 2026-07-05
+
+### Added
+- **Rollback now covers env vars, data updates, and service vendor swaps too.**
+  The transition change set gains three categories alongside code/migrations/
+  config/libraries: `env` (environment variables — reverse restores the **prior
+  value**), `data` (a data update — reverse restores the **prior snapshot**), and
+  `services` (a service vendor swap — reverse restores the **prior vendor**). All
+  invert the same way as config/libraries (restore each name to its pre-change
+  value), so a reverse plan can now unwind the full deployment: code, DB
+  migrations, config, env, dependencies, data, and services.
+
 ## [1.10.0] — 2026-07-05
 
 ### Added

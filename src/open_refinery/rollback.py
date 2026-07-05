@@ -3,8 +3,9 @@
 Rolling back is not a normal forward transition: it moves a work item back to a
 stage it has **previously occupied** (from its `StageHistory`) and *reverses the
 change sets* of every transition being undone — not just the code, but the
-database migrations, configuration, and library/dependency changes those
-transitions carried in their diff.
+database migrations, configuration, library/dependency changes, **data updates**
+(restore the prior snapshot), and **service vendor swaps** (restore the prior
+vendor) those transitions carried in their diff.
 
 The platform governs; it does not run git/alembic/pip itself (that's the
 harness's job). So a rollback authorizes the revert (policy action `rollback`,
@@ -50,14 +51,20 @@ def _undone(history: list[StageHistory], to_stage: str) -> list[StageHistory]:
     return [h for h in history[last + 1:] if h.changes]
 
 
+# Categories that are a map of {name: {"old", "new"}} — reversed by restoring
+# each name to its value *before the earliest undone change* (first-seen "old").
+_RESTORE_KEYS = ("config", "env", "libraries", "data", "services")
+
+
 def reverse_plan(undone: list[StageHistory]) -> dict:
     """Invert the forward change sets of the undone transitions (oldest→newest).
 
-    Restores each thing to its value *before the earliest undone change*: code to
-    that transition's `prev` commit, each config/library key to its first-seen
-    `old`; migrations are downgraded newest-first so dependents drop before deps.
+    Restores each thing to its state *before the earliest undone change*: code to
+    that transition's `prev` commit; each config value / env var / library /
+    dataset / service to its first-seen `old`; migrations are downgraded
+    newest-first so dependents drop first.
     """
-    plan: dict = {"code": None, "migrations": [], "config": {}, "libraries": {}}
+    plan: dict = {"code": None, "migrations": [], **{k: {} for k in _RESTORE_KEYS}}
     forward_migrations = []
     for h in undone:                                  # oldest → newest
         c = h.changes or {}
@@ -65,10 +72,9 @@ def reverse_plan(undone: list[StageHistory]) -> dict:
         if code and plan["code"] is None:             # earliest code state wins
             plan["code"] = {"revert_to": code.get("prev")}
         forward_migrations.extend(c.get("migrations") or [])
-        for key, chg in (c.get("config") or {}).items():
-            plan["config"].setdefault(key, chg.get("old"))
-        for pkg, chg in (c.get("libraries") or {}).items():
-            plan["libraries"].setdefault(pkg, chg.get("old"))
+        for cat in _RESTORE_KEYS:
+            for name, chg in (c.get(cat) or {}).items():
+                plan[cat].setdefault(name, chg.get("old"))
     plan["migrations"] = [{"downgrade": m} for m in reversed(forward_migrations)]
     return plan
 

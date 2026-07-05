@@ -1502,7 +1502,10 @@ function WorkRow({ w, onMove, onAttest, onRequest, onReload }: any) {
                 <div className="kv-row"><span className="muted">code</span><span className="mono">{plan.code ? `revert → ${plan.code.revert_to}` : '—'}</span></div>
                 <div className="kv-row"><span className="muted">migrations</span><span className="mono">{plan.migrations.map((m: any) => `↓ ${m.downgrade}`).join(', ') || '—'}</span></div>
                 <div className="kv-row"><span className="muted">config</span><span className="mono">{Object.entries(plan.config).map(([k, v]) => `${k}=${v}`).join(', ') || '—'}</span></div>
+                <div className="kv-row"><span className="muted">env</span><span className="mono">{Object.entries(plan.env).map(([k, v]) => `${k}=${v}`).join(', ') || '—'}</span></div>
                 <div className="kv-row"><span className="muted">libraries</span><span className="mono">{Object.entries(plan.libraries).map(([k, v]) => `${k}@${v}`).join(', ') || '—'}</span></div>
+                <div className="kv-row"><span className="muted">data</span><span className="mono">{Object.entries(plan.data).map(([k, v]) => `${k}→${v}`).join(', ') || '—'}</span></div>
+                <div className="kv-row"><span className="muted">services</span><span className="mono">{Object.entries(plan.services).map(([k, v]) => `${k}→${v}`).join(', ') || '—'}</span></div>
               </div>
             )}
           </div>
