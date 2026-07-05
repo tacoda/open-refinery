@@ -68,6 +68,7 @@ from .webhooks import create_webhook, delete_webhook, list_webhooks
 from .governance import landscape
 from .packs import disable_pack, enable_pack, list_packs, list_standards
 from .postmortem import postmortem
+from .rollback import rollback_targets, rollback_work_item, stage_history
 from .policies import (
     PolicyDenied,
     create_policy,
@@ -173,6 +174,7 @@ class NewWorkItem(BaseModel):
 class Move(BaseModel):
     to: str
     approve: bool = False  # current user signs off, if the process requires it
+    changes: dict | None = None  # the PR's change set (code/migrations/config/libraries)
 
 
 class RequestApproval(BaseModel):
@@ -785,6 +787,17 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
                              _: User = Depends(current_user)):
         return postmortem(session, item_id)
 
+    @app.get("/work-items/{item_id}/history")
+    def work_item_history(item_id: str, session: Session = Depends(get_session),
+                          _: User = Depends(current_user)):
+        return {"history": stage_history(session, item_id),
+                "rollback_targets": rollback_targets(session, item_id)}
+
+    @app.post("/work-items/{item_id}/rollback")
+    def rollback_item(item_id: str, body: Move, session: Session = Depends(get_session),
+                      user: User = Depends(current_user)):
+        return rollback_work_item(session, item_id, body.to, user.id, SqliteSink(session))
+
     @app.post("/work-items/{item_id}/attest", status_code=201)
     def add_attestation(item_id: str, body: Attest, session: Session = Depends(get_session),
                         user: User = Depends(current_user)):
@@ -795,7 +808,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def move(item_id: str, body: Move, session: Session = Depends(get_session),
              user: User = Depends(current_user)):
         return transition(session, item_id, body.to, user.id, SqliteSink(session),
-                          approver_id=user.id if body.approve else None)
+                          approver_id=user.id if body.approve else None, changes=body.changes)
 
     # --- async approval queue (chained sign-off) ---
     @app.post("/work-items/{item_id}/request-approval", status_code=201)

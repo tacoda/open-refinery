@@ -82,6 +82,7 @@ from .approval_workflows import (
 from .analysis import analyze
 from .debt import audit, health, list_audits, run_audit
 from .postmortem import postmortem
+from .rollback import rollback_targets, rollback_work_item, stage_history
 from .jobs import create_job, enqueue, get_job, list_jobs, run_job
 from .scheduler import due_repos, run_due_ingests
 from .live import HUB
@@ -164,7 +165,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "1.9.0"
+__version__ = "1.10.0"
 
 __all__ = [
     "Factory",
@@ -284,6 +285,9 @@ __all__ = [
     "list_audits",
     "health",
     "postmortem",
+    "rollback_work_item",
+    "rollback_targets",
+    "stage_history",
     "enqueue",
     "run_job",
     "create_job",

@@ -3,6 +3,29 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.10.0] — 2026-07-05
+
+### Added
+- **Rollbacks as a first-class, governed feature.** Every work item now keeps an
+  append-only `StageHistory`, so a work item can be reverted to a **known-good
+  prior stage** — authorized (policy action `rollback`, honoring the enforcement
+  mode and auditing refusals), recorded as a structured `rollback` audit event,
+  and appended to the history.
+- **Rollback reverses the whole change set, not just the stage.** A transition
+  can carry the **PR's diff** categorized as `code` / `migrations` / `config` /
+  `libraries`. A rollback computes a structured **reverse plan** across all of
+  them — code revert-to-commit, DB **migration downgrades** (newest-first),
+  config keys and library versions restored to their pre-change values — and
+  returns it for the harness to apply (the platform governs the revert; it does
+  not run git/alembic/pip itself). `POST /work-items/{id}/transition` accepts an
+  optional `changes` manifest; `GET …/history` and `POST …/rollback` expose the
+  trail and the plan.
+
+### Note
+- `StageHistory` is a brand-new table created by `create_all` on upgrade —
+  additive, so no schema migration is required (the frozen-since-1.0 schema
+  stays additive-only).
+
 ## [1.9.0] — 2026-07-05
 
 ### Added

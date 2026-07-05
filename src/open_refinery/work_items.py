@@ -48,8 +48,17 @@ def create_work_item(session: Session, repo_id: str, process_id: str, title: str
                     current_stage=process.initial, owner_id=owner_id, external_ref=external_ref)
     session.add(item)
     session.commit()
+    _record_stage(session, item.id, process.initial, "initial", owner_id)
     session.refresh(item)
     return item
+
+
+def _record_stage(session: Session, item_id: str, stage: str, kind: str,
+                  actor_id: str | None, changes: dict | None = None) -> None:
+    from .models import StageHistory
+    session.add(StageHistory(work_item_id=item_id, stage=stage, kind=kind,
+                             actor_id=actor_id, changes=changes or {}))
+    session.commit()
 
 
 def get_work_item(session: Session, item_id: str) -> WorkItem | None:
@@ -71,7 +80,7 @@ def list_work_items(session: Session, *, owner_id: str | None = None,
 
 
 def apply_transition(session: Session, item_id: str, to: str, actor_id: str,
-                     audit: AuditSink) -> WorkItem:
+                     audit: AuditSink, *, changes: dict | None = None) -> WorkItem:
     """Apply a move: validate the move + policy + required checks, then move + audit.
 
     Does NOT run the oversight approval gate — callers that reach here have already
@@ -104,9 +113,11 @@ def apply_transition(session: Session, item_id: str, to: str, actor_id: str,
     item.current_stage = to
     session.add(item)
     session.commit()
+    _record_stage(session, item_id, to, "transition", actor_id, changes)
     audit.write(Record.of(
         recipe="transition", actor=actor_id, owner=item.owner_id,
-        inputs={"from": frm, "process": item.process_id, "repo": item.repo_id},
+        inputs={"from": frm, "process": item.process_id, "repo": item.repo_id,
+                "changes": changes or {}},
         output=to, subject=item_id,
     ))
     session.refresh(item)
@@ -114,7 +125,7 @@ def apply_transition(session: Session, item_id: str, to: str, actor_id: str,
 
 
 def transition(session: Session, item_id: str, to: str, actor_id: str, audit: AuditSink,
-               *, approver_id: str | None = None) -> WorkItem:
+               *, approver_id: str | None = None, changes: dict | None = None) -> WorkItem:
     """Synchronous move: enforce the oversight approval gate inline, then apply.
 
     For approve-later flows, use the approval queue (`approvals.request_approval`).
@@ -137,7 +148,7 @@ def transition(session: Session, item_id: str, to: str, actor_id: str, audit: Au
             raise PolicyDenied(
                 f"approval requires {process.min_approver_role}+ (got {approver.role!r})")
 
-    result = apply_transition(session, item_id, to, actor_id, audit)
+    result = apply_transition(session, item_id, to, actor_id, audit, changes=changes)
     if needs_approval:
         audit.write(Record.of(
             recipe="approval", actor=approver_id, owner=result.owner_id,

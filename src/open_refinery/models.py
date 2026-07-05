@@ -108,6 +108,22 @@ class WorkItem(SQLModel, table=True):
     external_ref: str | None = None
 
 
+class StageHistory(SQLModel, table=True):
+    """Append-only record of every stage a work item has occupied — the basis for
+    first-class rollback (revert to a known-good prior stage)."""
+    __tablename__ = "stage_history"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    work_item_id: str = Field(foreign_key="work_items.id", index=True)
+    stage: str
+    kind: str = "transition"          # initial | transition | rollback
+    actor_id: str | None = None
+    # forward change set this transition applied, categorized so a rollback can
+    # reverse each kind: {"code": {"commit","prev"}, "migrations": [id,...],
+    # "config": {KEY: {"old","new"}}, "libraries": {pkg: {"old","new"}}}
+    changes: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    created_at: str = Field(default_factory=now_iso)
+
+
 class Integration(SQLModel, table=True):
     __tablename__ = "integrations"
     id: str = Field(default_factory=new_id, primary_key=True)

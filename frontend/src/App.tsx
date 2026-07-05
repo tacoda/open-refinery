@@ -1446,17 +1446,25 @@ function Work() {
       </div>
       <div className="work-list">
         {rows.map((w) => <WorkRow key={w.id} w={w} onMove={move} onAttest={attest}
-                                  onRequest={requestApproval} />)}
+                                  onRequest={requestApproval} onReload={load} />)}
       </div>
     </section>
   )
 }
 
-function WorkRow({ w, onMove, onAttest, onRequest }: any) {
+function WorkRow({ w, onMove, onAttest, onRequest, onReload }: any) {
   const [to, setTo] = useState(''), [check, setCheck] = useState('')
   const [pm, setPm] = useState<any>(null)
+  const [hist, setHist] = useState<any>(null), [rbTo, setRbTo] = useState(''), [plan, setPlan] = useState<any>(null)
   const runPm = () => pm ? setPm(null)
     : api(`/work-items/${w.id}/postmortem`).then(setPm).catch(fail)
+  const showHist = () => hist ? (setHist(null), setPlan(null))
+    : api(`/work-items/${w.id}/history`).then((h) => { setHist(h); setRbTo(h.rollback_targets[0] ?? '') }).catch(fail)
+  const rollback = () => post(`/work-items/${w.id}/rollback`, { to: rbTo })
+    .then((r) => {
+      setPlan(r.plan); toast.success(`rolled back to ${rbTo}`); onReload?.()
+      return api(`/work-items/${w.id}/history`).then((h) => { setHist(h); setRbTo(h.rollback_targets[0] ?? '') })
+    }).catch(fail)
   return (
     <Card>
       <CardContent>
@@ -1473,7 +1481,32 @@ function WorkRow({ w, onMove, onAttest, onRequest }: any) {
           <Button variant="outline" size="sm" onClick={() => onAttest(w.id, check, true)}>Attest ✓</Button>
           <Button variant="outline" size="sm" onClick={() => onAttest(w.id, check, false)}>Attest ✗</Button>
           <Button variant="outline" size="sm" onClick={runPm}>{pm ? 'Hide post-mortem' : 'Post-mortem'}</Button>
+          <Button variant="outline" size="sm" onClick={showHist}>{hist ? 'Hide history' : 'History'}</Button>
         </div>
+        {hist && (
+          <div style={{ marginTop: '0.6rem', borderTop: '1px solid var(--border)', paddingTop: '0.6rem' }}>
+            <div className="mono">stages: {hist.history.map((h: any) => h.kind === 'rollback' ? `↩ ${h.stage}` : h.stage).join(' → ') || '—'}</div>
+            {hist.rollback_targets.length > 0 ? (
+              <div className="work-actions" style={{ marginTop: '0.4rem' }}>
+                <span className="muted">roll back to</span>
+                <Select value={rbTo} onValueChange={(v) => setRbTo(v ?? '')}>
+                  <SelectTrigger className="field"><SelectValue placeholder="stage…" /></SelectTrigger>
+                  <SelectContent>{hist.rollback_targets.map((s: string) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                </Select>
+                <Button variant="destructive" size="sm" onClick={rollback} disabled={!rbTo}>Roll back</Button>
+              </div>
+            ) : <div className="muted" style={{ marginTop: '0.3rem' }}>no prior stage to roll back to</div>}
+            {plan && (
+              <div style={{ marginTop: '0.4rem' }}>
+                <div className="muted">reverse plan (for the harness to apply):</div>
+                <div className="kv-row"><span className="muted">code</span><span className="mono">{plan.code ? `revert → ${plan.code.revert_to}` : '—'}</span></div>
+                <div className="kv-row"><span className="muted">migrations</span><span className="mono">{plan.migrations.map((m: any) => `↓ ${m.downgrade}`).join(', ') || '—'}</span></div>
+                <div className="kv-row"><span className="muted">config</span><span className="mono">{Object.entries(plan.config).map(([k, v]) => `${k}=${v}`).join(', ') || '—'}</span></div>
+                <div className="kv-row"><span className="muted">libraries</span><span className="mono">{Object.entries(plan.libraries).map(([k, v]) => `${k}@${v}`).join(', ') || '—'}</span></div>
+              </div>
+            )}
+          </div>
+        )}
         {pm && (
           <div style={{ marginTop: '0.6rem', borderTop: '1px solid var(--border)', paddingTop: '0.6rem' }}>
             <div className="kv-row"><span className="muted">root cause</span><span>{pm.root_cause}</span></div>
