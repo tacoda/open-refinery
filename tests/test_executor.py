@@ -12,9 +12,12 @@ from open_refinery import (
     create_quota,
     create_route,
     create_target,
+    create_team,
     create_user,
     execute,
     query_events,
+    set_user_team,
+    team_usage,
 )
 
 
@@ -34,6 +37,16 @@ def test_execute_runs_pipeline_and_audits(monkeypatch):
     r = execute(conn, ian.id, proc.id, "hello", SqliteSink(conn), step="run")
     assert r["target"] == "opus" and "hello" in r["output"]
     assert [e.recipe for e in query_events(conn)] == ["invoke"]
+
+
+def test_execute_attributes_units_to_actor_team(monkeypatch):
+    conn, ian, boss, proc = setup(monkeypatch)
+    team = create_team(conn, "core", boss.id)
+    set_user_team(conn, ian.id, team.id)
+    t = create_target(conn, "opus", "model", "claude-opus-4-8", ian.id)
+    create_route(conn, proc.id, t.id, ian.id)
+    r = execute(conn, ian.id, proc.id, "hello", SqliteSink(conn), step="run")
+    assert team_usage(conn, team.id) == r["units"] > 0  # ledger attributed to the team
 
 
 def test_no_route_raises(monkeypatch):

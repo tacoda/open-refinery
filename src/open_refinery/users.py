@@ -138,6 +138,10 @@ def count_users(session: Session) -> int:
     return len(session.exec(select(User.id)).all())
 
 
+def list_users(session: Session) -> list[User]:
+    return list(session.exec(select(User).order_by(User.created_at)))
+
+
 def rotate_token(session: Session, user_id: str) -> str:
     token = secrets.token_urlsafe(32)
     user = session.get(User, user_id)

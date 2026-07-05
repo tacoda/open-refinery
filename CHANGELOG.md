@@ -3,6 +3,31 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.15.0] — 2026-07-05
+
+### Added
+- **Teams, usage ledger, cost attribution + concurrency caps (M2 on the road to
+  2.0).**
+  - **Teams** — a user belongs to at most one `team` (`User.team_id`); teams are
+    the unit of cost attribution and concurrency capping. `GET/POST/DELETE
+    /teams`, `PUT /users/{id}/team`, and a `GET /users` (projected — never
+    exposes password/token hashes). Teams tab + membership editor in the UI.
+  - **Usage ledger** — every governed invoke appends a `LedgerEntry` (units,
+    actor, team, target) so usage is queryable (the audit event digests units
+    away). Cost attribution rolls up by team; `GET /usage`, Usage tab.
+  - **Concurrency caps** — a team's `max_concurrency` (0 = unlimited) is enforced
+    live at the invoke seam via an in-process in-flight counter; over the cap →
+    `ConcurrencyExceeded` (`429`). Same single-process ethos as the job runner /
+    scheduler (Redis-backed counter can replace it later, same `slot()` API).
+
+### Migration
+- **v13** — `users.team_id` (ALTER-added, indexed → the migration also creates
+  the index). `teams` + `ledger_entries` are new tables (create_all). Reversible
+  downgrade appended. `team_id` and the ledger columns are plain indexed columns,
+  **not** DB foreign keys — an ALTER-added FK column can't be dropped by SQLite
+  (would break the downgrade), and the ledger is an append-only historical log
+  that must survive deletion of the team/target it references.
+
 ## [1.14.0] — 2026-07-05
 
 ### Added

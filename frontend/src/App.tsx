@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'approvals' | 'repos' | 'processes' | 'systems' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics'
+type View = 'work' | 'approvals' | 'repos' | 'processes' | 'systems' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics' | 'teams' | 'usage'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
@@ -29,9 +29,11 @@ const NAV: { group: string; tabs: NavTab[] }[] = [
     { value: 'governance', label: 'Governance', gate: 'admin' } ] },
   { group: 'Platform', tabs: [
     { value: 'systems', label: 'Systems' },
-    { value: 'integrations', label: 'Integrations' }, { value: 'targets', label: 'Targets' } ] },
+    { value: 'integrations', label: 'Integrations' }, { value: 'targets', label: 'Targets' },
+    { value: 'teams', label: 'Teams', gate: 'platform' } ] },
   { group: 'Insights', tabs: [
-    { value: 'metrics', label: 'Metrics' }, { value: 'audits', label: 'Audits' },
+    { value: 'metrics', label: 'Metrics' }, { value: 'usage', label: 'Usage' },
+    { value: 'audits', label: 'Audits' },
     { value: 'coverage', label: 'Coverage' }, { value: 'experiments', label: 'Experiments' },
     { value: 'events', label: 'Audit log' } ] },
   { group: 'Admin', tabs: [
@@ -157,6 +159,8 @@ export default function App() {
               <TabsContent value="repos"><Repos /></TabsContent>
               <TabsContent value="processes"><Processes /></TabsContent>
               <TabsContent value="systems"><Systems /></TabsContent>
+              <TabsContent value="teams"><Teams /></TabsContent>
+              <TabsContent value="usage"><Usage /></TabsContent>
               <TabsContent value="integrations"><Integrations /></TabsContent>
               <TabsContent value="targets"><Targets /></TabsContent>
               <TabsContent value="policies"><Policies /></TabsContent>
@@ -1211,6 +1215,108 @@ function Invitations({ me, roles }: any) {
           ))}</TableBody>
         </Table>
       </CardContent></Card>
+    </section>
+  )
+}
+
+function Teams() {
+  const { rows, load } = useList('/teams')
+  const { rows: users } = useList('/users')
+  const [name, setName] = useState(''), [cap, setCap] = useState('0')
+  const add = () => post('/teams', { name, max_concurrency: Number(cap) || 0 })
+    .then(() => { setName(''); setCap('0'); load() }).catch(fail)
+  const del = (id: string) => api(`/teams/${id}`, { method: 'DELETE' }).then(load).catch(fail)
+  const assign = (userId: string, teamId: string) =>
+    api(`/users/${userId}/team`, { method: 'PUT', body: JSON.stringify({ team_id: teamId || null }) })
+      .then(() => toast.success('team updated')).catch(fail)
+  const teamName = (id: string) => rows.find((t: any) => t.id === id)?.name ?? '—'
+
+  return (
+    <section className="page">
+      <h2 className="page-title">Teams</h2>
+      <p className="muted">Group users for cost attribution and live concurrency caps (0 = unlimited concurrent invokes).</p>
+      <Card>
+        <CardHeader><CardTitle>New team</CardTitle></CardHeader>
+        <CardContent>
+          <div className="toolbar">
+            <Input className="field" placeholder="name" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input className="field" type="number" min="0" placeholder="max concurrency" value={cap} onChange={(e) => setCap(e.target.value)} />
+            <Button onClick={add} disabled={!name}>Create</Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow><TableHead>Team</TableHead><TableHead>Max concurrency</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>
+              <EmptyRow show={!rows.length} cols={3}>No teams yet.</EmptyRow>
+              {rows.map((t: any) => (
+                <TableRow key={t.id}>
+                  <TableCell>{t.name}</TableCell>
+                  <TableCell className="mono">{t.max_concurrency || '∞'}</TableCell>
+                  <TableCell><Button variant="outline" size="sm" onClick={() => del(t.id)}>Delete</Button></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Membership</CardTitle></CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow><TableHead>User</TableHead><TableHead>Team</TableHead></TableRow></TableHeader>
+            <TableBody>
+              <EmptyRow show={!users.length} cols={2}>No users.</EmptyRow>
+              {users.map((u: any) => (
+                <TableRow key={u.id}>
+                  <TableCell>{u.email}</TableCell>
+                  <TableCell>
+                    <Select value={u.team_id ?? ''} onValueChange={(v) => assign(u.id, v === 'none' ? '' : (v ?? ''))}>
+                      <SelectTrigger className="field"><SelectValue placeholder={u.team_id ? teamName(u.team_id) : 'unassigned'} /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">unassigned</SelectItem>
+                        {rows.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
+function Usage() {
+  const [data, setData] = useState<any>(null)
+  useEffect(() => { api('/usage').then(setData).catch(fail) }, [])
+  const teams = data?.by_team ?? []
+  return (
+    <section className="page">
+      <h2 className="page-title">Usage &amp; cost attribution</h2>
+      <p className="muted">Units metered per governed invoke, attributed to the actor's team.</p>
+      <Card>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow><TableHead>Team</TableHead><TableHead>Units</TableHead></TableRow></TableHeader>
+            <TableBody>
+              <EmptyRow show={!teams.length} cols={2}>No usage recorded yet.</EmptyRow>
+              {teams.map((r: any) => (
+                <TableRow key={r.team_id ?? 'unassigned'}>
+                  <TableCell>{r.team}</TableCell>
+                  <TableCell className="mono">{r.units}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </section>
   )
 }

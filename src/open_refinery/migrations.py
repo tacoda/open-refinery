@@ -63,6 +63,11 @@ MIGRATIONS: list[str] = [
     # v12 (1.8.0): scheduled ingest cadence per repo
     "ALTER TABLE repositories ADD COLUMN ingest_interval_hours INTEGER NOT NULL DEFAULT 0;"
     "ALTER TABLE repositories ADD COLUMN last_ingest_at TEXT NOT NULL DEFAULT '';",
+    # v13 (1.15.0): a user belongs to a team (cost attribution + concurrency caps).
+    # ALTER-added indexed column → create the index too (create_all only indexes
+    # new tables). Teams + ledger_entries are new tables, handled by create_all.
+    "ALTER TABLE users ADD COLUMN team_id TEXT;"
+    "CREATE INDEX IF NOT EXISTS ix_users_team_id ON users (team_id);",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -87,6 +92,8 @@ DOWNGRADES: list[str] = [
     "DROP INDEX IF EXISTS ix_processes_pack;",                                           # v11
     "ALTER TABLE repositories DROP COLUMN ingest_interval_hours;"
     "ALTER TABLE repositories DROP COLUMN last_ingest_at;",                              # v12
+    "DROP INDEX IF EXISTS ix_users_team_id;"
+    "ALTER TABLE users DROP COLUMN team_id;",                                            # v13
 ]
 
 

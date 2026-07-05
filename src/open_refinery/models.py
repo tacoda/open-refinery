@@ -31,6 +31,36 @@ class User(SQLModel, table=True):
     pw_salt: str
     pw_hash: str
     token_hash: str = Field(unique=True, index=True)
+    # plain indexed column, not a DB foreign key: an ALTER-added FK column can't be
+    # dropped by SQLite, which would break the reversible v13 downgrade. Membership
+    # integrity is enforced in `set_user_team`.
+    team_id: str | None = Field(default=None, index=True)
+    created_at: str = Field(default_factory=now_iso)
+
+
+class Team(SQLModel, table=True):
+    """A group users belong to — the unit of cost attribution and concurrency cap."""
+    __tablename__ = "teams"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    name: str
+    max_concurrency: int = 0            # 0 = unlimited concurrent invokes
+    owner_id: str = Field(foreign_key="users.id", index=True)
+    created_at: str = Field(default_factory=now_iso)
+
+
+class LedgerEntry(SQLModel, table=True):
+    """One usage record per governed invoke — the queryable usage ledger (the
+    audit event digests units away, so cost attribution needs its own row)."""
+    __tablename__ = "ledger_entries"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    # plain indexed columns (no FKs): an append-only historical log must survive
+    # deletion of the team/target it references.
+    team_id: str | None = Field(default=None, index=True)
+    actor_id: str = Field(index=True)
+    target_id: str = Field(index=True)
+    units: int = 0
+    kind: str = "invoke"
+    subject: str | None = None          # e.g. work item id
     created_at: str = Field(default_factory=now_iso)
 
 

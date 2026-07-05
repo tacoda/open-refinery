@@ -13,7 +13,9 @@ from __future__ import annotations
 from sqlmodel import Session
 
 from .audit import AuditSink
-from .models import User
+from .concurrency import slot
+from .ledger import record_usage
+from .models import Team, User
 from .policies import enforce as enforce_policy
 from .policies import scan_content
 from .provenance import Record
@@ -249,44 +251,48 @@ def execute(session: Session, actor_id: str, process_id: str, payload: str, audi
 
     clean_in, in_hits = scan_content(payload)  # filter before anything leaves
     errors: list[str] = []
-    for target in targets:
-        # role-based authorization to invoke this target kind (deny aborts, no failover)
-        enforce_policy(session, actor.role, "invoke", target.kind,
-                       audit=audit, actor_id=actor_id, subject=work_item_id)
-        consume_quota(session, target.id)                 # pre-call; over → QuotaExceeded
-        credential = target_credential(session, target.id)  # decrypted here, never returned
-        try:
-            result = EXECUTORS[target.kind](target, credential, clean_in)
-        except Exception as exc:  # backend failure → try the next route
-            errors.append(f"{target.name}: {exc}")
-            audit.write(Record.of(
-                recipe="invoke-failed", actor=actor_id, owner=actor_id,
-                inputs={"target": target.id, "step": step}, output=str(exc), subject=work_item_id))
-            continue
-
-        raw = result.get("output", "")
-        if target.output_schema:  # structured contract: validate + keep structured
-            validate_schema(raw, target.output_schema)
-            clean_out, out_hits = _filter_value(raw)
-            structured = True
-        else:
-            clean_out, out_hits = scan_content(str(raw))
-            structured = False
-        units = int(result.get("units", 1))
-        redactions = in_hits + out_hits
-        audit.write(Record.of(
-            recipe="invoke", actor=actor_id, owner=actor_id,
-            inputs={"target": target.id, "step": step, "units": units,
-                    "redactions": redactions, "structured": structured},
-            output=clean_out, subject=work_item_id))
-        if experiment_id and arm:  # experiment-tagged: feed the control/treatment eval
-            from .experiments import add_sample
-            phase = "before" if arm == "control" else "after"
+    team = session.get(Team, actor.team_id) if actor.team_id else None
+    cap = team.max_concurrency if team else 0
+    with slot(actor.team_id, cap):  # live in-flight cap → ConcurrencyExceeded if at limit
+        for target in targets:
+            # role-based authorization to invoke this target kind (deny aborts, no failover)
+            enforce_policy(session, actor.role, "invoke", target.kind,
+                           audit=audit, actor_id=actor_id, subject=work_item_id)
+            consume_quota(session, target.id)                 # pre-call; over → QuotaExceeded
+            credential = target_credential(session, target.id)  # decrypted here, never returned
             try:
-                add_sample(session, experiment_id, phase, "units", units)
-            except Exception:  # tagging is best-effort — never fail the run over it
-                pass
-        return {"output": clean_out, "target": target.name, "kind": target.kind,
-                "units": units, "redactions": redactions, "structured": structured}
+                result = EXECUTORS[target.kind](target, credential, clean_in)
+            except Exception as exc:  # backend failure → try the next route
+                errors.append(f"{target.name}: {exc}")
+                audit.write(Record.of(
+                    recipe="invoke-failed", actor=actor_id, owner=actor_id,
+                    inputs={"target": target.id, "step": step}, output=str(exc), subject=work_item_id))
+                continue
+
+            raw = result.get("output", "")
+            if target.output_schema:  # structured contract: validate + keep structured
+                validate_schema(raw, target.output_schema)
+                clean_out, out_hits = _filter_value(raw)
+                structured = True
+            else:
+                clean_out, out_hits = scan_content(str(raw))
+                structured = False
+            units = int(result.get("units", 1))
+            redactions = in_hits + out_hits
+            audit.write(Record.of(
+                recipe="invoke", actor=actor_id, owner=actor_id,
+                inputs={"target": target.id, "step": step, "units": units,
+                        "redactions": redactions, "structured": structured},
+                output=clean_out, subject=work_item_id))
+            record_usage(session, actor_id, target.id, units, subject=work_item_id)  # cost attribution
+            if experiment_id and arm:  # experiment-tagged: feed the control/treatment eval
+                from .experiments import add_sample
+                phase = "before" if arm == "control" else "after"
+                try:
+                    add_sample(session, experiment_id, phase, "units", units)
+                except Exception:  # tagging is best-effort — never fail the run over it
+                    pass
+            return {"output": clean_out, "target": target.name, "kind": target.kind,
+                    "units": units, "redactions": redactions, "structured": structured}
 
     raise ExecutionError("all candidate targets failed: " + "; ".join(errors))

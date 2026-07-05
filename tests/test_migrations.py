@@ -56,6 +56,8 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
             "ALTER TABLE repositories DROP COLUMN integration_id",
             "ALTER TABLE repositories DROP COLUMN ingest_interval_hours",
             "ALTER TABLE repositories DROP COLUMN last_ingest_at",
+            "DROP INDEX IF EXISTS ix_users_team_id",  # indexed → drop before column
+            "ALTER TABLE users DROP COLUMN team_id",
             "DROP TABLE systems",
             "PRAGMA user_version = 7",   # pretend this is a 1.0-era install (schema v7)
         ):
@@ -72,6 +74,8 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
         assert {"namespace", "pack", "layer"} <= pol
         repo = {r[1] for r in raw.execute("PRAGMA table_info(repositories)").fetchall()}
         assert "integration_id" in repo
+        usr = {r[1] for r in raw.execute("PRAGMA table_info(users)").fetchall()}
+        assert "team_id" in usr
         assert raw.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='systems'").fetchone()
         assert raw.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)

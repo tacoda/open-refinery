@@ -97,6 +97,9 @@ from .repositories import (
 )
 from .settings import delete_setting, get_setting, list_setting_keys, set_setting
 from .store import DEFAULT_DATABASE_URL, SqliteSink, engine_for, purge_events, query_events
+from .concurrency import ConcurrencyExceeded
+from .ledger import usage_by_actor, usage_by_team
+from .teams import create_team, delete_team, list_teams, set_user_team
 from .targets import (
     QuotaExceeded,
     create_quota,
@@ -121,6 +124,7 @@ from .users import (
     create_user,
     delete_role,
     list_roles,
+    list_users,
     role_rank,
     rotate_token,
     session_user,
@@ -171,6 +175,15 @@ class NewWorkItem(BaseModel):
     repo_id: str
     process_id: str
     title: str
+
+
+class NewTeam(BaseModel):
+    name: str
+    max_concurrency: int = 0    # 0 = unlimited concurrent invokes
+
+
+class AssignTeam(BaseModel):
+    team_id: str | None = None  # null → unassign
 
 
 class AuthorizeReq(BaseModel):
@@ -438,6 +451,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         (AttestationMissing, 409),
         (AttestationFailed, 409),
         (QuotaExceeded, 429),
+        (ConcurrencyExceeded, 429),
         (PolicyDenied, 403),
         (RoleInUse, 409),
         (ExecutionError, 502),
@@ -807,6 +821,39 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def rollback_item(item_id: str, body: Move, session: Session = Depends(get_session),
                       user: User = Depends(current_user)):
         return rollback_work_item(session, item_id, body.to, user.id, SqliteSink(session))
+
+    @app.get("/users")
+    def get_users(session: Session = Depends(get_session),
+                  _: User = Depends(require("platform", "admin"))):
+        # projected — never expose password/token hashes
+        return [{"id": u.id, "email": u.email, "role": u.role, "team_id": u.team_id}
+                for u in list_users(session)]
+
+    # --- teams, usage ledger, cost attribution ---
+    @app.get("/teams")
+    def get_teams(session: Session = Depends(get_session), _: User = Depends(current_user)):
+        return list_teams(session)
+
+    @app.post("/teams", status_code=201)
+    def add_team(body: NewTeam, session: Session = Depends(get_session),
+                 user: User = Depends(require("platform", "admin"))):
+        return create_team(session, body.name, user.id, max_concurrency=body.max_concurrency)
+
+    @app.delete("/teams/{team_id}")
+    def remove_team(team_id: str, session: Session = Depends(get_session),
+                    _: User = Depends(require("platform", "admin"))):
+        delete_team(session, team_id)
+        return {"status": "deleted"}
+
+    @app.put("/users/{user_id}/team")
+    def assign_team(user_id: str, body: AssignTeam, session: Session = Depends(get_session),
+                    _: User = Depends(require("platform", "admin"))):
+        u = set_user_team(session, user_id, body.team_id)
+        return {"id": u.id, "team_id": u.team_id}
+
+    @app.get("/usage")
+    def get_usage(session: Session = Depends(get_session), _: User = Depends(current_user)):
+        return {"by_team": usage_by_team(session), "by_actor": usage_by_actor(session)}
 
     @app.post("/authorize")
     def authorize(body: AuthorizeReq, session: Session = Depends(get_session),
