@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'approvals' | 'repos' | 'processes' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics'
+type View = 'work' | 'approvals' | 'repos' | 'processes' | 'systems' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
@@ -28,6 +28,7 @@ const NAV: { group: string; tabs: NavTab[] }[] = [
     { value: 'packs', label: 'Packs' },
     { value: 'governance', label: 'Governance', gate: 'admin' } ] },
   { group: 'Platform', tabs: [
+    { value: 'systems', label: 'Systems' },
     { value: 'integrations', label: 'Integrations' }, { value: 'targets', label: 'Targets' } ] },
   { group: 'Insights', tabs: [
     { value: 'metrics', label: 'Metrics' }, { value: 'audits', label: 'Audits' },
@@ -133,6 +134,7 @@ export default function App() {
               <TabsContent value="approvals"><Approvals /></TabsContent>
               <TabsContent value="repos"><Repos /></TabsContent>
               <TabsContent value="processes"><Processes /></TabsContent>
+              <TabsContent value="systems"><Systems /></TabsContent>
               <TabsContent value="integrations"><Integrations /></TabsContent>
               <TabsContent value="targets"><Targets /></TabsContent>
               <TabsContent value="policies"><Policies /></TabsContent>
@@ -1150,6 +1152,71 @@ function Invitations({ me, roles }: any) {
           ))}</TableBody>
         </Table>
       </CardContent></Card>
+    </section>
+  )
+}
+
+function Systems() {
+  const { rows, load } = useList('/systems')
+  const { rows: repos } = useList('/repositories')
+  const [name, setName] = useState(''), [kind, setKind] = useState('service')
+  const [picked, setPicked] = useState<string[]>([])
+  const [cov, setCov] = useState<Record<string, any>>({})
+  const toggle = (id: string) =>
+    setPicked((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])
+  const add = () => post('/systems', { name, kind, repo_ids: picked })
+    .then(() => { setName(''); setPicked([]); load() }).catch(fail)
+  const del = (id: string) => api(`/systems/${id}`, { method: 'DELETE' }).then(load).catch(fail)
+  const loadCov = (id: string) => api(`/systems/${id}/coverage`).then((r) => setCov((c) => ({ ...c, [id]: r }))).catch(fail)
+  const repoName = (id: string) => repos.find((r: any) => r.id === id)?.name ?? id.slice(0, 8)
+  const badge = (s: number) => s >= 80 ? 'default' : s >= 50 ? 'secondary' : 'destructive'
+
+  return (
+    <section className="page">
+      <h2 className="page-title">Systems</h2>
+      <p className="muted">Compose repositories into a service / microservice group / server, and roll up their governance health.</p>
+      <Card>
+        <CardHeader><CardTitle>New system</CardTitle></CardHeader>
+        <CardContent>
+          <div className="toolbar">
+            <Input className="field" placeholder="name" value={name} onChange={(e) => setName(e.target.value)} />
+            <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+              <SelectContent>{['service', 'microservices', 'server'].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+            </Select>
+            <Button onClick={add} disabled={!name}>Create</Button>
+          </div>
+          <div className="toolbar">
+            {repos.map((r: any) => (
+              <Button key={r.id} size="sm" variant={picked.includes(r.id) ? 'default' : 'outline'}
+                      onClick={() => toggle(r.id)}>{r.name}</Button>
+            ))}
+            {!repos.length && <span className="muted">no repositories yet</span>}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow><TableHead>System</TableHead><TableHead>Kind</TableHead><TableHead>Repos</TableHead><TableHead>Health</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>
+              <EmptyRow show={!rows.length} cols={9}>No systems yet — compose repositories above.</EmptyRow>
+              {rows.map((s: any) => (
+                <TableRow key={s.id}>
+                  <TableCell>{s.name}</TableCell>
+                  <TableCell><Badge variant="secondary">{s.kind}</Badge></TableCell>
+                  <TableCell className="mono">{(s.repo_ids || []).map(repoName).join(', ') || '—'}</TableCell>
+                  <TableCell>{cov[s.id]
+                    ? <Badge variant={badge(cov[s.id].score)}>{cov[s.id].score} · {cov[s.id].imitation} imitation</Badge>
+                    : <Button size="sm" variant="outline" onClick={() => loadCov(s.id)}>Roll up</Button>}</TableCell>
+                  <TableCell><Button variant="outline" size="sm" onClick={() => del(s.id)}>Delete</Button></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </section>
   )
 }

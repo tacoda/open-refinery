@@ -81,6 +81,18 @@ class Process(SQLModel, table=True):
         return tuple(self.checks.get(to, ()))
 
 
+class System(SQLModel, table=True):
+    """A platform-level grouping of repositories that compose a service /
+    microservice group / server. Membership drives system-level coverage rollups."""
+    __tablename__ = "systems"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    name: str
+    kind: str = "service"             # service | microservices | server | … (customizable)
+    repo_ids: list = Field(default_factory=list, sa_column=Column(JSON))
+    owner_id: str = Field(foreign_key="users.id", index=True)
+    created_at: str = Field(default_factory=now_iso)
+
+
 class WorkItem(SQLModel, table=True):
     __tablename__ = "work_items"
     id: str = Field(default_factory=new_id, primary_key=True)

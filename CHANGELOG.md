@@ -3,6 +3,17 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.3.0] — 2026-07-05
+
+### Added
+- **Systems — compose repositories into services.** A platform-level `System`
+  groups repos (service / microservice group / server) and **rolls up their
+  governance health**: average coverage score + total imitation surfaces across
+  members. `GET/POST /systems`, `POST /systems/{id}/repos`,
+  `GET /systems/{id}/coverage`, `DELETE /systems/{id}`. Dashboard **Systems** tab
+  (Platform group) — pick member repos, roll up health. New `systems` table
+  (additive; schema stays frozen).
+
 ## [1.2.0] — 2026-07-05
 
 ### Added

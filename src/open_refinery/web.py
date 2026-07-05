@@ -74,6 +74,13 @@ from .policies import (
 )
 from .processes import create_process, list_processes
 from .repo_governance import create_claim, delete_claim, list_claims, report as repo_report
+from .systems import (
+    create_system,
+    delete_system,
+    list_systems,
+    set_system_repos,
+    system_coverage,
+)
 from .repositories import DuplicateRepository, create_repository, import_or_get, list_repositories
 from .settings import delete_setting, get_setting, list_setting_keys, set_setting
 from .store import DEFAULT_DATABASE_URL, SqliteSink, engine_for, purge_events, query_events
@@ -259,6 +266,16 @@ class ReviewBody(BaseModel):
 
 class ResubmitBody(BaseModel):
     payload: dict | None = None
+
+
+class NewSystem(BaseModel):
+    name: str
+    kind: str = "service"
+    repo_ids: list[str] = []
+
+
+class SystemRepos(BaseModel):
+    repo_ids: list[str]
 
 
 class NewClaim(BaseModel):
@@ -505,6 +522,32 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def run_audits(area: str = "all", session: Session = Depends(get_session),
                    user: User = Depends(current_user)):
         return run_audit(session, area, user.id)
+
+    # --- systems (compose repos into services) ---
+    @app.get("/systems")
+    def get_systems(session: Session = Depends(get_session), _: User = Depends(current_user)):
+        return list_systems(session)
+
+    @app.post("/systems", status_code=201)
+    def add_system(body: NewSystem, session: Session = Depends(get_session),
+                   user: User = Depends(require("platform", "admin"))):
+        return create_system(session, body.name, body.kind, user.id, repo_ids=body.repo_ids)
+
+    @app.post("/systems/{system_id}/repos")
+    def set_repos(system_id: str, body: SystemRepos, session: Session = Depends(get_session),
+                  _: User = Depends(require("platform", "admin"))):
+        return set_system_repos(session, system_id, body.repo_ids)
+
+    @app.get("/systems/{system_id}/coverage")
+    def sys_coverage(system_id: str, session: Session = Depends(get_session),
+                     _: User = Depends(current_user)):
+        return system_coverage(session, system_id)
+
+    @app.delete("/systems/{system_id}")
+    def remove_system(system_id: str, session: Session = Depends(get_session),
+                      _: User = Depends(require("platform", "admin"))):
+        delete_system(session, system_id)
+        return {"status": "deleted"}
 
     # --- repo-level drift & coverage ---
     @app.get("/repositories/{repo_id}/coverage")

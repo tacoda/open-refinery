@@ -95,6 +95,13 @@ from .repo_governance import (
     list_claims,
     report as repo_report,
 )
+from .systems import (
+    create_system,
+    delete_system,
+    list_systems,
+    set_system_repos,
+    system_coverage,
+)
 from .governance import landscape
 from .packs import (
     disable_pack,
@@ -150,7 +157,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 __all__ = [
     "Factory",
@@ -257,6 +264,11 @@ __all__ = [
     "list_claims",
     "delete_claim",
     "repo_report",
+    "create_system",
+    "list_systems",
+    "set_system_repos",
+    "system_coverage",
+    "delete_system",
     "audit",
     "run_audit",
     "list_audits",
