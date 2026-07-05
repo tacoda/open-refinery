@@ -1506,6 +1506,7 @@ function WorkRow({ w, onMove, onAttest, onRequest, onReload }: any) {
                 <div className="kv-row"><span className="muted">libraries</span><span className="mono">{Object.entries(plan.libraries).map(([k, v]) => `${k}@${v}`).join(', ') || '—'}</span></div>
                 <div className="kv-row"><span className="muted">data</span><span className="mono">{Object.entries(plan.data).map(([k, v]) => `${k}→${v}`).join(', ') || '—'}</span></div>
                 <div className="kv-row"><span className="muted">services</span><span className="mono">{Object.entries(plan.services).map(([k, v]) => `${k}→${v}`).join(', ') || '—'}</span></div>
+                <div className="kv-row"><span className="muted">secrets</span><span className="mono">{Object.entries(plan.secrets).map(([k, v]) => `${k}→${v}`).join(', ') || '—'}</span></div>
               </div>
             )}
           </div>

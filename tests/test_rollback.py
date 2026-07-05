@@ -66,6 +66,7 @@ def test_reverse_plan_undoes_code_migrations_config_and_libraries():
         "libraries": {"requests": {"old": "2.30", "new": "2.31"}},
         "data": {"orders": {"old": "snap-1", "new": "snap-2"}},
         "services": {"payments": {"old": "stripe", "new": "adyen"}},
+        "secrets": {"db_password": {"old": "v7", "new": "v8"}},  # version refs, not material
     })
     transition(conn, item.id, "review", dev.id, audit, changes={
         "code": {"commit": "c3", "prev": "c2"},
@@ -84,6 +85,7 @@ def test_reverse_plan_undoes_code_migrations_config_and_libraries():
     assert plan["libraries"] == {"requests": "2.30"}
     assert plan["data"] == {"orders": "snap-1"}                # restore pre-update snapshot
     assert plan["services"] == {"payments": "stripe"}          # restore prior vendor
+    assert plan["secrets"] == {"db_password": "v7"}            # restore prior credential ref
 
 
 def test_cannot_rollback_to_unvisited_or_current_stage():

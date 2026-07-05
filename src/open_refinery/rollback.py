@@ -4,8 +4,9 @@ Rolling back is not a normal forward transition: it moves a work item back to a
 stage it has **previously occupied** (from its `StageHistory`) and *reverses the
 change sets* of every transition being undone — not just the code, but the
 database migrations, configuration, library/dependency changes, **data updates**
-(restore the prior snapshot), and **service vendor swaps** (restore the prior
-vendor) those transitions carried in their diff.
+(restore the prior snapshot), **service vendor swaps** (restore the prior
+vendor), and **secret/credential rotations** (restore the prior credential
+*reference* — never the material) those transitions carried in their diff.
 
 The platform governs; it does not run git/alembic/pip itself (that's the
 harness's job). So a rollback authorizes the revert (policy action `rollback`,
@@ -53,7 +54,13 @@ def _undone(history: list[StageHistory], to_stage: str) -> list[StageHistory]:
 
 # Categories that are a map of {name: {"old", "new"}} — reversed by restoring
 # each name to its value *before the earliest undone change* (first-seen "old").
-_RESTORE_KEYS = ("config", "env", "libraries", "data", "services")
+#
+# SECURITY: `secrets` old/new are **references only** — a credential version id,
+# rotation id, or vault path — NEVER the secret material. The change set is
+# stored in StageHistory.changes and digested into the audit trail (plaintext),
+# so material must never be placed there. A rollback restores the prior
+# reference; the harness re-activates that credential version out of band.
+_RESTORE_KEYS = ("config", "env", "libraries", "data", "services", "secrets")
 
 
 def reverse_plan(undone: list[StageHistory]) -> dict:
@@ -61,8 +68,8 @@ def reverse_plan(undone: list[StageHistory]) -> dict:
 
     Restores each thing to its state *before the earliest undone change*: code to
     that transition's `prev` commit; each config value / env var / library /
-    dataset / service to its first-seen `old`; migrations are downgraded
-    newest-first so dependents drop first.
+    dataset / service / secret-reference to its first-seen `old`; migrations are
+    downgraded newest-first so dependents drop first.
     """
     plan: dict = {"code": None, "migrations": [], **{k: {} for k in _RESTORE_KEYS}}
     forward_migrations = []

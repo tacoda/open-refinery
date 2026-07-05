@@ -3,6 +3,19 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.12.0] — 2026-07-05
+
+### Added
+- **Rollback covers secret/credential rotations too.** A new `secrets` change-set
+  category reverses a rotation by restoring the **prior credential reference**.
+  **Security:** `secrets` `old`/`new` are references only — a credential version
+  id, rotation id, or vault path — **never the secret material**. The change set
+  is stored in `StageHistory.changes` and digested into the audit trail
+  (plaintext), so material must never be placed there; the rollback plan restores
+  the prior reference and the harness re-activates that credential version out of
+  band. (Consistent with "only `SECRET_KEY` in env; everything else encrypted;
+  secrets never returned by the API.")
+
 ## [1.11.0] — 2026-07-05
 
 ### Added
