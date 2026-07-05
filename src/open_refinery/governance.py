@@ -17,7 +17,7 @@ from sqlmodel import Session, func, select
 
 from .analysis import analyze
 from .models import Policy, User
-from .policies import layer_rank, list_policies
+from .policies import enforcement_mode, layer_rank, list_policies
 from .users import list_roles, role_rank
 
 
@@ -63,4 +63,5 @@ def landscape(session: Session) -> dict:
         "layers": layered,
         "overrides": overrides,
         "violations": analyze(session)["findings"],  # dead/contradiction/redundant/injection
+        "enforcement": enforcement_mode(session),     # audit (default-allow) | strict (whitelist)
     }

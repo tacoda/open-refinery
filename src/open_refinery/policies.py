@@ -23,6 +23,7 @@ EFFECTS = ("allow", "deny")
 LAYERS = ("factory", "harness", "charter")
 LAYER_RANK = {"charter": 1, "harness": 2, "factory": 3}
 STRICT_DEFAULT_KEY = "policy.strict_default"  # admin setting; "true"/"false"
+ENFORCEMENT_KEY = "policy.enforcement"        # admin setting; "audit" | "strict"
 
 
 def layer_rank(layer: str) -> int:
@@ -80,42 +81,67 @@ def delete_policy(session: Session, policy_id: str) -> None:
 
 
 def decide(policies: list[Policy], role: str, action: str, resource: str,
-           *, rank_of=None) -> bool:
-    """Allow unless a matching rule denies (deny-overrides; default allow).
+           *, rank_of=None, default_allow: bool = True) -> bool:
+    """Decide whether an action is permitted by the rule set.
 
     Only `rule` policies gate. **Layer graph:** precedence resolves on the lattice
     of (author role rank, artifact layer) — role axis dominant, artifact axis
-    (factory > harness > charter) as tiebreak. A **strict** rule locks the
-    decision against lower points on the lattice: the highest-key strict rule
-    wins; ties at that key deny-override. With no strict rule, plain deny-overrides
-    applies. `rank_of` defaults to a flat 0, so the layer axis alone orders when
-    no author ranks are supplied.
+    (factory > harness > charter) as tiebreak; a **strict** rule locks the
+    decision at the highest lattice point (ties deny-override).
+
+    `default_allow=True` (audit mode): allow unless a matching rule denies.
+    `default_allow=False` (**whitelist / default-deny**): deny unless a matching
+    rule explicitly allows (and none in the deciding pool denies). No matching
+    rule at all → the default.
     """
     rank_of = rank_of or (lambda _p: 0)
     key = lambda p: (rank_of(p), layer_rank(p.layer))
     matches = [p for p in policies if p.kind == "rule"
                and _match(p.role, role) and _match(p.action, action) and _match(p.resource, resource)]
+    if not matches:
+        return default_allow
     strict = [p for p in matches if p.strict]
+    pool = matches
     if strict:
         top = max(key(p) for p in strict)              # highest lattice point that locked
         pool = [p for p in strict if key(p) == top]
-        return not any(p.effect == "deny" for p in pool)
-    return not any(p.effect == "deny" for p in matches)
+    denied = any(p.effect == "deny" for p in pool)
+    if default_allow:
+        return not denied
+    return not denied and any(p.effect == "allow" for p in pool)  # whitelist: needs an explicit allow
 
 
-def enforce(session: Session, role: str, action: str, resource: str) -> None:
-    """Raise PolicyDenied if the current policy set denies the action.
+def enforcement_mode(session: Session) -> str:
+    """Org enforcement mode: 'audit' (default-allow, opt-in deny) or 'strict'
+    (whitelist / default-deny). Admin setting `policy.enforcement`."""
+    mode = (get_setting(session, ENFORCEMENT_KEY) or "audit").lower()
+    return "strict" if mode in ("strict", "whitelist", "deny") else "audit"
 
-    Resolves each rule's layer from its author's role rank (the platform→developer
-    axis), so a higher-layer strict rule cannot be overridden by a lower one.
+
+def enforce(session: Session, role: str, action: str, resource: str, *,
+            audit=None, actor_id: str | None = None, subject: str | None = None) -> None:
+    """Proactively gate an action: raise `PolicyDenied` if not permitted, and
+    **record the refusal in the audit log** (when an audit sink is given).
+
+    Honors the org enforcement mode — `audit` (default-allow) or `strict`
+    (whitelist / default-deny). Resolves each rule's layer from its author's role
+    rank, so a higher-layer strict rule can't be overridden by a lower one.
     """
     policies = list_policies(session)
     owners = {p.owner_id for p in policies}
     ranks = {oid: role_rank(session, u.role)
              for oid in owners if (u := session.get(User, oid)) is not None}
     rank_of = lambda p: ranks.get(p.owner_id, 0)
-    if not decide(policies, role, action, resource, rank_of=rank_of):
-        raise PolicyDenied(f"policy denies {role!r} {action!r} on {resource!r}")
+    allow_default = enforcement_mode(session) == "audit"
+    if not decide(policies, role, action, resource, rank_of=rank_of, default_allow=allow_default):
+        reason = f"policy denies {role!r} {action!r} on {resource!r}"
+        if audit is not None:  # every refused attempt is auditable
+            from .provenance import Record
+            audit.write(Record.of(recipe="denied", actor=actor_id or role, owner=actor_id or role,
+                                  inputs={"role": role, "action": action, "resource": resource,
+                                          "mode": enforcement_mode(session)},
+                                  output=reason, subject=subject))
+        raise PolicyDenied(reason)
 
 
 # --- content filtering ----------------------------------------------------

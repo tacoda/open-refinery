@@ -251,7 +251,8 @@ def execute(session: Session, actor_id: str, process_id: str, payload: str, audi
     errors: list[str] = []
     for target in targets:
         # role-based authorization to invoke this target kind (deny aborts, no failover)
-        enforce_policy(session, actor.role, "invoke", target.kind)
+        enforce_policy(session, actor.role, "invoke", target.kind,
+                       audit=audit, actor_id=actor_id, subject=work_item_id)
         consume_quota(session, target.id)                 # pre-call; over → QuotaExceeded
         credential = target_credential(session, target.id)  # decrypted here, never returned
         try:

@@ -116,6 +116,7 @@ from .policies import (
     decide,
     delete_policy,
     enforce,
+    enforcement_mode,
     list_policies,
     scan_content,
 )
@@ -158,7 +159,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "1.4.1"
+__version__ = "1.5.0"
 
 __all__ = [
     "Factory",
@@ -256,6 +257,7 @@ __all__ = [
     "delete_policy",
     "decide",
     "enforce",
+    "enforcement_mode",
     "scan_content",
     "list_packs",
     "enable_pack",

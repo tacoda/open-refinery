@@ -3,6 +3,27 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.5.0] — 2026-07-05
+
+### Added
+- **Proactive enforcement layer.** Governance can now *restrain* actions, not
+  just explain them after the fact:
+  - **Whitelist / default-deny mode** — an admin setting `policy.enforcement`
+    (`audit` default-allow, or `strict` whitelist). In `strict`, an action at a
+    gate (work-item transition, executor invoke) proceeds **only if an explicit
+    allow rule matches** — otherwise it's blocked. `decide` gained a
+    `default_allow` flag; `enforcement_mode` resolves the setting.
+  - **Every refused attempt is audited** — `enforce` writes a `denied` event
+    (actor, action, resource, mode, reason) before raising, so refusals show in
+    the Audit log in both modes (closing the prior gap where denials weren't
+    recorded).
+  - Governance landscape reports the active enforcement mode; Settings hints and
+    a landscape badge surface it.
+
+### Note
+- This is the shift from *legible* automation (observe/audit) to *restrained*
+  automation (block-before-act). Default stays `audit` — opt into `strict`.
+
 ## [1.4.1] — 2026-07-05
 
 ### Added

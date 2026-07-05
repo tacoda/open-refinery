@@ -90,7 +90,8 @@ def apply_transition(session: Session, item_id: str, to: str, actor_id: str,
     if not process.can_transition(frm, to):
         raise InvalidTransition(f"{frm!r} -> {to!r} not allowed by process {process.name!r}")
 
-    enforce_policy(session, actor.role, "transition", to)  # org-wide role policy
+    enforce_policy(session, actor.role, "transition", to,  # org-wide role policy (audits refusals)
+                   audit=audit, actor_id=actor_id, subject=item_id)
 
     required = process.required_checks(to)
     if required:

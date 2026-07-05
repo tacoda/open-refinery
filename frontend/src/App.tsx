@@ -580,6 +580,8 @@ function Policies() {
 const SETTING_HINTS = [
   'github.client_id', 'github.client_secret',
   'gitlab.client_id', 'gitlab.client_secret',
+  'policy.enforcement',       // audit | strict (whitelist / default-deny)
+  'policy.strict_default',    // true | false
 ]
 
 function Settings() {
@@ -1017,6 +1019,13 @@ function Governance() {
     <section className="page">
       <h2 className="page-title">Governance landscape</h2>
       <p className="muted">What is defined where, and what overrides what — across the role layers.</p>
+      <div className="toolbar">
+        <span className="muted">enforcement</span>
+        <Badge variant={g.enforcement === 'strict' ? 'default' : 'outline'}>
+          {g.enforcement === 'strict' ? 'strict (whitelist / default-deny)' : 'audit (default-allow)'}
+        </Badge>
+        <span className="muted">set `policy.enforcement` in Settings to change</span>
+      </div>
 
       <Card>
         <CardHeader><CardTitle>Roles</CardTitle></CardHeader>
