@@ -65,6 +65,7 @@ from .ingest import ingest
 from .webhooks import create_webhook, delete_webhook, list_webhooks
 from .governance import landscape
 from .packs import disable_pack, enable_pack, list_packs, list_standards
+from .postmortem import postmortem
 from .policies import (
     PolicyDenied,
     create_policy,
@@ -724,6 +725,11 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def get_work_items(session: Session = Depends(get_session), user: User = Depends(current_user),
                        repo_id: str | None = None):
         return list_work_items(session, owner_id=owner_scope(user), repo_id=repo_id)
+
+    @app.get("/work-items/{item_id}/postmortem")
+    def work_item_postmortem(item_id: str, session: Session = Depends(get_session),
+                             _: User = Depends(current_user)):
+        return postmortem(session, item_id)
 
     @app.post("/work-items/{item_id}/attest", status_code=201)
     def add_attestation(item_id: str, body: Attest, session: Session = Depends(get_session),

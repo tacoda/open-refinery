@@ -1425,6 +1425,9 @@ function Work() {
 
 function WorkRow({ w, onMove, onAttest, onRequest }: any) {
   const [to, setTo] = useState(''), [check, setCheck] = useState('')
+  const [pm, setPm] = useState<any>(null)
+  const runPm = () => pm ? setPm(null)
+    : api(`/work-items/${w.id}/postmortem`).then(setPm).catch(fail)
   return (
     <Card>
       <CardContent>
@@ -1440,7 +1443,22 @@ function WorkRow({ w, onMove, onAttest, onRequest }: any) {
           <Input className="field" placeholder="check" value={check} onChange={(e) => setCheck(e.target.value)} />
           <Button variant="outline" size="sm" onClick={() => onAttest(w.id, check, true)}>Attest ✓</Button>
           <Button variant="outline" size="sm" onClick={() => onAttest(w.id, check, false)}>Attest ✗</Button>
+          <Button variant="outline" size="sm" onClick={runPm}>{pm ? 'Hide post-mortem' : 'Post-mortem'}</Button>
         </div>
+        {pm && (
+          <div style={{ marginTop: '0.6rem', borderTop: '1px solid var(--border)', paddingTop: '0.6rem' }}>
+            <div className="kv-row"><span className="muted">root cause</span><span>{pm.root_cause}</span></div>
+            <div className="kv-row"><span className="muted">duration</span><span className="mono">{pm.duration_seconds}s · {pm.timeline.length} events</span></div>
+            {pm.findings.map((f: any, i: number) => (
+              <div key={i} className="kv-row"><Badge variant={f.severity === 'high' ? 'destructive' : 'secondary'}>{f.type}</Badge><span>{f.detail}</span></div>
+            ))}
+            {pm.suggestions.length > 0 && <div className="muted" style={{ marginTop: '0.3rem' }}>Suggested next steps:</div>}
+            {pm.suggestions.map((s: string, i: number) => <div key={i} className="kv-row"><span>• {s}</span></div>)}
+            <div className="mono" style={{ marginTop: '0.3rem' }}>
+              timeline: {pm.timeline.map((t: any) => t.recipe).join(' → ') || '—'}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

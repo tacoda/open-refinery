@@ -3,6 +3,19 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.6.0] — 2026-07-05
+
+### Added
+- **Agent-run post-mortem.** `GET /work-items/{id}/postmortem` assembles a run's
+  full trail — the audit timeline (transitions, invokes, **invoke-failures**,
+  **policy denials**, approvals, attestations), latest attestation results,
+  pending approvals, timings — then **deduces a likely root cause** (policy
+  denial › target failure › failed attestation › rejected › stalled › clean) and
+  **suggests concrete follow-ups** (review the blocking rule, check target
+  creds/quota, fix the failing check, resubmit, close imitation surfaces, resolve
+  poison). Heuristic over recorded facts. Dashboard: a **Post-mortem** toggle on
+  each work item (root cause + findings + suggestions + timeline).
+
 ## [1.5.0] — 2026-07-05
 
 ### Added

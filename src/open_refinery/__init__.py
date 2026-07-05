@@ -80,6 +80,7 @@ from .approval_workflows import (
 )
 from .analysis import analyze
 from .debt import audit, health, list_audits, run_audit
+from .postmortem import postmortem
 from .experiments import (
     add_sample,
     analyze_experiment,
@@ -159,7 +160,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 
 __all__ = [
     "Factory",
@@ -278,6 +279,7 @@ __all__ = [
     "run_audit",
     "list_audits",
     "health",
+    "postmortem",
     "ingest",
     "create_experiment",
     "record_eval",
