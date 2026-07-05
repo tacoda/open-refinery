@@ -54,6 +54,14 @@ adapters. They explain *why* the system is shaped this way.
   needs a reason.
 - **Protocols over inheritance** for the seams (`Authorizer`, `AuditSink`).
 - **Immutable records, append-only audit.** Never mutate a `Record`.
+- **Every schema change ships a migration.** Any DB change (a model column, a new
+  index) must land with the matching entry in `migrations.MIGRATIONS` so existing
+  installs upgrade — new tables are handled by `create_all`; columns need an
+  `ALTER`, ALTER-added indexed columns need a `CREATE INDEX IF NOT EXISTS`.
+  Append-only; schema frozen at 1.0 (additive changes only). Migrations run
+  automatically on `serve`, or explicitly via `open-refinery migrate` (`--to N`
+  to pin a version, up or down). Append a reverse to `DOWNGRADES` alongside every
+  `MIGRATIONS` entry so downgrades stay possible.
 - **Test non-trivial logic.** Prove a bug with a failing test first.
 - **Surgical changes.** Touch only what the task needs; match existing style.
 - Order in `produce` is load-bearing: authorize before running; record/log only

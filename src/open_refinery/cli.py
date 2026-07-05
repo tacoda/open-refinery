@@ -54,6 +54,57 @@ def _openapi(args: argparse.Namespace) -> int:
     return 0
 
 
+def _migrate(args: argparse.Namespace) -> int:
+    """Migrate the database up (default: latest) or down to a pinned version."""
+    import sqlite3
+    import sys
+
+    from .migrations import MIGRATIONS, migrate_to
+    from .store import DEFAULT_DATABASE_URL, _sqlite_path, engine_for
+
+    url = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
+    path = _sqlite_path(url)
+
+    def _version() -> int | None:
+        if not path or path == ":memory:" or not os.path.exists(path):
+            return None
+        conn = sqlite3.connect(path)
+        try:
+            return conn.execute("PRAGMA user_version").fetchone()[0]
+        finally:
+            conn.close()
+
+    before = _version()
+    engine_for(url)  # ensure tables exist + apply pending up-migrations
+    latest = len(MIGRATIONS)
+    target = latest if args.to is None else args.to
+    if target < 0 or target > latest:
+        print(f"error: --to must be between 0 and {latest}", file=sys.stderr)
+        return 1
+
+    current = _version() or 0
+    if target < current and not args.yes:
+        print(f"refusing to downgrade {current} → {target}: this DROPS columns and their data.\n"
+              f"re-run with --yes to confirm.", file=sys.stderr)
+        return 1
+
+    if target != current:
+        conn = sqlite3.connect(path)
+        try:
+            migrate_to(conn, target)
+        finally:
+            conn.close()
+
+    after = _version()
+    if before is None:
+        print(f"initialized database (schema v{after})")
+    elif after == before:
+        print(f"database up to date (schema v{after})")
+    else:
+        print(f"migrated schema {before} → {after}")
+    return 0
+
+
 def _seed(args: argparse.Namespace) -> int:
     import sys
 
@@ -130,6 +181,11 @@ def main(argv: list[str] | None = None) -> int:
 
     seed = sub.add_parser("seed", help="populate the database with sample data (dev)")
     seed.set_defaults(func=_seed)
+
+    migrate = sub.add_parser("migrate", help="migrate the schema up (default) or down to --to N")
+    migrate.add_argument("--to", type=int, default=None, help="target schema version (default: latest)")
+    migrate.add_argument("--yes", action="store_true", help="confirm a destructive downgrade")
+    migrate.set_defaults(func=_migrate)
 
     packs = sub.add_parser("packs", help="list or enable/disable topic packs")
     packs.add_argument("pack_cmd", choices=("list", "enable", "disable"))

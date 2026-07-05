@@ -109,6 +109,21 @@ open-refinery serve --port 9000 &                # or: PORT=9000 open-refinery s
 curl localhost:9000/health                       # {"status": "ok"}
 ```
 
+### Upgrading
+
+Schema migrations run **automatically on startup** (`serve`). To apply them
+explicitly after upgrading the package — before starting the server — run:
+
+```bash
+pip install -U open-refinery
+open-refinery migrate                            # applies pending migrations
+open-refinery migrate --to 9 --yes               # pin an older schema (down; destructive)
+```
+
+The schema is frozen at 1.0 — upgrades are additive only, so existing data is
+preserved. Downgrading to a pinned version drops the newer columns (and their
+data), so it requires `--yes`.
+
 ### Using the API
 
 Authenticate every request with the admin token from `create-admin`:

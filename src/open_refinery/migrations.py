@@ -1,14 +1,24 @@
 """Schema migrations — minimal, versioned, no framework.
 
-`register_schema` (in store.py) creates every table at its *latest* shape, so a
-**fresh** database is complete immediately and is stamped to the newest version.
-An **existing** database is evolved by running the pending entries in
-`MIGRATIONS` in order, tracked by SQLite's `PRAGMA user_version`.
+`SQLModel.metadata.create_all` (in store.py) builds every table at its *latest*
+model shape. A **fresh** DB is complete immediately and stamped to the newest
+version. An **existing** DB is evolved by running the pending entries in
+`MIGRATIONS` in order, tracked by SQLite's `PRAGMA user_version`. Both run on
+`engine_for()` — i.e. automatically at `open-refinery serve` (and any `connect`);
+`open-refinery migrate` runs them explicitly without starting the server.
 
-Rules when the schema changes:
-  1. Update the module's `register_schema` DDL to the new shape (for fresh DBs).
-  2. Append the incremental change (e.g. `ALTER TABLE … ADD COLUMN …`) to
-     `MIGRATIONS` — append only, never edit or reorder existing entries.
+**Standard practice — every schema change ships a migration.** Whenever a model
+changes, add the corresponding migration so existing installs upgrade:
+  - **New table** → handled by `create_all` (creates missing tables on upgrade);
+    no `MIGRATIONS` entry needed.
+  - **New / changed column** → append an `ALTER TABLE … ADD COLUMN …` (with a
+    NOT NULL DEFAULT for non-nullable) to `MIGRATIONS`.
+  - **New index on an existing table's column** → append
+    `CREATE INDEX IF NOT EXISTS …` (`create_all` only makes indexes on *new*
+    tables, so an ALTER-added indexed column needs this too).
+Append only — never edit or reorder existing entries. The schema is frozen at
+1.0.0: additive changes only (new tables / nullable-or-default columns), no
+drops, renames, or restructures.
 """
 
 from __future__ import annotations
@@ -46,6 +56,32 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE policies ADD COLUMN layer TEXT NOT NULL DEFAULT 'charter';",
     # v10 (1.4.0): explicit source integration per repo (for ingest)
     "ALTER TABLE repositories ADD COLUMN integration_id TEXT;",
+    # v11 (1.4.1): catch up indexes for pack columns added by ALTER (create_all
+    # only makes indexes on *new* tables, so upgraded installs missed these).
+    "CREATE INDEX IF NOT EXISTS ix_policies_pack ON policies (pack);"
+    "CREATE INDEX IF NOT EXISTS ix_processes_pack ON processes (pack);",
+]
+
+# Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
+# version. ⚠ Downgrading is DESTRUCTIVE — dropping a column drops its data.
+# Kept in sync with MIGRATIONS (append the reverse whenever you append an entry).
+DOWNGRADES: list[str] = [
+    "ALTER TABLE work_items DROP COLUMN external_ref;",                                  # v1
+    "ALTER TABLE processes DROP COLUMN min_approver_role;",                              # v2
+    "ALTER TABLE processes DROP COLUMN approval_chain;",                                 # v3
+    "ALTER TABLE targets DROP COLUMN output_schema;",                                    # v4
+    "ALTER TABLE policies DROP COLUMN kind;"
+    "ALTER TABLE policies DROP COLUMN strict;"
+    "ALTER TABLE policies DROP COLUMN content;",                                         # v5
+    "ALTER TABLE quotas DROP COLUMN window_seconds;"
+    "ALTER TABLE quotas DROP COLUMN window_started_at;",                                 # v6
+    "ALTER TABLE processes DROP COLUMN pack;",                                           # v7
+    "ALTER TABLE policies DROP COLUMN namespace;"
+    "ALTER TABLE policies DROP COLUMN pack;",                                            # v8
+    "ALTER TABLE policies DROP COLUMN layer;",                                           # v9
+    "ALTER TABLE repositories DROP COLUMN integration_id;",                              # v10
+    "DROP INDEX IF EXISTS ix_policies_pack;"
+    "DROP INDEX IF EXISTS ix_processes_pack;",                                           # v11
 ]
 
 
@@ -62,6 +98,28 @@ def run_migrations(conn: sqlite3.Connection, migrations: list[str] | None = None
         conn.execute(f"PRAGMA user_version = {i + 1}")
     conn.commit()
     return max(0, len(migrations) - start)
+
+
+def migrate_to(conn: sqlite3.Connection, target: int) -> int:
+    """Migrate up or down to a target schema version. Returns the version reached.
+
+    Down-migrations are destructive (dropping a column drops its data) — the CLI
+    warns before running one. Assumes DOWNGRADES stays aligned with MIGRATIONS.
+    """
+    assert len(DOWNGRADES) == len(MIGRATIONS), "DOWNGRADES must mirror MIGRATIONS"
+    n = len(MIGRATIONS)
+    target = max(0, min(target, n))
+    cur = _version(conn)
+    if target > cur:                       # up
+        for i in range(cur, target):
+            conn.executescript(MIGRATIONS[i])
+            conn.execute(f"PRAGMA user_version = {i + 1}")
+    elif target < cur:                     # down (reverse order)
+        for i in range(cur - 1, target - 1, -1):
+            conn.executescript(DOWNGRADES[i])
+            conn.execute(f"PRAGMA user_version = {i}")
+    conn.commit()
+    return target
 
 
 def stamp_latest(conn: sqlite3.Connection) -> None:

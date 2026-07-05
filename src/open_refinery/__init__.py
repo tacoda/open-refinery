@@ -119,7 +119,7 @@ from .policies import (
     list_policies,
     scan_content,
 )
-from .migrations import run_migrations
+from .migrations import migrate_to, run_migrations
 from .metrics import (
     activity_by_actor,
     event_counts,
@@ -158,7 +158,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 
 __all__ = [
     "Factory",
@@ -221,6 +221,7 @@ __all__ = [
     "seed",
     "AlreadySeeded",
     "run_migrations",
+    "migrate_to",
     "Integration",
     "create_integration",
     "delete_integration",

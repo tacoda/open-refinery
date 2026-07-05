@@ -3,6 +3,25 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.4.1] — 2026-07-05
+
+### Added
+- **`open-refinery migrate`** — migrate the schema **up or down**. Up (default,
+  or `--to N`) applies pending migrations; `--to N` below the current version
+  **downgrades** to a pinned schema version (destructive — drops columns/data, so
+  it requires `--yes`). Migrations still run automatically on `serve`; this gives
+  an explicit, reversible way to move an existing install's database. Backed by a
+  `DOWNGRADES` list (reverse of each migration) + `migrate_to`. README gains an
+  **Upgrading** section.
+- Migration **v11** — catch-up `CREATE INDEX IF NOT EXISTS` for the `pack`
+  columns added by earlier `ALTER`s (upgraded installs missed those indexes,
+  since `create_all` only builds indexes on new tables).
+
+### Note
+- **Standard practice, now documented:** every schema change ships a migration
+  (new tables via `create_all`; columns via `ALTER`; ALTER-added indexed columns
+  via `CREATE INDEX IF NOT EXISTS`). Covered by a 1.0-era → latest upgrade test.
+
 ## [1.4.0] — 2026-07-05
 
 ### Added

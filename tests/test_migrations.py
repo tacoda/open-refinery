@@ -36,3 +36,65 @@ def test_migration_evolves_an_older_db():
                                     "ALTER TABLE t ADD COLUMN y INTEGER"])
     assert applied == 1  # only the new one ran
     assert "y" in {r[1] for r in conn.execute("PRAGMA table_info(t)")}
+
+
+def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
+    """A 1.0-era DB (schema v7, no systems table) upgrades cleanly: create_all adds
+    new tables, run_migrations adds the new columns, version reaches latest."""
+    from open_refinery.store import engine_for
+
+    url = f"sqlite:///{tmp_path/'up.db'}"
+    engine_for(url)  # build current schema, stamped to latest
+
+    raw = engine_for(url).raw_connection()
+    try:
+        for stmt in (
+            "DROP INDEX IF EXISTS ix_policies_pack",  # references policies.pack
+            "ALTER TABLE policies DROP COLUMN namespace",
+            "ALTER TABLE policies DROP COLUMN pack",
+            "ALTER TABLE policies DROP COLUMN layer",
+            "ALTER TABLE repositories DROP COLUMN integration_id",
+            "DROP TABLE systems",
+            "PRAGMA user_version = 7",   # pretend this is a 1.0-era install (schema v7)
+        ):
+            raw.execute(stmt)
+        raw.commit()
+    finally:
+        raw.close()
+
+    engine_for(url)  # reopen → _init_schema upgrades
+
+    raw = engine_for(url).raw_connection()
+    try:
+        pol = {r[1] for r in raw.execute("PRAGMA table_info(policies)").fetchall()}
+        assert {"namespace", "pack", "layer"} <= pol
+        repo = {r[1] for r in raw.execute("PRAGMA table_info(repositories)").fetchall()}
+        assert "integration_id" in repo
+        assert raw.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='systems'").fetchone()
+        assert raw.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
+    finally:
+        raw.close()
+
+
+def test_migrate_down_then_up_round_trips(tmp_path):
+    import sqlite3
+    from open_refinery.migrations import migrate_to
+    from open_refinery.store import engine_for
+
+    url = f"sqlite:///{tmp_path/'rt.db'}"
+    engine_for(url)  # latest (v11)
+    raw = sqlite3.connect(tmp_path / "rt.db")
+    try:
+        def pol_cols():
+            return {r[1] for r in raw.execute("PRAGMA table_info(policies)").fetchall()}
+
+        assert {"namespace", "pack", "layer"} <= pol_cols()
+        migrate_to(raw, 4)                       # down past all policy-column adds
+        assert not ({"namespace", "pack", "layer", "kind"} & pol_cols())
+        assert raw.execute("PRAGMA user_version").fetchone()[0] == 4
+        migrate_to(raw, len(MIGRATIONS))         # back up to latest
+        assert {"namespace", "pack", "layer", "kind"} <= pol_cols()
+        assert raw.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
+    finally:
+        raw.close()
