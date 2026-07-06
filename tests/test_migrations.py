@@ -58,6 +58,9 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
             "ALTER TABLE repositories DROP COLUMN last_ingest_at",
             "DROP INDEX IF EXISTS ix_users_team_id",  # indexed → drop before column
             "ALTER TABLE users DROP COLUMN team_id",
+            "ALTER TABLE targets DROP COLUMN region",
+            "ALTER TABLE targets DROP COLUMN compliance",
+            "ALTER TABLE targets DROP COLUMN unit_cost",
             "DROP TABLE systems",
             "PRAGMA user_version = 7",   # pretend this is a 1.0-era install (schema v7)
         ):

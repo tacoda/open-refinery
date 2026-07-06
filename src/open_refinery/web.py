@@ -8,6 +8,7 @@ request gets its own SQLModel `Session`.
 
 from __future__ import annotations
 
+import json
 import os
 import secrets
 from pathlib import Path
@@ -98,7 +99,7 @@ from .repositories import (
 from .settings import delete_setting, get_setting, list_setting_keys, set_setting
 from .store import DEFAULT_DATABASE_URL, SqliteSink, engine_for, purge_events, query_events
 from .concurrency import ConcurrencyExceeded
-from .ledger import usage_by_actor, usage_by_team
+from .ledger import traffic_graph, usage_by_actor, usage_by_team
 from .teams import create_team, delete_team, list_teams, set_user_team
 from .targets import (
     QuotaExceeded,
@@ -107,9 +108,11 @@ from .targets import (
     create_target,
     delete_route,
     delete_target,
+    ROUTING_POLICY_KEY,
     list_quotas,
     list_routes,
     list_targets,
+    routing_policy,
     set_target_credential,
 )
 from .users import (
@@ -255,6 +258,15 @@ class NewTarget(BaseModel):
     endpoint: str
     credential: dict[str, str] | None = None
     output_schema: dict | None = None
+    region: str = ""
+    compliance: list[str] = []
+    unit_cost: int = 0
+
+
+class RoutingPolicyBody(BaseModel):
+    require_region: str = ""
+    require_compliance: list[str] = []
+    prefer: str = "priority"        # priority | cost
 
 
 class NewRoute(BaseModel):
@@ -984,11 +996,26 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def add_target(body: NewTarget, session: Session = Depends(get_session),
                    user: User = Depends(current_user)):
         return create_target(session, body.name, body.kind, body.endpoint, user.id,
-                            credential=body.credential, output_schema=body.output_schema)
+                            credential=body.credential, output_schema=body.output_schema,
+                            region=body.region, compliance=body.compliance, unit_cost=body.unit_cost)
 
     @app.get("/targets")
     def get_targets(session: Session = Depends(get_session), user: User = Depends(current_user)):
         return list_targets(session, owner_id=owner_scope(user))
+
+    @app.get("/routing-policy")
+    def get_routing_policy(session: Session = Depends(get_session), _: User = Depends(current_user)):
+        return routing_policy(session)
+
+    @app.put("/routing-policy")
+    def set_routing_policy(body: RoutingPolicyBody, session: Session = Depends(get_session),
+                           user: User = Depends(require("platform", "admin"))):
+        set_setting(session, ROUTING_POLICY_KEY, json.dumps(body.model_dump()), user.id)
+        return routing_policy(session)
+
+    @app.get("/traffic")
+    def get_traffic(session: Session = Depends(get_session), _: User = Depends(current_user)):
+        return traffic_graph(session)
 
     @app.delete("/targets/{target_id}")
     def remove_target(target_id: str, session: Session = Depends(get_session),

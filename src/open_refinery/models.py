@@ -176,6 +176,11 @@ class Target(SQLModel, table=True):
     owner_id: str = Field(foreign_key="users.id", index=True)
     secret: str = ""   # encrypted JSON credential; "" when none
     output_schema: dict = Field(default_factory=dict, sa_column=Column(JSON))  # {} = free text
+    # routing policy inputs — resolution can require a region / compliance tags
+    # and prefer lower cost (units) across candidates.
+    region: str = ""                    # e.g. us | eu | … (blank = unspecified)
+    compliance: list = Field(default_factory=list, sa_column=Column(JSON))  # e.g. ["hipaa","soc2"]
+    unit_cost: int = 0                  # cost per unit (proxy; lower preferred)
     created_at: str = Field(default_factory=now_iso)
 
 

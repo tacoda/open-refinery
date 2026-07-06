@@ -1265,6 +1265,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/routing-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Routing Policy */
+        get: operations["get_routing_policy_routing_policy_get"];
+        /** Set Routing Policy */
+        put: operations["set_routing_policy_routing_policy_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/traffic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Traffic */
+        get: operations["get_traffic_traffic_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/targets/{target_id}": {
         parameters: {
             query?: never;
@@ -1838,6 +1873,21 @@ export interface components {
             output_schema?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Region
+             * @default
+             */
+            region: string;
+            /**
+             * Compliance
+             * @default []
+             */
+            compliance: string[];
+            /**
+             * Unit Cost
+             * @default 0
+             */
+            unit_cost: number;
         };
         /** NewTeam */
         NewTeam: {
@@ -1924,6 +1974,24 @@ export interface components {
              * @default
              */
             note: string;
+        };
+        /** RoutingPolicyBody */
+        RoutingPolicyBody: {
+            /**
+             * Require Region
+             * @default
+             */
+            require_region: string;
+            /**
+             * Require Compliance
+             * @default []
+             */
+            require_compliance: string[];
+            /**
+             * Prefer
+             * @default priority
+             */
+            prefer: string;
         };
         /** ScanRequest */
         ScanRequest: {
@@ -4896,6 +4964,103 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_routing_policy_routing_policy_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_routing_policy_routing_policy_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoutingPolicyBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_traffic_traffic_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

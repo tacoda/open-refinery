@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'approvals' | 'repos' | 'processes' | 'systems' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics' | 'teams' | 'usage'
+type View = 'work' | 'approvals' | 'repos' | 'processes' | 'systems' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics' | 'teams' | 'usage' | 'traffic'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
@@ -33,7 +33,7 @@ const NAV: { group: string; tabs: NavTab[] }[] = [
     { value: 'teams', label: 'Teams', gate: 'platform' } ] },
   { group: 'Insights', tabs: [
     { value: 'metrics', label: 'Metrics' }, { value: 'usage', label: 'Usage' },
-    { value: 'audits', label: 'Audits' },
+    { value: 'traffic', label: 'Traffic' }, { value: 'audits', label: 'Audits' },
     { value: 'coverage', label: 'Coverage' }, { value: 'experiments', label: 'Experiments' },
     { value: 'events', label: 'Audit log' } ] },
   { group: 'Admin', tabs: [
@@ -161,6 +161,7 @@ export default function App() {
               <TabsContent value="systems"><Systems /></TabsContent>
               <TabsContent value="teams"><Teams /></TabsContent>
               <TabsContent value="usage"><Usage /></TabsContent>
+              <TabsContent value="traffic"><Traffic /></TabsContent>
               <TabsContent value="integrations"><Integrations /></TabsContent>
               <TabsContent value="targets"><Targets /></TabsContent>
               <TabsContent value="policies"><Policies /></TabsContent>
@@ -1386,6 +1387,64 @@ function Systems() {
   )
 }
 
+function RoutingPolicyEditor() {
+  const [region, setRegion] = useState(''), [comp, setComp] = useState(''), [prefer, setPrefer] = useState('priority')
+  useEffect(() => {
+    api('/routing-policy').then((p) => {
+      setRegion(p.require_region ?? ''); setComp((p.require_compliance ?? []).join(', '))
+      setPrefer(p.prefer ?? 'priority')
+    }).catch(() => {})
+  }, [])
+  const save = () => api('/routing-policy', { method: 'PUT', body: JSON.stringify({
+    require_region: region, require_compliance: comp.split(',').map((s) => s.trim()).filter(Boolean), prefer,
+  }) }).then(() => toast.success('routing policy saved')).catch(fail)
+  return (
+    <div className="toolbar" style={{ marginTop: '0.4rem' }}>
+      <span className="muted">routing policy:</span>
+      <Input className="field" placeholder="require region" value={region} onChange={(e) => setRegion(e.target.value)} />
+      <Input className="field" placeholder="require compliance (csv)" value={comp} onChange={(e) => setComp(e.target.value)} />
+      <Select value={prefer} onValueChange={(v) => setPrefer(v ?? 'priority')}>
+        <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+        <SelectContent>{['priority', 'cost'].map((p) => <SelectItem key={p} value={p}>prefer: {p}</SelectItem>)}</SelectContent>
+      </Select>
+      <Button variant="secondary" size="sm" onClick={save}>Save policy</Button>
+    </div>
+  )
+}
+
+function Traffic() {
+  const [g, setG] = useState<any>(null)
+  useEffect(() => { api('/traffic').then(setG).catch(fail) }, [])
+  const label = (id: string) => g?.nodes.find((n: any) => n.id === id)?.label ?? id
+  const teamOf = (id: string) => g?.nodes.find((n: any) => n.id === id)?.team ?? ''
+  const edges = g?.edges ?? []
+  return (
+    <section className="page">
+      <h2 className="page-title">Traffic</h2>
+      <p className="muted">Cross-agent traffic from the usage ledger — who sends how much to which target.</p>
+      <Card>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow><TableHead>Actor</TableHead><TableHead>Team</TableHead><TableHead>Target</TableHead><TableHead>Calls</TableHead><TableHead>Units</TableHead></TableRow></TableHeader>
+            <TableBody>
+              <EmptyRow show={!edges.length} cols={5}>No traffic yet.</EmptyRow>
+              {edges.map((e: any, i: number) => (
+                <TableRow key={i}>
+                  <TableCell>{label(e.source)}</TableCell>
+                  <TableCell className="mono">{teamOf(e.source)}</TableCell>
+                  <TableCell>{label(e.target)}</TableCell>
+                  <TableCell className="mono">{e.count}</TableCell>
+                  <TableCell className="mono">{e.units}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
 function Targets() {
   const { rows: targets, load: loadT } = useList('/targets')
   const { rows: routes, load: loadR } = useList('/routes')
@@ -1402,9 +1461,11 @@ function Targets() {
 
   const [name, setName] = useState(''), [kind, setKind] = useState('model')
   const [endpoint, setEndpoint] = useState(''), [token, setToken] = useState('')
+  const [region, setRegion] = useState(''), [compliance, setCompliance] = useState(''), [cost, setCost] = useState('0')
   const addTarget = () => post('/targets', {
     name, kind, endpoint, credential: token ? { token } : null,
-  }).then(() => { setName(''); setEndpoint(''); setToken(''); loadT() }).catch(fail)
+    region, compliance: compliance.split(',').map((s) => s.trim()).filter(Boolean), unit_cost: Number(cost) || 0,
+  }).then(() => { setName(''); setEndpoint(''); setToken(''); setRegion(''); setCompliance(''); setCost('0'); loadT() }).catch(fail)
   const delTarget = (id: string) => api(`/targets/${id}`, { method: 'DELETE' })
     .then(() => { loadT(); loadR(); loadQ() }).catch(fail)
 
@@ -1437,15 +1498,22 @@ function Targets() {
             </Select>
             <Input className="field" placeholder="endpoint / model id" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} />
             <Input className="field" placeholder="token (optional)" type="password" value={token} onChange={(e) => setToken(e.target.value)} />
+            <Input className="field" placeholder="region (e.g. eu)" value={region} onChange={(e) => setRegion(e.target.value)} />
+            <Input className="field" placeholder="compliance (csv: hipaa,soc2)" value={compliance} onChange={(e) => setCompliance(e.target.value)} />
+            <Input className="field" type="number" min="0" placeholder="unit cost" value={cost} onChange={(e) => setCost(e.target.value)} />
             <Button onClick={addTarget}>Add target</Button>
           </div>
+          <RoutingPolicyEditor />
           <Table>
-            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Endpoint</TableHead><TableHead /></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Endpoint</TableHead><TableHead>Region</TableHead><TableHead>Compliance</TableHead><TableHead>Cost</TableHead><TableHead /></TableRow></TableHeader>
             <TableBody><EmptyRow show={!targets.length} cols={9}>No targets yet — add a model, MCP, or API target.</EmptyRow>{targets.map((t) => (
               <TableRow key={t.id}>
                 <TableCell>{t.name}</TableCell>
                 <TableCell><Badge variant="secondary">{t.kind}</Badge></TableCell>
                 <TableCell className="mono">{t.endpoint}</TableCell>
+                <TableCell className="mono">{t.region || '—'}</TableCell>
+                <TableCell className="mono">{(t.compliance ?? []).join(', ') || '—'}</TableCell>
+                <TableCell className="mono">{t.unit_cost || 0}</TableCell>
                 <TableCell>
                   <span style={{ display: 'flex', gap: '0.3rem' }}>
                     {oauthProviders.map((p) => (

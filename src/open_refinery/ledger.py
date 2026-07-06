@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from sqlmodel import Session, select
 
-from .models import LedgerEntry, Team, User
+from .models import LedgerEntry, Target, Team, User
 
 
 def record_usage(session: Session, actor_id: str, target_id: str, units: int,
@@ -49,3 +49,32 @@ def usage_by_actor(session: Session) -> dict[str, int]:
 def team_usage(session: Session, team_id: str) -> int:
     return sum(e.units for e in session.exec(
         select(LedgerEntry).where(LedgerEntry.team_id == team_id)))
+
+
+def traffic_graph(session: Session) -> dict:
+    """Cross-agent traffic graph from the ledger: who sends how much to which
+    target. Nodes are actors (tagged with their team) and targets; each edge is
+    an actor→target pair weighted by call count + units. The audit event digests
+    the target away, so the ledger is the only source that can wire this up."""
+    entries = list(session.exec(select(LedgerEntry)))
+    emails = {u.id: u.email for u in session.exec(select(User))}
+    team_of = {u.id: u.team_id for u in session.exec(select(User))}
+    team_names = {t.id: t.name for t in session.exec(select(Team))}
+    target_names = {t.id: t.name for t in session.exec(select(Target))}
+
+    edges: dict[tuple[str, str], dict] = {}
+    actors, targets = set(), set()
+    for e in entries:
+        actors.add(e.actor_id)
+        targets.add(e.target_id)
+        edge = edges.setdefault((e.actor_id, e.target_id), {"count": 0, "units": 0})
+        edge["count"] += 1
+        edge["units"] += e.units
+
+    nodes = [{"id": f"actor:{a}", "type": "actor", "label": emails.get(a, a),
+              "team": team_names.get(team_of.get(a), "unassigned")} for a in actors]
+    nodes += [{"id": f"target:{t}", "type": "target",
+               "label": target_names.get(t, t)} for t in targets]
+    edge_list = [{"source": f"actor:{a}", "target": f"target:{t}", **w}
+                 for (a, t), w in edges.items()]
+    return {"nodes": nodes, "edges": edge_list}

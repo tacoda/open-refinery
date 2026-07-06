@@ -68,6 +68,11 @@ MIGRATIONS: list[str] = [
     # new tables). Teams + ledger_entries are new tables, handled by create_all.
     "ALTER TABLE users ADD COLUMN team_id TEXT;"
     "CREATE INDEX IF NOT EXISTS ix_users_team_id ON users (team_id);",
+    # v14 (1.16.0): routing policy inputs — targets carry region, compliance tags,
+    # and a per-unit cost so route resolution can filter/prefer on them.
+    "ALTER TABLE targets ADD COLUMN region TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE targets ADD COLUMN compliance TEXT NOT NULL DEFAULT '[]';"
+    "ALTER TABLE targets ADD COLUMN unit_cost INTEGER NOT NULL DEFAULT 0;",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -94,6 +99,9 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE repositories DROP COLUMN last_ingest_at;",                              # v12
     "DROP INDEX IF EXISTS ix_users_team_id;"
     "ALTER TABLE users DROP COLUMN team_id;",                                            # v13
+    "ALTER TABLE targets DROP COLUMN region;"
+    "ALTER TABLE targets DROP COLUMN compliance;"
+    "ALTER TABLE targets DROP COLUMN unit_cost;",                                        # v14
 ]
 
 

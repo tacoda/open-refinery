@@ -25,14 +25,16 @@ class QuotaExceeded(Exception):
 # --- targets --------------------------------------------------------------
 
 def create_target(session: Session, name: str, kind: str, endpoint: str, owner_id: str,
-                  *, credential: dict | None = None, output_schema: dict | None = None) -> Target:
+                  *, credential: dict | None = None, output_schema: dict | None = None,
+                  region: str = "", compliance: list | None = None, unit_cost: int = 0) -> Target:
     if kind not in KINDS:
         raise ValueError(f"unknown target kind: {kind!r} (expected {KINDS})")
     if session.get(User, owner_id) is None:
         raise ValueError(f"unknown owner: {owner_id!r}")
     secret = encrypt(json.dumps(credential)) if credential else ""
     target = Target(name=name, kind=kind, endpoint=endpoint, owner_id=owner_id, secret=secret,
-                    output_schema=output_schema or {})
+                    output_schema=output_schema or {}, region=region,
+                    compliance=compliance or [], unit_cost=unit_cost)
     session.add(target)
     session.commit()
     session.refresh(target)
@@ -107,17 +109,49 @@ def delete_route(session: Session, route_id: str) -> None:
         session.commit()
 
 
+ROUTING_POLICY_KEY = "routing.policy"  # admin setting; JSON RoutingPolicy
+
+
+def routing_policy(session: Session) -> dict:
+    """Org-wide routing inputs: {require_region, require_compliance:[...],
+    prefer:'priority'|'cost'}. Blank/missing → no constraint, priority order."""
+    from .settings import get_setting
+    raw = get_setting(session, ROUTING_POLICY_KEY)
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except (ValueError, TypeError):
+        return {}
+
+
+def _passes(target: Target, policy: dict) -> bool:
+    region = policy.get("require_region") or ""
+    if region and target.region != region:
+        return False
+    required = policy.get("require_compliance") or []
+    return set(required) <= set(target.compliance or [])
+
+
 def resolve_targets(session: Session, process_id: str, step: str | None = None) -> list[Target]:
     """Targets for a process/step, best first — for routing with failover.
 
     Ordered by priority desc, step-specific routes before process-wide ones at
-    equal priority.
+    equal priority. The org **routing policy** then filters candidates that fail a
+    required region / compliance tag, and (when `prefer='cost'`) orders survivors
+    cheapest-first while keeping priority as the primary key.
     """
     routes = session.exec(select(Route).where(Route.process_id == process_id)).all()
     candidates = [r for r in routes if r.step is None or r.step == step]
     candidates.sort(key=lambda r: (r.priority, r.step is not None), reverse=True)
-    targets = [session.get(Target, r.target_id) for r in candidates]
-    return [t for t in targets if t is not None]
+    pairs = [(r, session.get(Target, r.target_id)) for r in candidates]
+    pairs = [(r, t) for r, t in pairs if t is not None]
+
+    policy = routing_policy(session)
+    pairs = [(r, t) for r, t in pairs if _passes(t, policy)]  # compliance/region gate
+    if policy.get("prefer") == "cost":  # cheapest first, priority still dominant
+        pairs.sort(key=lambda rt: (-rt[0].priority, rt[1].unit_cost))
+    return [t for _, t in pairs]
 
 
 def resolve_target(session: Session, process_id: str, step: str | None = None) -> Target | None:

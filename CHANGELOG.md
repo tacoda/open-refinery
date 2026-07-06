@@ -3,6 +3,27 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.16.0] — 2026-07-06
+
+### Added
+- **Routing policy inputs + traffic graph (M3 on the road to 2.0).**
+  - **Routing policy inputs** — targets carry a `region`, `compliance` tags, and a
+    per-unit `unit_cost`. An org-wide **routing policy** (`GET/PUT /routing-policy`,
+    admin setting) filters route candidates that fail a required region /
+    compliance tag and — with `prefer: "cost"` — orders survivors cheapest-first
+    while priority stays dominant. A compliance/region requirement that no target
+    meets yields no route (the call is blocked, not silently downgraded). Target
+    form exposes region / compliance / cost; a routing-policy editor sits above
+    the targets table.
+  - **Traffic graph** — `GET /traffic` builds a cross-agent traffic graph from the
+    usage ledger (the audit event digests the target away, so the ledger is the
+    only wireable source): actor→target edges weighted by call count + units,
+    actors tagged with their team. New Traffic tab.
+
+### Migration
+- **v14** — `targets.region` / `targets.compliance` / `targets.unit_cost`
+  (additive, reversible downgrade appended).
+
 ## [1.15.0] — 2026-07-05
 
 ### Added
