@@ -74,7 +74,7 @@
 <header class="hero">
   <div class="wrap">
     <div class="brand">◆ Open Refinery</div>
-    <div style="margin:1.2rem 0 .2rem"><span class="tag">Open source · self-hosted · v1.0</span></div>
+    <div style="margin:1.2rem 0 .2rem"><span class="tag">Open source · self-hosted · v2.0</span></div>
     <h1>An open factory to<br><span class="accent">shine light into the dark.</span></h1>
     <p class="lede">The self-hosted platform layer that governs AI-driven software work —
       so every change is <strong>authorized, owned, provenanced, and audited</strong>.
@@ -134,6 +134,8 @@
         <li>A <strong>human-oversight dial</strong> per process (manual → fully dark)</li>
         <li>Immutable provenance and a <strong>complete, attributed audit trail</strong></li>
         <li>Quotas, content filtering, and structured output at the call site</li>
+        <li><strong>Proactive enforcement</strong> — <code class="inline">strict</code> whitelist mode + a pre-action authorize gate</li>
+        <li><strong>First-class rollbacks</strong> — revert a whole deployment, not just the code</li>
         <li>Self-hosted, single-tenant — <code class="inline">pip install</code> + one command</li>
       </ul>
     </div>
@@ -153,6 +155,16 @@
         <p>Enable curated canon — TDD, ATDD, spec-driven, code review, CI/CD, observability, tech-debt — as standards and ready-made processes.</p></div>
       <div class="card feature"><h3>Real target backends</h3>
         <p>Anthropic, OpenAI, MCP, and generic API targets — connect by API key or OAuth, with routing, failover, and windowed rate quotas.</p></div>
+      <div class="card feature"><h3>Proactive enforcement</h3>
+        <p>An <strong>audit</strong> or <strong>strict</strong> (whitelist / default-deny) mode, plus a pre-action <code class="inline">/authorize</code> gate — verify identity + intent <em>before</em> a tool, command, or host-egress action. Per-namespace whitelists; every refusal audited.</p></div>
+      <div class="card feature"><h3>First-class rollbacks</h3>
+        <p>Revert a work item to a known-good prior stage and get a structured <strong>reverse plan</strong> that unwinds the whole deployment — code, DB migrations, config, env, libraries, data, services, secret refs, infra, DNS. The harness applies it and reports back.</p></div>
+      <div class="card feature"><h3>Teams, cost &amp; concurrency</h3>
+        <p>Group users into teams; a usage ledger meters units per governed invoke and rolls up <strong>cost by team</strong>; a team's live in-flight <strong>concurrency cap</strong> is enforced at the invoke seam.</p></div>
+      <div class="card feature"><h3>Routing policy &amp; traffic graph</h3>
+        <p>Resolve routes on <strong>region / compliance / cost</strong> inputs — an unmet requirement blocks the call, it isn't silently downgraded. A cross-agent <strong>traffic graph</strong> shows who sends how much to which target.</p></div>
+      <div class="card feature"><h3>Live runtime</h3>
+        <p>Background jobs, scheduled ingest, and a WebSocket live channel — job status, new audit events, and per-run <strong>live logs</strong> stream to the dashboard, no polling.</p></div>
       <div class="card feature"><h3>Coverage &amp; drift</h3>
         <p>Ingest a repo's charter/harness/code, then surface coverage, drift, and <strong>imitation surfaces</strong> with 0–100 health scores.</p></div>
       <div class="card feature"><h3>Governance analysis</h3>
@@ -167,8 +179,8 @@
         <p>HMAC-signed event fan-out and a complete, queryable, attributed audit trail — with metrics derived from it.</p></div>
       <div class="card feature"><h3>Integrations</h3>
         <p>GitHub, GitLab, Jira, Linear — import repos and sync work items, connect by token or OAuth, credentials encrypted at rest.</p></div>
-      <div class="card feature"><h3>Bundled dashboard + API docs</h3>
-        <p>A React dashboard ships in the wheel; self-hosted API docs with live "Try it out" at <code class="inline">/api-docs</code>.</p></div>
+      <div class="card feature"><h3>Visibility-first dashboard + API docs</h3>
+        <p>A React dashboard ships in the wheel — an overview that surfaces what needs attention, a work board, and a right-hand detail/action drawer. Self-hosted API docs with live "Try it out" at <code class="inline">/api-docs</code>.</p></div>
     </div>
   </div>
 </section>
