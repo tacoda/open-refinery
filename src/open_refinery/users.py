@@ -138,8 +138,12 @@ def count_users(session: Session) -> int:
     return len(session.exec(select(User.id)).all())
 
 
-def list_users(session: Session) -> list[User]:
-    return list(session.exec(select(User).order_by(User.created_at)))
+def list_users(session: Session, *, kind: str = "human") -> list[User]:
+    """People by default; pass kind='agent' for harness identities (or None for all)."""
+    stmt = select(User)
+    if kind is not None:
+        stmt = stmt.where(User.kind == kind)
+    return list(session.exec(stmt.order_by(User.created_at)))
 
 
 def rotate_token(session: Session, user_id: str) -> str:

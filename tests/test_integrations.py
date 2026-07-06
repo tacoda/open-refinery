@@ -96,3 +96,33 @@ def test_connect_state_is_one_time():
     state = integrations.create_connect_state(conn, ian.id, "github")
     assert integrations.pop_connect_state(conn, state) == ian.id
     assert integrations.pop_connect_state(conn, state) is None  # consumed
+
+
+def test_connector_catalog_capabilities_and_fields():
+    from open_refinery import connectors, CONNECTORS, SOURCE_KINDS, TRACKER_KINDS, WORKFLOW_KINDS
+    cat = {c["kind"]: c for c in connectors()}
+    assert "github-issues" in cat and cat["github-issues"]["label"] == "GitHub Issues"
+    assert "tracker" in cat["github-issues"]["caps"] and "workflow" in cat["github-issues"]["caps"]
+    assert cat["github-issues"]["fields"] == ["token", "repo"]
+    # derived groupings stay consistent with the catalog
+    assert set(SOURCE_KINDS) == {k for k, v in CONNECTORS.items() if "source" in v["caps"]}
+    assert set(TRACKER_KINDS) == {"github-issues", "jira", "linear"}
+    assert set(WORKFLOW_KINDS) == {"github-issues", "jira", "linear"}
+
+
+def test_workflow_discovery_routes_to_adapter(monkeypatch):
+    conn, ian = setup()
+    monkeypatch.setitem(integrations.ADAPTERS["linear"], "verify", lambda c: {"account": "L"})
+    monkeypatch.setitem(integrations.ADAPTERS["linear"], "workflow",
+                        lambda c: ["Backlog", "In Progress", "Done"])
+    from open_refinery import create_integration, list_workflow
+    integ = create_integration(conn, "linear", {"token": "t"}, ian.id)
+    assert list_workflow(conn, integ.id) == ["Backlog", "In Progress", "Done"]
+
+
+def test_workflow_unsupported_for_a_source_raises(monkeypatch):
+    conn, ian = setup()  # github (source) has no workflow op
+    from open_refinery import create_integration, list_workflow
+    integ = create_integration(conn, "github", {"token": "t"}, ian.id)
+    with pytest.raises(ValueError):
+        list_workflow(conn, integ.id)

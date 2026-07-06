@@ -10,7 +10,8 @@ from open_refinery import (
 )
 
 
-def test_seed_populates_a_minimal_dataset():
+def test_seed_populates_a_minimal_dataset(monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "test-secret")  # seed sets the onboarded flag (encrypted)
     conn = connect("sqlite:///:memory:")
     data = seed(conn)
 
@@ -18,6 +19,9 @@ def test_seed_populates_a_minimal_dataset():
     assert all(tok for _, tok in data["users"].values())
     assert len(list_processes(conn)) == 1          # minimal: one board process
     assert len(list_work_items(conn)) == 2
+    # a seeded org is pre-configured → onboarding is marked complete
+    from open_refinery import get_setting
+    assert get_setting(conn, "org.onboarded") == "true"
 
     # the moved item recorded a transition
     login = next(w for w in list_work_items(conn) if w.title == "Add login page")
@@ -25,7 +29,8 @@ def test_seed_populates_a_minimal_dataset():
     assert any(e.recipe == "transition" for e in query_events(conn, subject=login.id))
 
 
-def test_seed_refuses_non_empty_db():
+def test_seed_refuses_non_empty_db(monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
     conn = connect("sqlite:///:memory:")
     seed(conn)
     with pytest.raises(AlreadySeeded):

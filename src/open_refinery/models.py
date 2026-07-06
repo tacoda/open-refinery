@@ -35,6 +35,11 @@ class User(SQLModel, table=True):
     # dropped by SQLite, which would break the reversible v13 downgrade. Membership
     # integrity is enforced in `set_user_team`.
     team_id: str | None = Field(default=None, index=True)
+    # harness identities: an agent (Claude Code, LangGraph, …) is a service-account
+    # user governed by its role like anyone; owner_id is the person who registered it.
+    kind: str = "human"                 # human | agent
+    harness_kind: str | None = None     # e.g. claude-code (when kind == agent)
+    owner_id: str | None = None
     created_at: str = Field(default_factory=now_iso)
 
 
@@ -250,6 +255,23 @@ class ConnectState(SQLModel, table=True):
     user_id: str = Field(foreign_key="users.id")
     kind: str
     created_at: str = Field(default_factory=now_iso)
+
+
+class DeviceGrant(SQLModel, table=True):
+    """Pending OAuth device-flow authorization for a harness. The agent starts a
+    grant (gets a user_code), a human approves it in the UI (which mints the
+    agent + its token), then the agent polls to collect the token. Transient —
+    the raw token is held only until first poll, then cleared."""
+    __tablename__ = "device_grants"
+    device_code: str = Field(primary_key=True)        # the agent's secret handle
+    user_code: str = Field(index=True)                # short code the human enters
+    harness_kind: str
+    name: str
+    status: str = "pending"                           # pending | approved | consumed
+    agent_id: str | None = None
+    token: str | None = None                          # raw token, held until first poll
+    created_at: str = Field(default_factory=now_iso)
+    expires_at: str = ""
 
 
 class Event(SQLModel, table=True):

@@ -73,6 +73,12 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE targets ADD COLUMN region TEXT NOT NULL DEFAULT '';"
     "ALTER TABLE targets ADD COLUMN compliance TEXT NOT NULL DEFAULT '[]';"
     "ALTER TABLE targets ADD COLUMN unit_cost INTEGER NOT NULL DEFAULT 0;",
+    # v15 (1.17.0): harness identities — a coding agent (Claude Code, LangGraph, …)
+    # is a service-account user (kind='agent') owned by a person, governed by its
+    # role like anyone. Its token authenticates the CLI to the platform.
+    "ALTER TABLE users ADD COLUMN kind TEXT NOT NULL DEFAULT 'human';"
+    "ALTER TABLE users ADD COLUMN harness_kind TEXT;"
+    "ALTER TABLE users ADD COLUMN owner_id TEXT;",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -102,6 +108,9 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE targets DROP COLUMN region;"
     "ALTER TABLE targets DROP COLUMN compliance;"
     "ALTER TABLE targets DROP COLUMN unit_cost;",                                        # v14
+    "ALTER TABLE users DROP COLUMN kind;"
+    "ALTER TABLE users DROP COLUMN harness_kind;"
+    "ALTER TABLE users DROP COLUMN owner_id;",                                           # v15
 ]
 
 

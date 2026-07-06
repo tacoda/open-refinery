@@ -41,7 +41,8 @@ dev: ## Dev server: sources .env for secrets, local devtest.db on :8000
 	set -a; . ./.env; set +a; DATABASE_URL=$(DEV_DB) PORT=8000 uv run open-refinery serve
 
 seed: ## Seed the local devtest.db with sample data + login tokens
-	DATABASE_URL=$(DEV_DB) uv run open-refinery seed
+	@test -f .env || { echo "no .env — copy .env.example to .env and set SECRET_KEY"; exit 1; }
+	set -a; . ./.env; set +a; DATABASE_URL=$(DEV_DB) uv run open-refinery seed
 
 demo: ## Produce one artifact and print its provenance record
 	uv run open-refinery demo

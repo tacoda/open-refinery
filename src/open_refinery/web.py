@@ -35,12 +35,14 @@ from .invitations import (
     send_invitation_email,
 )
 from .integrations import (
+    connectors,
     create_connect_state,
     create_integration,
     delete_integration,
     list_integrations,
     list_issues,
     list_remote_repos,
+    list_workflow,
     pop_connect_state,
 )
 from .integrations import verify as verify_integration
@@ -64,6 +66,20 @@ from .experiments import (
 )
 from .ingest import ingest
 from .jobs import enqueue, get_job, list_jobs
+from .harnesses import (
+    HARNESS_CATALOG,
+    DeviceExpired,
+    DevicePending,
+    POLL_INTERVAL_SECONDS,
+    delete_harness,
+    device_approve,
+    device_poll,
+    device_start,
+    harness_view,
+    list_harnesses,
+    register_harness,
+    rotate_harness,
+)
 from .live import HUB
 from .logs import append_log, recent_logs
 from .webhooks import create_webhook, delete_webhook, list_webhooks
@@ -193,6 +209,26 @@ class NewTeam(BaseModel):
 
 class AssignTeam(BaseModel):
     team_id: str | None = None  # null → unassign
+
+
+class NewHarness(BaseModel):
+    harness_kind: str            # e.g. claude-code
+    name: str
+    role: str | None = None      # defaults to the registrant's role; can't exceed it
+
+
+class DeviceStart(BaseModel):
+    harness_kind: str
+    name: str
+
+
+class DeviceToken(BaseModel):
+    device_code: str
+
+
+class DeviceApprove(BaseModel):
+    user_code: str
+    role: str | None = None
 
 
 class AuthorizeReq(BaseModel):
@@ -485,6 +521,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         (AttestationFailed, 409),
         (QuotaExceeded, 429),
         (ConcurrencyExceeded, 429),
+        (DeviceExpired, 400),
         (PolicyDenied, 403),
         (RoleInUse, 409),
         (ExecutionError, 502),
@@ -515,6 +552,18 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     @app.get("/health")
     def healthcheck():  # not `health` — that name is the imported debt.health scorer
         return {"status": "ok"}
+
+    # --- first-run onboarding: the first admin runs the setup wizard; once
+    # complete, later users inherit the configured org and skip it. ---
+    @app.get("/onboarding")
+    def onboarding_status(session: Session = Depends(get_session), _: User = Depends(current_user)):
+        return {"onboarded": (get_setting(session, "org.onboarded") or "").lower() == "true"}
+
+    @app.post("/onboarding/complete")
+    def onboarding_complete(session: Session = Depends(get_session),
+                            user: User = Depends(require("platform", "admin"))):
+        set_setting(session, "org.onboarded", "true", user.id)
+        return {"onboarded": True}
 
     @app.get("/api-docs", include_in_schema=False)
     def api_docs():
@@ -883,6 +932,74 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
                   _: User = Depends(require("platform", "admin"))):
         return [_public_user(u) for u in list_users(session)]  # projected, no hashes
 
+    # --- harness identities: auth for coding agents (Claude Code, …) ---
+    @app.get("/harnesses/catalog")
+    def harness_catalog(_: User = Depends(current_user)):
+        return HARNESS_CATALOG
+
+    @app.get("/harnesses")
+    def get_harnesses(session: Session = Depends(get_session), user: User = Depends(current_user)):
+        # platform/admin see all; everyone else sees the agents they own
+        scope = None if user.role in ("platform", "admin") else user.id
+        return [harness_view(a) for a in list_harnesses(session, owner_id=scope)]
+
+    @app.post("/harnesses", status_code=201)
+    def add_harness(body: NewHarness, request: Request, session: Session = Depends(get_session),
+                    user: User = Depends(current_user)):
+        role = body.role or user.role
+        # an agent can't be given more authority than the person registering it
+        if role_rank(session, role) > role_rank(session, user.role):
+            raise HTTPException(status_code=403, detail="agent role cannot exceed your own")
+        agent, token = register_harness(session, body.harness_kind, body.name, user.id, role)
+        base = _base(request)
+        return {"harness": harness_view(agent), "token": token,  # token shown once
+                "setup": {"OPEN_REFINERY_URL": base, "OPEN_REFINERY_TOKEN": token}}
+
+    @app.post("/harnesses/{agent_id}/rotate")
+    def rotate_a_harness(agent_id: str, session: Session = Depends(get_session),
+                         user: User = Depends(current_user)):
+        agent = session.get(User, agent_id)
+        if agent is None or agent.kind != "agent":
+            raise HTTPException(status_code=404, detail="unknown harness")
+        if agent.owner_id != user.id and user.role not in ("platform", "admin"):
+            raise HTTPException(status_code=403, detail="not your harness")
+        return {"token": rotate_harness(session, agent_id)}
+
+    @app.delete("/harnesses/{agent_id}")
+    def remove_harness(agent_id: str, session: Session = Depends(get_session),
+                       user: User = Depends(current_user)):
+        agent = session.get(User, agent_id)
+        if agent is not None and agent.kind == "agent":
+            if agent.owner_id != user.id and user.role not in ("platform", "admin"):
+                raise HTTPException(status_code=403, detail="not your harness")
+            delete_harness(session, agent_id)
+        return {"status": "deleted"}
+
+    # --- OAuth device flow: the agent gets auth without a human pasting a token ---
+    @app.post("/agent/device/start")   # called by the agent (unauthenticated)
+    def device_start_route(body: DeviceStart, request: Request,
+                           session: Session = Depends(get_session)):
+        grant = device_start(session, body.harness_kind, body.name)
+        return {"device_code": grant.device_code, "user_code": grant.user_code,
+                "verification_uri": _base(request) + "/",
+                "interval": POLL_INTERVAL_SECONDS, "expires_in": 600}
+
+    @app.post("/agent/device/token")   # polled by the agent (unauthenticated)
+    def device_token_route(body: DeviceToken, session: Session = Depends(get_session)):
+        try:
+            return {"access_token": device_poll(session, body.device_code), "token_type": "bearer"}
+        except DevicePending:
+            return {"status": "authorization_pending", "interval": POLL_INTERVAL_SECONDS}
+        except DeviceExpired as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/agent/device/approve")  # a human authorizes the agent in the UI
+    def device_approve_route(body: DeviceApprove, session: Session = Depends(get_session),
+                             user: User = Depends(current_user)):
+        role = body.role or user.role
+        grant = device_approve(session, body.user_code, user, role)
+        return {"status": "approved", "harness": harness_view(session.get(User, grant.agent_id))}
+
     # --- teams, usage ledger, cost attribution ---
     @app.get("/teams")
     def get_teams(session: Session = Depends(get_session), _: User = Depends(current_user)):
@@ -970,6 +1087,10 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         return summary(session, owner_id=owner_scope(user))
 
     # --- integrations ---
+    @app.get("/connectors")
+    def get_connectors(_: User = Depends(current_user)):
+        return connectors()  # catalog: kind + label + capabilities + credential fields
+
     @app.post("/integrations", status_code=201)
     def add_integration(body: NewIntegration, session: Session = Depends(get_session),
                         user: User = Depends(current_user)):
@@ -1026,6 +1147,11 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def integration_issues(integ_id: str, session: Session = Depends(get_session),
                            _: User = Depends(current_user)):
         return list_issues(session, integ_id)
+
+    @app.get("/integrations/{integ_id}/workflow")
+    def integration_workflow(integ_id: str, session: Session = Depends(get_session),
+                             _: User = Depends(current_user)):
+        return {"stages": list_workflow(session, integ_id)}  # for process-from-columns
 
     @app.post("/integrations/{integ_id}/sync")
     def sync_integration(integ_id: str, body: SyncRequest, session: Session = Depends(get_session),

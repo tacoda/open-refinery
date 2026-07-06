@@ -38,6 +38,15 @@ def test_me_and_users_never_leak_secret_fields(ctx):
     assert users and all(LEAKY.isdisjoint(u) for u in users)
 
 
+def test_onboarding_flag_lifecycle(ctx, monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "test-secret")  # completing onboarding writes an encrypted setting
+    _, client, admin, token = ctx
+    h = auth(token)
+    assert client.get("/onboarding", headers=h).json()["onboarded"] is False
+    assert client.post("/onboarding/complete", headers=h).json()["onboarded"] is True
+    assert client.get("/onboarding", headers=h).json()["onboarded"] is True
+
+
 def test_health_areas_scores_all_three(ctx):
     # regression: the /health route handler must not shadow the debt.health scorer
     _, client, admin, token = ctx

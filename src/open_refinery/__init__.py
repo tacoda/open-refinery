@@ -29,14 +29,18 @@ from .attestations import (
     attestations_for,
 )
 from .integrations import (
+    CONNECTORS,
     SOURCE_KINDS,
     TRACKER_KINDS,
+    WORKFLOW_KINDS,
     Integration,
+    connectors,
     create_integration,
     delete_integration,
     get_integration,
     list_integrations,
     list_issues,
+    list_workflow,
 )
 from .targets import (
     QuotaExceeded,
@@ -93,6 +97,19 @@ from .approval_workflows import (
 )
 from .analysis import analyze
 from .debt import audit, health, list_audits, run_audit
+from .harnesses import (
+    HARNESS_CATALOG,
+    DeviceExpired,
+    DevicePending,
+    delete_harness,
+    device_approve,
+    device_poll,
+    device_start,
+    harness_view,
+    list_harnesses,
+    register_harness,
+    rotate_harness,
+)
 from .postmortem import postmortem
 from .rollback import (
     record_rollback_applied,
@@ -188,7 +205,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "2.0.2"
+__version__ = "2.1.0"
 
 __all__ = [
     "Factory",
@@ -259,8 +276,12 @@ __all__ = [
     "get_integration",
     "list_integrations",
     "list_issues",
+    "list_workflow",
+    "connectors",
+    "CONNECTORS",
     "SOURCE_KINDS",
     "TRACKER_KINDS",
+    "WORKFLOW_KINDS",
     "sync_tracker",
     "find_by_external_ref",
     "import_or_get",
@@ -310,6 +331,17 @@ __all__ = [
     "list_audits",
     "health",
     "postmortem",
+    "register_harness",
+    "list_harnesses",
+    "harness_view",
+    "rotate_harness",
+    "delete_harness",
+    "device_start",
+    "device_approve",
+    "device_poll",
+    "DevicePending",
+    "DeviceExpired",
+    "HARNESS_CATALOG",
     "rollback_work_item",
     "rollback_targets",
     "stage_history",

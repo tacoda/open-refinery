@@ -1,6 +1,10 @@
-# open-refinery
+<p align="center">
+  <img src="frontend/public/favicon.svg" width="72" height="72" alt="Open Refinery" />
+</p>
+<h1 align="center">Open Refinery</h1>
+<p align="center"><em>A dark factory with the lights on.</em></p>
 
-*An open factory to shine light into the dark.*
+---
 
 **open-refinery is a self-hosted control plane for AI-driven software work.**
 Teams define the *processes* their work moves through — a kanban board, a
@@ -48,6 +52,11 @@ with `pip install` and one command; manage everything from the web dashboard.
 - **Routing policy inputs + traffic graph** — route resolution filters targets on
   region / compliance tags and can prefer lowest cost; a cross-agent traffic
   graph shows who sends how much to which target.
+- **Connects your code hosts and issue trackers** — GitHub, GitLab (code hosts);
+  GitHub Issues, Jira, Linear (issue trackers), connected by token or OAuth,
+  credentials encrypted at rest. Trackers expose **workflow discovery** — the
+  tool's own columns/statuses — so a process can be shaped from *your* board
+  (your Jira statuses, your Linear states) rather than a generic template.
 - Ships work through **customizable processes** — ordered steps with feedback
   loops (board or doctrine archetypes).
 - Records a **complete, attributed audit trail** — who did what, to which work

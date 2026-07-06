@@ -407,6 +407,14 @@ item. Each milestone is a shippable minor; 2.0.0 is the cut.
 drawer pattern across the remaining admin surfaces (+ a reserved slot dropped for
 now — revisit later).
 
+**2.1.0 (post-2.0 UX + agents).** Left icon sidebar + brand/login; role-aware nav
++ developer read-only "My rules"; GitHub Issues connector + tracker **workflow
+discovery**; OAuth-first shared connect; **first-run setup wizard** (connect →
+import → pack → process-from-columns → first item); **harness identities** (auth
+for Claude Code et al. — role-scoped service accounts, token + OAuth device flow,
+governed by the proactive controls); concept visuals (process pipeline, layer
+lattice, icon/trend cards, humanized metrics). Migration v15.
+
 ## Roadmap
 
 | Version | Deliverable                                                          |

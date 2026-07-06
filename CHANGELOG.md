@@ -3,6 +3,51 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.1.0] — 2026-07-06
+
+A large UX + onboarding + agent-auth release.
+
+### Added
+- **Harness identities — auth for coding agents (Claude Code first).** A harness
+  is a role-scoped **service-account** owned by a person; its token authenticates
+  the agent's CLI to the platform, and every call it makes is governed by its
+  role under the current enforcement mode (the proactive controls apply to agents
+  exactly as to people). Two paths:
+  - **OAuth device flow** (preferred, RFC 8628): agent starts a request → shows a
+    code → a human approves it in the UI → agent polls for the token. Endpoints
+    `POST /agent/device/{start,token,approve}`; token returned once.
+  - **Minted token** (fallback): register → `OPEN_REFINERY_URL`/`OPEN_REFINERY_TOKEN`
+    setup snippet. `GET/POST/DELETE /harnesses`, `POST /harnesses/{id}/rotate`,
+    `GET /harnesses/catalog`. Catalog: Claude Code + LangGraph/Cursor/Aider/Codex.
+- **GitHub Issues connector + workflow discovery.** A connector catalog
+  (`GET /connectors`) with capabilities (source/tracker/workflow); GitHub Issues
+  joins Jira/Linear as trackers. `GET /integrations/{id}/workflow` returns the
+  tool's own columns/statuses — so a process is shaped from *your* board.
+- **First-run setup wizard.** The first admin goes connect → import repo → enable
+  a pack → **create the first process from a tracker's columns** → ship a first
+  item. `GET /onboarding` + `POST /onboarding/complete`; later users inherit.
+- **OAuth-first connect** (`ConnectService`), shared by Integrations + onboarding:
+  one-click OAuth when configured, token fallback under "use a token instead".
+
+### Changed
+- **Left icon sidebar** replaces the two-level top nav (Lucide icons, collapsible,
+  role-filtered) — snappier SPA feel.
+- **Role-aware surfaces.** Developers get a trimmed, work-focused nav + a
+  read-only **"My rules"** view (what governs them, not authoring); platform/admin
+  see the full surface. Everyone lands on the visibility-first Overview.
+- **Concept visuals.** Processes render as a **pipeline diagram** (gated stages
+  locked, current stage lit, feedback loops noted); the Governance tab shows a
+  **layer lattice** (factory ↓ harness ↓ charter); Overview cards gain icons;
+  Metrics labels are humanized and actor IDs resolve to emails.
+- **Brand.** New process-graph logo mark ("a dark factory with the lights on"),
+  redesigned login, `favicon.svg` + `.png` + `.ico` + apple-touch; README + gh-pages
+  branding refreshed.
+
+### Migration
+- **v15** — `users.kind` / `harness_kind` / `owner_id` (agent service accounts).
+  `device_grants` is a new table (create_all). Reversible downgrade appended.
+  `make seed` now marks seeded orgs onboarded (and sources `.env`).
+
 ## [2.0.2] — 2026-07-06
 
 ### Added

@@ -12,32 +12,62 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { LogoMark } from './Brand'
+import {
+  LayoutDashboard, ListChecks, CheckSquare, GitBranch, Workflow, Shield, GitPullRequest,
+  Package, Boxes, Plug, Target, Users, BarChart3, Coins, Network, Activity, ScanSearch,
+  FlaskConical, ScrollText, Mail, Settings as SettingsIcon, ShieldCheck, PanelLeftClose,
+  PanelLeft, LogOut, Eye, Bot, Lock,
+} from 'lucide-react'
 
-type View = 'overview' | 'work' | 'approvals' | 'repos' | 'processes' | 'systems' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics' | 'teams' | 'usage' | 'traffic'
+// One icon per view — used by the sidebar and (later) overview cards.
+const VIEW_ICON: Record<string, any> = {
+  overview: LayoutDashboard, work: ListChecks, approvals: CheckSquare, repos: GitBranch,
+  processes: Workflow, policies: Shield, proposals: GitPullRequest, packs: Package,
+  governance: ShieldCheck, myrules: Eye, harnesses: Bot, systems: Boxes, integrations: Plug, targets: Target, teams: Users,
+  metrics: BarChart3, usage: Coins, traffic: Network, audits: Activity, coverage: ScanSearch,
+  experiments: FlaskConical, events: ScrollText, invitations: Mail, settings: SettingsIcon,
+}
+const GROUP_ICON: Record<string, any> = {
+  Home: LayoutDashboard, Work: ListChecks, Governance: ShieldCheck, Platform: Boxes,
+  Insights: BarChart3, Admin: SettingsIcon,
+}
+
+type View = 'overview' | 'work' | 'approvals' | 'repos' | 'processes' | 'systems' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics' | 'teams' | 'usage' | 'traffic' | 'myrules' | 'harnesses'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
-// Grouped navigation: one group is shown at a time (progressive disclosure).
-type NavTab = { value: View; label: string; gate?: 'admin' | 'invite' | 'platform' }
+// Role-aware navigation. Gates: 'platform' → platform+admin, 'admin' → admin,
+// 'dev' → developers only, 'invite' → anyone with a lower role to invite.
+// Developers get a trimmed, work-focused surface + read-only "My rules"; the
+// platform internals and governance *authoring* are hidden from them.
+type NavTab = { value: View; label: string; gate?: 'admin' | 'invite' | 'platform' | 'dev' }
 const NAV: { group: string; tabs: NavTab[] }[] = [
   { group: 'Home', tabs: [
     { value: 'overview', label: 'Overview' } ] },
   { group: 'Work', tabs: [
     { value: 'work', label: 'Work' }, { value: 'approvals', label: 'Approvals' },
-    { value: 'repos', label: 'Repos' }, { value: 'processes', label: 'Processes' } ] },
+    { value: 'repos', label: 'Repos' }, { value: 'processes', label: 'Processes' },
+    { value: 'harnesses', label: 'Harnesses' } ] },
   { group: 'Governance', tabs: [
-    { value: 'policies', label: 'Policies' }, { value: 'proposals', label: 'Proposals' },
+    { value: 'myrules', label: 'My rules', gate: 'dev' },   // read-only, developers
+    { value: 'policies', label: 'Policies', gate: 'platform' },
+    { value: 'proposals', label: 'Proposals', gate: 'platform' },
     { value: 'packs', label: 'Packs' },
     { value: 'governance', label: 'Governance', gate: 'admin' } ] },
   { group: 'Platform', tabs: [
-    { value: 'systems', label: 'Systems' },
-    { value: 'integrations', label: 'Integrations' }, { value: 'targets', label: 'Targets' },
+    { value: 'systems', label: 'Systems', gate: 'platform' },
+    { value: 'integrations', label: 'Integrations', gate: 'platform' },
+    { value: 'targets', label: 'Targets', gate: 'platform' },
     { value: 'teams', label: 'Teams', gate: 'platform' } ] },
   { group: 'Insights', tabs: [
-    { value: 'metrics', label: 'Metrics' }, { value: 'usage', label: 'Usage' },
-    { value: 'traffic', label: 'Traffic' }, { value: 'audits', label: 'Audits' },
-    { value: 'coverage', label: 'Coverage' }, { value: 'experiments', label: 'Experiments' },
-    { value: 'events', label: 'Audit log' } ] },
+    { value: 'metrics', label: 'Metrics' },
+    { value: 'coverage', label: 'Coverage' },
+    { value: 'usage', label: 'Usage', gate: 'platform' },
+    { value: 'traffic', label: 'Traffic', gate: 'platform' },
+    { value: 'audits', label: 'Audits', gate: 'platform' },
+    { value: 'experiments', label: 'Experiments', gate: 'platform' },
+    { value: 'events', label: 'Audit log', gate: 'platform' } ] },
   { group: 'Admin', tabs: [
     { value: 'invitations', label: 'Invitations', gate: 'invite' },
     { value: 'settings', label: 'Settings', gate: 'platform' } ] },
@@ -47,6 +77,31 @@ const NAV: { group: string; tabs: NavTab[] }[] = [
 export function EmptyRow({ show, cols, children }: { show: boolean; cols: number; children: any }) {
   if (!show) return null
   return <TableRow><TableCell colSpan={cols} className="muted">{children}</TableCell></TableRow>
+}
+
+// A process, drawn: stages as nodes, flow left→right, gated stages locked, the
+// current stage lit, feedback loops noted. The process concept made visible.
+export function Pipeline({ stages, gates = [], transitions = [], current }:
+    { stages: string[]; gates?: string[]; transitions?: any[]; current?: string }) {
+  const idx = (s: string) => stages.indexOf(s)
+  const loops = (transitions || []).filter((t: any[]) => idx(t[1]) >= 0 && idx(t[1]) < idx(t[0]))
+  return (
+    <div>
+      <div className="pipeline">
+        {stages.map((s, i) => (
+          <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: '.375rem' }}>
+            <span className={`pl-node${current === s ? ' current' : ''}${gates.includes(s) ? ' gate' : ''}`}>
+              {gates.includes(s) && <Lock size={12} />}{s}
+            </span>
+            {i < stages.length - 1 && <span className="pl-arrow">→</span>}
+          </span>
+        ))}
+      </div>
+      {loops.length > 0 && (
+        <div className="pl-loop">↩ feedback: {loops.map((t: any[]) => `${t[0]} → ${t[1]}`).join(', ')}</div>
+      )}
+    </div>
+  )
 }
 
 // Modern on/off switch. aria-checked drives both a11y and the CSS knob position.
@@ -136,12 +191,19 @@ export default function App() {
     document.title = me ? `Open Refinery · ${view[0].toUpperCase()}${view.slice(1)}` : 'Open Refinery'
   }, [view, me])
 
-  // Progressive disclosure: admins land on high-level Insights; everyone else on Work.
+  // Everyone lands on the visibility-first Overview (what needs attention now).
   useEffect(() => {
     if (!me) return
-    const g = me.role === 'admin' ? 'Insights' : 'Work'
-    setGroup(g)
-    setView((NAV.find((n) => n.group === g)!.tabs[0].value))
+    setGroup('Home')
+    setView('overview')
+  }, [me])
+
+  // First-run: platform/admin see the setup wizard until the org is onboarded.
+  useEffect(() => {
+    if (!me) return
+    if (['platform', 'admin'].includes(me.role)) {
+      api('/onboarding').then((r) => setOnboarded(!!r.onboarded)).catch(() => setOnboarded(true))
+    } else setOnboarded(true)  // developers inherit the configured org
   }, [me])
 
   const rank = (r: string) => roles.find((x) => x.name === r)?.rank ?? 0
@@ -151,13 +213,15 @@ export default function App() {
   const isPlatform = !!me && ['platform', 'admin'].includes(me.role)
   const isAdmin = !!me && me.role === 'admin'
   const [group, setGroup] = useState('Home')
+  const [collapsed, setCollapsed] = useState(false)
+  const [onboarded, setOnboarded] = useState<boolean | null>(null)
 
   const allow = (t: NavTab) =>
     t.gate === 'admin' ? isAdmin : t.gate === 'invite' ? canInvite
-      : t.gate === 'platform' ? isPlatform : true
+      : t.gate === 'platform' ? isPlatform
+        : t.gate === 'dev' ? (!!me && me.role === 'developer') : true
   const tabsFor = (g: string) => (NAV.find((n) => n.group === g)?.tabs ?? []).filter(allow)
   const groups = NAV.filter((n) => tabsFor(n.group).length > 0)
-  const openGroup = (g: string) => { setGroup(g); const t = tabsFor(g)[0]; if (t) setView(t.value) }
   // jump straight to a view from anywhere (Overview drill-in), opening its group
   const goto = (v: View) => {
     const g = NAV.find((n) => n.tabs.some((t) => t.value === v))
@@ -170,43 +234,70 @@ export default function App() {
       <Toaster richColors position="top-right" />
       {!token || !me
         ? <Entry onToken={(t) => { setToken(t); setTok(t) }} />
+        : onboarded === false
+        ? <Wizard onDone={() => setOnboarded(true)} />
         : (
-          <div className="app-shell">
-            <Tabs value={view} onValueChange={(v) => setView(v as View)}>
-              <header className="app-header">
-                <span className="app-brand">Open Refinery</span>
-                <nav className="nav-group">
-                  {groups.map((n) => (
-                    <Button key={n.group} size="sm"
-                            variant={group === n.group ? 'default' : 'ghost'}
-                            onClick={() => openGroup(n.group)}>{n.group}</Button>
-                  ))}
-                </nav>
+          <div className={`app-shell${collapsed ? ' collapsed' : ''}`}>
+            <aside className="sidebar">
+              <button className="sidebar-brand" onClick={() => goto('overview')} title="Open Refinery">
+                <LogoMark size={24} /><span className="brand-word">Open Refinery</span>
+              </button>
+              <nav className="sidebar-nav">
+                {groups.map((n) => (
+                  <div key={n.group} className="sidebar-section">
+                    <div className="sidebar-section-label">{n.group}</div>
+                    {tabsFor(n.group).map((t) => {
+                      const Icon = VIEW_ICON[t.value] ?? GROUP_ICON[n.group] ?? LayoutDashboard
+                      return (
+                        <button key={t.value} title={t.label}
+                                className={`sidebar-item${view === t.value ? ' active' : ''}`}
+                                onClick={() => { setGroup(n.group); setView(t.value) }}>
+                          <Icon size={16} className="sidebar-icon" />
+                          <span className="sidebar-label">{t.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ))}
+              </nav>
+              <div className="sidebar-foot">
+                <button className="sidebar-item" onClick={() => setCollapsed((c) => !c)}
+                        title={collapsed ? 'Expand' : 'Collapse'}>
+                  {collapsed ? <PanelLeft size={16} className="sidebar-icon" /> : <PanelLeftClose size={16} className="sidebar-icon" />}
+                  <span className="sidebar-label">Collapse</span>
+                </button>
+              </div>
+            </aside>
+            <main className="app-main">
+              <header className="app-topbar">
                 <span className="app-spacer" />
                 <ThemeToggle />
                 {live && <Badge variant="outline" title="live updates connected">● live</Badge>}
                 <span className="app-user">{me.email} · {me.role}</span>
                 <Button variant="outline" size="sm"
                         onClick={() => { clearToken(); setTok(''); setMe(null) }}>
-                  Sign out
+                  <LogOut size={14} /> Sign out
                 </Button>
               </header>
-              <TabsList>
-                {tabsFor(group).map((t) => (
-                  <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
-                ))}
-              </TabsList>
+              <Tabs value={view} onValueChange={(v) => setView(v as View)}>
+                <TabsList className="sr-only">
+                  {tabsFor(group).map((t) => (
+                    <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
+                  ))}
+                </TabsList>
               <TabsContent value="overview"><Overview goto={goto} /></TabsContent>
               <TabsContent value="work"><Work /></TabsContent>
               <TabsContent value="approvals"><Approvals /></TabsContent>
               <TabsContent value="repos"><Repos /></TabsContent>
               <TabsContent value="processes"><Processes /></TabsContent>
+              <TabsContent value="harnesses"><Harnesses me={me} roles={roles} /></TabsContent>
               <TabsContent value="systems"><Systems /></TabsContent>
               <TabsContent value="teams"><Teams /></TabsContent>
               <TabsContent value="usage"><Usage /></TabsContent>
               <TabsContent value="traffic"><Traffic /></TabsContent>
               <TabsContent value="integrations"><Integrations /></TabsContent>
               <TabsContent value="targets"><Targets /></TabsContent>
+              {me.role === 'developer' && <TabsContent value="myrules"><MyRules me={me} /></TabsContent>}
               <TabsContent value="policies"><Policies /></TabsContent>
               <TabsContent value="packs"><Packs me={me} roles={roles} /></TabsContent>
               <TabsContent value="proposals"><Proposals me={me} roles={roles} isAdmin={isAdmin} /></TabsContent>
@@ -218,7 +309,8 @@ export default function App() {
               {isAdmin && <TabsContent value="governance"><Governance /></TabsContent>}
               <TabsContent value="events"><Events isAdmin={isAdmin} /></TabsContent>
               <TabsContent value="metrics"><Metrics /></TabsContent>
-            </Tabs>
+              </Tabs>
+            </main>
           </div>
         )}
     </>
@@ -270,10 +362,7 @@ function AcceptInvite({ token, onToken }: { token: string; onToken: (t: string) 
   return (
     <div className="login-screen">
       <div className="login-card">
-        <h1 className="app-brand">Open Refinery</h1>
-        <p className="login-tagline">
-          {email ? `Set a password to join as ${email}.` : 'This invitation is invalid or expired.'}
-        </p>
+        <LoginBrand tagline={email ? `Set a password to join as ${email}.` : 'This invitation is invalid or expired.'} />
         {email && <>
           <Input placeholder="choose a password" type="password" value={pw}
                  onChange={(e) => setPw(e.target.value)}
@@ -281,6 +370,17 @@ function AcceptInvite({ token, onToken }: { token: string; onToken: (t: string) 
           <Button onClick={go}>Set password &amp; join</Button>
         </>}
       </div>
+    </div>
+  )
+}
+
+// Brand lockup for the login/onboarding screens: the lit mark on a dark panel.
+function LoginBrand({ tagline }: { tagline: string }) {
+  return (
+    <div className="login-brand">
+      <div className="login-mark"><LogoMark size={44} /></div>
+      <h1 className="login-title">Open Refinery</h1>
+      <p className="login-tagline">{tagline}</p>
     </div>
   )
 }
@@ -296,8 +396,7 @@ function SetupWizard({ onToken }: { onToken: (t: string) => void }) {
   return (
     <div className="login-screen">
       <div className="login-card">
-        <h1 className="app-brand">Welcome to Open Refinery</h1>
-        <p className="login-tagline">Create the first admin account to get started.</p>
+        <LoginBrand tagline="Create the first admin account to light up the factory." />
         <Input placeholder="admin email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <Input placeholder="password" type="password" value={pw}
                onChange={(e) => setPw(e.target.value)}
@@ -323,8 +422,7 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
   return (
     <div className="login-screen">
       <div className="login-card">
-        <h1 className="app-brand">Open Refinery</h1>
-        <p className="login-tagline">An open factory to shine light into the dark.</p>
+        <LoginBrand tagline="A dark factory with the lights on." />
         <Input placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <Input placeholder="password" type="password" value={pw}
                onChange={(e) => setPw(e.target.value)}
@@ -345,6 +443,197 @@ function useList(path: string) {
   const load = () => api(path).then(setRows).catch(fail)
   useEffect(() => { load() }, [])
   return { rows, load }
+}
+
+// First-run setup wizard — the first admin goes from signed-up to a running
+// factory: connect a service, import a repo, enable a pack, shape the first
+// process from the tracker's own columns, ship the first work item.
+const WIZ_STEPS = ['Welcome', 'Connect', 'Repository', 'Standards', 'Process', 'First work']
+export function Wizard({ onDone }: { onDone: () => void }) {
+  const [step, setStep] = useState(0)
+  const [catalog, setCatalog] = useState<any[]>([])
+  const [integs, setIntegs] = useState<any[]>([])
+  const reloadInteg = () => api('/integrations').then(setIntegs).catch(() => {})
+  useEffect(() => { api('/connectors').then(setCatalog).catch(() => {}); reloadInteg() }, [])
+
+  // step 1 — connect (shared OAuth-first flow)
+  const trackers = integs.filter((i) => {
+    const c = catalog.find((x) => x.kind === i.kind); return c?.caps.includes('tracker')
+  })
+  const sources = integs.filter((i) => {
+    const c = catalog.find((x) => x.kind === i.kind); return c?.caps.includes('source')
+  })
+
+  // step 2 — repo
+  const { rows: repos, load: reloadRepos } = useList('/repositories')
+  const [rname, setRname] = useState(''), [rurl, setRurl] = useState('')
+  const [remoteRepos, setRemoteRepos] = useState<any[]>([])
+  const browse = (id: string) => api(`/integrations/${id}/repos`).then(setRemoteRepos).catch(fail)
+  const importRepo = (r: any) => post('/repositories/import', { name: r.name, git_url: r.ssh_url })
+    .then(() => { toast.success(`Imported ${r.name}`); reloadRepos() }).catch(fail)
+  const addRepo = () => post('/repositories', { name: rname, git_url: rurl })
+    .then(() => { setRname(''); setRurl(''); reloadRepos() }).catch(fail)
+
+  // step 3 — pack
+  const { rows: packs, load: reloadPacks } = useList('/packs')
+  const enablePack = (key: string) => api(`/packs/${key}/enable`, { method: 'POST' })
+    .then(reloadPacks).catch(fail)
+
+  // step 4 — process (from a tracker's columns, or manual)
+  const { rows: procs, load: reloadProcs } = useList('/processes')
+  const [pname, setPname] = useState('My process'), [parch, setParch] = useState('board')
+  const [pstages, setPstages] = useState('backlog, in progress, review, done')
+  const [fromTracker, setFromTracker] = useState('')
+  const pullColumns = (id: string) => api(`/integrations/${id}/workflow`)
+    .then((r) => { if (r.stages?.length) setPstages(r.stages.join(', ')) })
+    .then(() => toast.success('Columns imported')).catch(fail)
+  const addProc = () => post('/processes', {
+    name: pname, archetype: parch, oversight: 'supervised',
+    stages: pstages.split(',').map((s) => s.trim()).filter(Boolean),
+  }).then(() => { reloadProcs(); toast.success('Process created') }).catch(fail)
+
+  // step 5 — first work item
+  const [wtitle, setWtitle] = useState(''), [wrepo, setWrepo] = useState(''), [wproc, setWproc] = useState('')
+  const ship = () => post('/work-items', { repo_id: wrepo, process_id: wproc, title: wtitle })
+    .then(() => toast.success('Work shipped')).catch(fail)
+
+  const finish = () => api('/onboarding/complete', { method: 'POST' }).then(onDone).catch(fail)
+  const next = () => setStep((s) => Math.min(s + 1, WIZ_STEPS.length - 1))
+  const back = () => setStep((s) => Math.max(s - 1, 0))
+  const last = step === WIZ_STEPS.length - 1
+
+  return (
+    <div className="wizard-screen">
+      <div className="wizard-card">
+        <div className="wizard-head">
+          <div className="login-mark" style={{ width: 44, height: 44 }}><LogoMark size={26} /></div>
+          <div>
+            <h1 className="login-title">Set up your factory</h1>
+            <p className="login-tagline">Step {step + 1} of {WIZ_STEPS.length} · {WIZ_STEPS[step]}</p>
+          </div>
+          <span className="app-spacer" />
+          <div className="wizard-steps">
+            {WIZ_STEPS.map((_, i) => <span key={i} className={`wizard-dot${i === step ? ' active' : i < step ? ' done' : ''}`} />)}
+          </div>
+        </div>
+
+        <div className="wizard-body">
+          {step === 0 && (
+            <div className="space-y-2">
+              <p>Welcome. In a few steps you'll connect your tools, import a repository, adopt a set of standards, and shape the first process from your own board — then ship a work item through it.</p>
+              <p className="muted">You're the first user, so what you set up here becomes the org default. Later teammates inherit it.</p>
+            </div>
+          )}
+
+          {step === 1 && (
+            <div className="space-y-3">
+              <p className="muted">Connect a code host and/or an issue tracker — OAuth is the one-click path; a token works too. (Or skip and add later.)</p>
+              <ConnectService onConnected={reloadInteg} />
+              <div className="toolbar">{integs.map((i) => <Badge key={i.id} variant="secondary">{i.kind} · {i.account}</Badge>)}</div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-3">
+              <p className="muted">Import a repository from a connected code host, or add one by URL.</p>
+              {sources.length > 0 && (
+                <div className="field-form">
+                  <Field label="Browse from">
+                    <Select value="" onValueChange={(v) => { if (v) browse(v) }}>
+                      <SelectTrigger className="field"><SelectValue placeholder="code host…" /></SelectTrigger>
+                      <SelectContent>{sources.map((i) => <SelectItem key={i.id} value={i.id}>{i.kind} · {i.account}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+              )}
+              {remoteRepos.length > 0 && (
+                <div className="toolbar">{remoteRepos.slice(0, 12).map((r) => (
+                  <Button key={r.full_name} size="sm" variant="outline" onClick={() => importRepo(r)}>+ {r.name}</Button>
+                ))}</div>
+              )}
+              <div className="field-form">
+                <Field label="Name"><Input className="field" placeholder="checkout-api" value={rname} onChange={(e) => setRname(e.target.value)} /></Field>
+                <Field label="Git URL"><Input className="field" placeholder="git@github.com:org/repo.git" value={rurl} onChange={(e) => setRurl(e.target.value)} /></Field>
+                <Button onClick={addRepo} disabled={!rname || !rurl}>Add repo</Button>
+              </div>
+              <div className="toolbar">{repos.map((r: any) => <Badge key={r.id} variant="secondary">{r.name}</Badge>)}</div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-3">
+              <p className="muted">Adopt a starter set of standards & processes. Enable what fits (you can add more later).</p>
+              <div className="board">{packs.slice(0, 9).map((p: any) => (
+                <button key={p.key} className={`wizard-pill${p.enabled ? ' picked' : ''}`}
+                        onClick={() => !p.enabled && enablePack(p.key)}>
+                  <Package size={15} /> {p.title}{p.enabled && <Badge>on</Badge>}
+                </button>
+              ))}</div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="space-y-3">
+              <p className="muted">Shape your first process. Pull the stages from a connected tracker's board, or type your own.</p>
+              {trackers.length > 0 && (
+                <div className="field-form">
+                  <Field label="From tracker columns">
+                    <Select value={fromTracker} onValueChange={(v) => { setFromTracker(v ?? ''); if (v) pullColumns(v) }}>
+                      <SelectTrigger className="field"><SelectValue placeholder="tracker…" /></SelectTrigger>
+                      <SelectContent>{trackers.map((i) => <SelectItem key={i.id} value={i.id}>{i.kind} · {i.account}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+              )}
+              <div className="field-form">
+                <Field label="Name"><Input className="field" value={pname} onChange={(e) => setPname(e.target.value)} /></Field>
+                <Field label="Type">
+                  <Select value={parch} onValueChange={(v) => setParch(v ?? '')}>
+                    <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="board">board</SelectItem><SelectItem value="doctrine">doctrine</SelectItem></SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Stages"><Input className="field" style={{ width: '20rem' }} value={pstages} onChange={(e) => setPstages(e.target.value)} /></Field>
+                <Button onClick={addProc} disabled={!pname || !pstages}>Create process</Button>
+              </div>
+              {/* preview the process as a pipeline */}
+              <Pipeline stages={pstages.split(',').map((s) => s.trim()).filter(Boolean)} />
+              <div className="toolbar">{procs.map((p: any) => <Badge key={p.id} variant="secondary">{p.name}</Badge>)}</div>
+            </div>
+          )}
+
+          {step === 5 && (
+            <div className="space-y-3">
+              <p className="muted">Ship your first work item through the process you just built.</p>
+              <div className="field-form">
+                <Field label="Title"><Input className="field" placeholder="first task" value={wtitle} onChange={(e) => setWtitle(e.target.value)} /></Field>
+                <Field label="Repository">
+                  <Select value={wrepo} onValueChange={(v) => setWrepo(v ?? '')}>
+                    <SelectTrigger className="field"><SelectValue placeholder="repo…" /></SelectTrigger>
+                    <SelectContent>{repos.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Process">
+                  <Select value={wproc} onValueChange={(v) => setWproc(v ?? '')}>
+                    <SelectTrigger className="field"><SelectValue placeholder="process…" /></SelectTrigger>
+                    <SelectContent>{procs.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </Field>
+                <Button onClick={ship} disabled={!wtitle || !wrepo || !wproc}>Ship it</Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="wizard-foot">
+          <Button variant="ghost" size="sm" onClick={finish}>Skip setup</Button>
+          <span className="app-spacer" />
+          {step > 0 && <Button variant="outline" size="sm" onClick={back}>Back</Button>}
+          {last ? <Button onClick={finish}>Finish</Button> : <Button onClick={next}>Next</Button>}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function Repos() {
@@ -445,68 +734,214 @@ function Processes() {
                onChange={(e) => setChain(e.target.value)} /></Field>
         <Button onClick={add} disabled={!name}>Add process</Button>
       </div>
-      <Card><CardContent>
-        <Table>
-          <TableHeader><TableRow>
-            <TableHead>Name</TableHead><TableHead>Type</TableHead><TableHead>Oversight</TableHead><TableHead>Steps</TableHead>
-          </TableRow></TableHeader>
-          <TableBody><EmptyRow show={!rows.length} cols={9}>Nothing here yet.</EmptyRow>{rows.map((p) => (
-            <TableRow key={p.id}>
-              <TableCell>{p.name}</TableCell>
-              <TableCell><Badge variant="secondary">{p.archetype}</Badge></TableCell>
-              <TableCell><Badge variant="outline">{p.oversight}</Badge></TableCell>
-              <TableCell className="mono">{p.stages.join(' → ')}</TableCell>
-            </TableRow>
-          ))}</TableBody>
-        </Table>
-      </CardContent></Card>
+      <div className="work-list">
+        {!rows.length && <Card><CardContent><p className="muted">No processes yet — define one above.</p></CardContent></Card>}
+        {rows.map((p) => (
+          <Card key={p.id}>
+            <CardContent>
+              <div className="work-head">
+                <span className="work-title">{p.name}</span>
+                <Badge variant="secondary">{p.archetype}</Badge>
+                <Badge variant="outline">{p.oversight}</Badge>
+              </div>
+              <div style={{ marginTop: '.6rem' }}>
+                <Pipeline stages={p.stages} gates={p.gates} transitions={p.transitions} />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </section>
+  )
+}
+
+// Credential field metadata — label + placeholder + whether it's a secret.
+const FIELD_META: Record<string, { label: string; ph: string; secret?: boolean }> = {
+  token: { label: 'Access token', ph: 'paste token', secret: true },
+  site: { label: 'Site', ph: 'acme.atlassian.net' },
+  email: { label: 'Email', ph: 'you@acme.com' },
+  repo: { label: 'Repository', ph: 'owner/name (optional)' },
+}
+const CAP_LABEL: Record<string, string> = {
+  source: 'code host', tracker: 'issue tracker', workflow: 'columns', docs: 'docs', notify: 'notify',
+}
+
+// Harness identities — register a coding agent (Claude Code, …) so its CLI is
+// authenticated to the platform and governed by its role.
+function Harnesses({ me, roles }: any) {
+  const { rows, load } = useList('/harnesses')
+  const [catalog, setCatalog] = useState<any[]>([])
+  useEffect(() => { api('/harnesses/catalog').then(setCatalog).catch(() => {}) }, [])
+  const [hkind, setHkind] = useState('claude-code'), [hname, setHname] = useState('')
+  const [role, setRole] = useState(me.role)
+  const [issued, setIssued] = useState<any>(null)  // {harness, token, setup} — shown once
+  const kindLabel = (k: string) => catalog.find((c) => c.kind === k)?.label ?? k
+  const register = () => post('/harnesses', { harness_kind: hkind, name: hname, role })
+    .then((r) => { setIssued(r); setHname(''); load() }).catch(fail)
+  const rotate = (id: string) => api(`/harnesses/${id}/rotate`, { method: 'POST' })
+    .then((r) => { setIssued({ harness: rows.find((x: any) => x.id === id), token: r.token,
+      setup: { OPEN_REFINERY_TOKEN: r.token } }); toast.success('token rotated') }).catch(fail)
+  const revoke = (id: string) => api(`/harnesses/${id}`, { method: 'DELETE' }).then(load).catch(fail)
+
+  // device flow: a human approves an agent that started a device request
+  const [ucode, setUcode] = useState(''), [drole, setDrole] = useState(me.role)
+  const approve = () => post('/agent/device/approve', { user_code: ucode, role: drole })
+    .then((r) => { toast.success(`Authorized ${r.harness.name}`); setUcode(''); load() }).catch(fail)
+
+  return (
+    <section className="page">
+      <h2 className="page-title">Harnesses</h2>
+      <p className="muted">Give a coding agent (Claude Code, and more soon) an identity. Its token authenticates the CLI to the platform — and every action it takes is governed by its role under the current enforcement mode, just like a person.</p>
+      <Card>
+        <CardHeader><CardTitle>Authorize an agent (device flow)</CardTitle></CardHeader>
+        <CardContent>
+          <p className="muted">The preferred path: the agent runs <span className="mono">open-refinery login</span>, shows a code, and you approve it here — no token to copy. Enter the code the agent displays:</p>
+          <div className="field-form">
+            <Field label="Code"><Input className="field" placeholder="XXXX-XXXX" value={ucode} onChange={(e) => setUcode(e.target.value)} /></Field>
+            <Field label="Runs as role">
+              <Select value={drole} onValueChange={(v) => setDrole(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                <SelectContent>{roles.map((r: Role) => <SelectItem key={r.name} value={r.name}>{r.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            <Button onClick={approve} disabled={!ucode}>Authorize</Button>
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Register an agent (token)</CardTitle></CardHeader>
+        <CardContent>
+          <div className="field-form">
+            <Field label="Agent">
+              <Select value={hkind} onValueChange={(v) => setHkind(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                <SelectContent>{catalog.map((c) => <SelectItem key={c.kind} value={c.kind}>{c.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            <Field label="Name"><Input className="field" placeholder="e.g. my-claude" value={hname} onChange={(e) => setHname(e.target.value)} /></Field>
+            <Field label="Runs as role">
+              <Select value={role} onValueChange={(v) => setRole(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                <SelectContent>{roles.map((r: Role) => <SelectItem key={r.name} value={r.name}>{r.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            <Button onClick={register} disabled={!hname}>Register</Button>
+          </div>
+          {issued && (
+            <div className="policy-preview" style={{ borderLeftColor: 'var(--primary)' }}>
+              <div><strong>{issued.harness?.name}</strong> registered as <Badge variant="secondary">{issued.harness?.role ?? role}</Badge> — copy this token now, it won't be shown again:</div>
+              <pre className="mono" style={{ whiteSpace: 'pre-wrap', marginTop: '.4rem' }}>{Object.entries(issued.setup).map(([k, v]) => `export ${k}=${v}`).join('\n')}</pre>
+              <p className="muted">Set these where the agent runs (e.g. Claude Code's environment); its calls are now authenticated and governed.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Agent</TableHead><TableHead>Role</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>
+              <EmptyRow show={!rows.length} cols={4}>No agents registered yet.</EmptyRow>
+              {rows.map((h: any) => (
+                <TableRow key={h.id}>
+                  <TableCell>{h.name}</TableCell>
+                  <TableCell><Badge variant="secondary">{kindLabel(h.harness_kind)}</Badge></TableCell>
+                  <TableCell><Badge variant="outline">{h.role}</Badge></TableCell>
+                  <TableCell><span style={{ display: 'flex', gap: '.3rem' }}>
+                    <Button variant="outline" size="sm" onClick={() => rotate(h.id)}>Rotate token</Button>
+                    <Button variant="outline" size="sm" onClick={() => revoke(h.id)}>Revoke</Button>
+                  </span></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
+// Shared connect flow (Integrations + onboarding). OAuth is the preferred path
+// when configured; a token is the always-available fallback.
+export function ConnectService({ onConnected }: { onConnected?: () => void }) {
+  const [catalog, setCatalog] = useState<any[]>([])
+  const [providers, setProviders] = useState<Record<string, boolean>>({})
+  const [kind, setKind] = useState('github')
+  const [creds, setCreds] = useState<Record<string, string>>({})
+  const [showToken, setShowToken] = useState(false)
+  useEffect(() => {
+    api('/connectors').then(setCatalog).catch(() => {})
+    api('/auth/providers').then(setProviders).catch(() => {})
+  }, [])
+  const conn = catalog.find((c) => c.kind === kind)
+  const fields: string[] = conn?.fields ?? ['token']
+  const oauth = !!providers[kind]                       // OAuth configured for this service
+  const missing = fields.some((f) => f !== 'repo' && !creds[f])
+  const pick = (v: string) => { setKind(v); setCreds({}); setShowToken(false) }
+  const connectToken = () => {
+    const credential: Record<string, string> = {}
+    for (const f of fields) if (creds[f]) credential[f] = creds[f]
+    post('/integrations', { kind, credential })
+      .then(() => { setCreds({}); setShowToken(false); toast.success('Connected'); onConnected?.() }).catch(fail)
+  }
+  const connectOAuth = () => post(`/integrations/${kind}/oauth/start`, {})
+    .then((r) => { window.location.href = r.authorize_url }).catch(fail)
+  return (
+    <div className="space-y-3">
+      <div className="field-form">
+        <Field label="Service">
+          <Select value={kind} onValueChange={(v) => pick(v ?? '')}>
+            <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+            <SelectContent>{catalog.map((c) => <SelectItem key={c.kind} value={c.kind}>{c.label}</SelectItem>)}</SelectContent>
+          </Select>
+        </Field>
+        {oauth
+          ? <Button onClick={connectOAuth}>Continue with {conn?.label} →</Button>
+          : (
+            <>
+              {fields.map((f) => {
+                const m = FIELD_META[f] ?? { label: f, ph: f }
+                return <Field key={f} label={m.label}><Input className="field" placeholder={m.ph}
+                  type={m.secret ? 'password' : 'text'} value={creds[f] ?? ''}
+                  onChange={(e) => setCreds((c) => ({ ...c, [f]: e.target.value }))} /></Field>
+              })}
+              <Button onClick={connectToken} disabled={missing}>Connect with token</Button>
+            </>
+          )}
+      </div>
+      {/* token fallback when OAuth is the primary path */}
+      {oauth && (showToken
+        ? (
+          <div className="field-form">
+            {fields.map((f) => {
+              const m = FIELD_META[f] ?? { label: f, ph: f }
+              return <Field key={f} label={m.label}><Input className="field" placeholder={m.ph}
+                type={m.secret ? 'password' : 'text'} value={creds[f] ?? ''}
+                onChange={(e) => setCreds((c) => ({ ...c, [f]: e.target.value }))} /></Field>
+            })}
+            <Button variant="outline" onClick={connectToken} disabled={missing}>Connect with token</Button>
+          </div>
+        )
+        : <Button variant="link" size="sm" onClick={() => setShowToken(true)}>Use an access token instead</Button>)}
+      {!oauth && conn && (
+        <p className="muted">OAuth isn’t configured for {conn.label}. Connect with a token, or an admin can set OAuth up in Settings for a one-click connect.</p>
+      )}
+      {conn && (
+        <div className="toolbar">{conn.caps.map((c: string) => <Badge key={c} variant="outline">{CAP_LABEL[c] ?? c}</Badge>)}</div>
+      )}
+    </div>
   )
 }
 
 function Integrations() {
   const { rows, load } = useList('/integrations')
-  const [kind, setKind] = useState('github')
-  const [token, setToken] = useState(''), [site, setSite] = useState(''), [email, setEmail] = useState('')
-  const [providers, setProviders] = useState<Record<string, boolean>>({})
-  useEffect(() => { api('/auth/providers').then(setProviders).catch(() => {}) }, [])
-  const isJira = kind === 'jira'
-  const connectToken = () => {
-    const credential = isJira ? { site, email, token } : { token }
-    post('/integrations', { kind, credential })
-      .then(() => { setToken(''); setSite(''); setEmail(''); load(); toast.success('Connected') })
-      .catch(fail)
-  }
-  const connectOAuth = () => post(`/integrations/${kind}/oauth/start`, {})
-    .then((r) => { window.location.href = r.authorize_url }).catch(fail)
-  const KINDS = [['github', 'GitHub'], ['gitlab', 'GitLab'], ['linear', 'Linear'], ['jira', 'Jira']]
   return (
     <section className="page">
       <h2 className="page-title">Integrations</h2>
-      <p className="muted">Connect a source host or issue tracker by token or OAuth; credentials are encrypted at rest.</p>
+      <p className="muted">Connect a code host or issue tracker. OAuth is the preferred one-click path; a token works too. Credentials are encrypted at rest.</p>
       <Card>
         <CardHeader><CardTitle>Connect a service</CardTitle></CardHeader>
-        <CardContent>
-          <div className="field-form">
-            <Field label="Service">
-              <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
-                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-                <SelectContent>{KINDS.map(([v, label]) =>
-                  <SelectItem key={v} value={v}>{label}</SelectItem>)}</SelectContent>
-              </Select>
-            </Field>
-            {isJira && <Field label="Site"><Input className="field" placeholder="acme.atlassian.net"
-                              value={site} onChange={(e) => setSite(e.target.value)} /></Field>}
-            {isJira && <Field label="Email"><Input className="field" placeholder="you@acme.com"
-                              value={email} onChange={(e) => setEmail(e.target.value)} /></Field>}
-            <Field label="Access token"><Input className="field" placeholder="paste token" type="password" value={token}
-                   onChange={(e) => setToken(e.target.value)} /></Field>
-            <Button onClick={connectToken} disabled={!token}>Connect with token</Button>
-            {providers[kind] && (
-              <Button variant="outline" onClick={connectOAuth}>Connect with OAuth</Button>
-            )}
-          </div>
-        </CardContent>
+        <CardContent><ConnectService onConnected={load} /></CardContent>
       </Card>
       <div className="work-list">
         {!rows.length && <p className="muted">No integrations connected yet.</p>}
@@ -600,6 +1035,38 @@ export function ruleSentence(p: any): string {
 const POLICY_ACTIONS = ['transition', 'invoke', 'rollback', 'tool', 'command', 'egress', '*']
 const LAYER_HINT: Record<string, string> = {
   factory: 'factory · org-wide service', harness: 'harness · agent tooling', charter: 'charter · repo/project',
+}
+
+// Read-only governance view for developers: the rules that actually apply to
+// them, in plain language. No authoring — legibility, not control.
+export function MyRules({ me }: { me: any }) {
+  const { rows } = useList('/policies')
+  const applies = rows.filter((p: any) => p.kind === 'rule' && (p.role === '*' || p.role === me.role))
+  const denies = applies.filter((p: any) => p.effect === 'deny')
+  const allows = applies.filter((p: any) => p.effect === 'allow')
+  const Section = ({ title, items, tone }: any) => (
+    <Card>
+      <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
+      <CardContent>
+        {items.length === 0
+          ? <p className="muted">Nothing here.</p>
+          : items.map((p: any) => (
+              <div key={p.id} className="policy-sentence" style={{ padding: '.25rem 0' }}>
+                <Badge variant={tone}>{p.effect}</Badge> {ruleSentence(p)}
+                {p.strict && <> <Badge>locked</Badge></>}
+              </div>
+            ))}
+      </CardContent>
+    </Card>
+  )
+  return (
+    <section className="page">
+      <h2 className="page-title">Rules that apply to me</h2>
+      <p className="muted">The governance rules in effect for your role ({me.role}). Read-only — proposing changes is a platform/admin action.</p>
+      <Section title="What I may not do" items={denies} tone="destructive" />
+      <Section title="What I'm explicitly allowed" items={allows} tone="secondary" />
+    </section>
+  )
 }
 
 function Policies() {
@@ -1231,6 +1698,31 @@ function Governance() {
         {' '}Higher-authority layers win; a locked (strict) rule can’t be overridden from below.</p>
 
       <Card>
+        <CardHeader><CardTitle>Layer lattice</CardTitle></CardHeader>
+        <CardContent>
+          <p className="muted">Precedence runs downward — a higher layer overrides a lower one on the same action.</p>
+          {(() => {
+            const counts: Record<string, number> = { factory: 0, harness: 0, charter: 0 }
+            for (const l of g.layers) for (const r of l.rules) if (counts[r.layer] !== undefined) counts[r.layer]++
+            const rows = [['factory', 'org service'], ['harness', 'agent tooling'], ['charter', 'repo / project']]
+            return (
+              <div className="lattice" style={{ marginTop: '.5rem' }}>
+                {rows.map(([layer, desc], i) => (
+                  <div key={layer}>
+                    <div className="lattice-row">
+                      <span><strong>{layer}</strong> <span className="rank">{desc}</span></span>
+                      <Badge variant="secondary">{counts[layer]} rule{counts[layer] === 1 ? '' : 's'}</Badge>
+                    </div>
+                    {i < rows.length - 1 && <div className="pl-arrow" style={{ textAlign: 'center' }}>↓ overrides</div>}
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader><CardTitle>Roles</CardTitle></CardHeader>
         <CardContent>
           <Table>
@@ -1826,11 +2318,11 @@ export function Overview({ goto }: { goto: (v: any) => void }) {
   }, {})
 
   const cards = [
-    { label: 'Approvals awaiting', n: pending, go: 'approvals', attn: pending > 0 },
-    { label: 'Work in progress', n: items.length, go: 'work', attn: false },
-    { label: 'Policy denials', n: denials, go: 'events', attn: denials > 0 },
-    { label: 'Failed invokes', n: failures, go: 'events', attn: failures > 0 },
-    { label: 'Rollbacks to apply', n: pendingApply, go: 'work', attn: pendingApply > 0 },
+    { label: 'Approvals awaiting', n: pending, go: 'approvals', attn: pending > 0, Icon: CheckSquare },
+    { label: 'Work in progress', n: items.length, go: 'work', attn: false, Icon: ListChecks },
+    { label: 'Policy denials', n: denials, go: 'events', attn: denials > 0, Icon: Shield },
+    { label: 'Failed invokes', n: failures, go: 'events', attn: failures > 0, Icon: Activity },
+    { label: 'Rollbacks to apply', n: pendingApply, go: 'work', attn: pendingApply > 0, Icon: GitBranch },
   ]
   return (
     <section className="page">
@@ -1839,7 +2331,10 @@ export function Overview({ goto }: { goto: (v: any) => void }) {
       <div className="highlight-grid">
         {cards.map((c) => (
           <button key={c.label} className={`highlight-card${c.attn ? ' highlight-attn' : ''}`} onClick={() => goto(c.go)}>
-            <div className={c.attn ? 'highlight-num-attn' : 'highlight-num'}>{c.n}</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span className={c.attn ? 'highlight-num-attn' : 'highlight-num'}>{c.n}</span>
+              <c.Icon size={18} className={c.attn ? '' : 'text-muted-foreground'} />
+            </div>
             <div className="muted">{c.label}</div>
           </button>
         ))}
@@ -2099,20 +2594,30 @@ function Events({ isAdmin }: any) {
   )
 }
 
+const METRIC_LABEL: Record<string, string> = {
+  avg_lead_seconds: 'avg lead time (s)', median_lead_seconds: 'median lead time (s)',
+  items: 'items', count: 'count',
+}
+const humanKey = (k: string) => METRIC_LABEL[k] ?? k.replace(/_/g, ' ')
+
 function Metrics() {
   const [m, setM] = useState<any>(null)
   const [ga, setGa] = useState<any>(null)
+  const [names, setNames] = useState<Record<string, string>>({})
   useEffect(() => {
     api('/metrics').then(setM).catch(fail)
     api('/governance/analysis').then(setGa).catch(() => {})
+    // resolve actor ids → emails when permitted (platform/admin); dev falls back to short id
+    api('/users').then((us: any[]) => setNames(Object.fromEntries(us.map((u) => [u.id, u.email])))).catch(() => {})
   }, [])
   if (!m) return null
   const panels = [
-    { title: 'WIP by step', data: m.wip_by_stage, accent: 'accent-blue' },
-    { title: 'Events', data: m.event_counts, accent: 'accent-green' },
-    { title: 'Activity by actor', data: m.activity_by_actor, accent: 'accent-purple' },
-    { title: 'Lead times', data: m.lead_times, accent: 'accent-orange' },
+    { title: 'WIP by step', data: m.wip_by_stage, accent: 'accent-blue', actor: false },
+    { title: 'Events', data: m.event_counts, accent: 'accent-green', actor: false },
+    { title: 'Activity by actor', data: m.activity_by_actor, accent: 'accent-purple', actor: true },
+    { title: 'Lead times', data: m.lead_times, accent: 'accent-orange', actor: false },
   ]
+  const keyLabel = (p: any, k: string) => p.actor ? (names[k] ?? `${k.slice(0, 8)}…`) : humanKey(k)
   return (
     <section className="page">
       <h2 className="page-title">Metrics</h2>
@@ -2122,7 +2627,7 @@ function Metrics() {
             <CardHeader><CardTitle>{p.title}</CardTitle></CardHeader>
             <CardContent>
               {Object.entries(p.data).map(([k, v]) => (
-                <div key={k} className="kv-row"><span className="mono">{k.slice(0, 14)}</span><b>{String(v)}</b></div>
+                <div key={k} className="kv-row"><span>{keyLabel(p, k)}</span><b>{String(v)}</b></div>
               ))}
               {!Object.keys(p.data).length && <div className="muted">none yet</div>}
             </CardContent>

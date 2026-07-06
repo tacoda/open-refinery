@@ -139,11 +139,36 @@
 
 /* Semantic layout classes so app JSX never carries raw utility classes. */
 @layer components {
-  .app-shell { @apply mx-auto max-w-6xl p-6; }
+  /* app shell: fixed left sidebar + scrollable main (SPA layout) */
+  .app-shell { display: grid; grid-template-columns: 236px 1fr; min-height: 100vh; }
+  .app-shell.collapsed { grid-template-columns: 60px 1fr; }
+  .app-main { @apply min-w-0; }
   .app-header { @apply flex flex-wrap items-center gap-4 border-b pb-4 mb-6; }
   .app-brand { @apply text-lg font-semibold tracking-tight; }
   .app-spacer { @apply ml-auto; }
   .app-user { @apply text-sm text-muted-foreground; }
+
+  .app-topbar { @apply flex items-center gap-3 border-b px-6 py-3; }
+
+  .sidebar { @apply flex flex-col border-r bg-card; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .sidebar-brand { @apply flex items-center gap-2 px-4 h-14 border-b w-full text-left font-semibold tracking-tight; }
+  .sidebar-brand .brand-word { @apply text-sm; }
+  .sidebar-nav { @apply flex-1 py-2 px-2 space-y-3; }
+  .sidebar-section-label { @apply px-2 pb-1 text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground; }
+  .sidebar-item { @apply flex items-center gap-2.5 w-full rounded-md px-2.5 py-1.5 text-sm text-left text-muted-foreground transition-colors; }
+  .sidebar-item:hover { @apply bg-accent text-foreground; }
+  .sidebar-item.active { @apply bg-primary/10 text-primary font-medium; }
+  .sidebar-item .sidebar-icon { flex: none; }
+  .sidebar-foot { @apply border-t p-2; }
+  /* collapsed: icons only */
+  .app-shell.collapsed .sidebar-label,
+  .app-shell.collapsed .sidebar-section-label,
+  .app-shell.collapsed .brand-word { display: none; }
+  .app-shell.collapsed .sidebar-item { @apply justify-center px-0; }
+  .app-shell.collapsed .sidebar-brand { @apply justify-center px-0; }
+
+  /* page content padding now lives in main */
+  .app-main .page { @apply p-6; }
 
   .page { @apply space-y-4; }
   .page-title { @apply text-xl font-semibold tracking-tight; }
@@ -192,6 +217,19 @@
   .switch[aria-checked="true"] .switch-knob { transform:translateX(1.1rem); }
   .switch-row { display:flex; align-items:center; gap:.5rem; }
 
+  /* process pipeline diagram — the process concept, drawn */
+  .pipeline { @apply flex flex-wrap items-center gap-1.5; }
+  .pl-node { @apply inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-sm bg-card; }
+  .pl-node.current { @apply border-primary text-primary font-medium; box-shadow: 0 0 0 1px var(--primary), 0 0 12px -2px color-mix(in oklab, var(--primary) 60%, transparent); }
+  .pl-node.gate { @apply border-dashed; }
+  .pl-arrow { @apply text-muted-foreground; }
+  .pl-loop { @apply text-xs text-muted-foreground mt-1; }
+
+  /* governance layer lattice — factory ▸ harness ▸ charter, precedence downward */
+  .lattice { @apply flex flex-col gap-1.5 max-w-md; }
+  .lattice-row { @apply flex items-center justify-between rounded-md border px-3 py-2; }
+  .lattice-row .rank { @apply text-xs uppercase tracking-wide text-muted-foreground; }
+
   .metric-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
   .kv-row { @apply flex items-center justify-between py-1 text-sm; }
   .muted { @apply text-sm text-muted-foreground; }
@@ -199,8 +237,29 @@
   .log-error { @apply font-mono text-xs text-destructive; }
 
   .login-screen { @apply min-h-screen grid place-items-center p-6; }
-  .login-card { @apply w-full max-w-sm space-y-4 text-center; }
+  .login-card { @apply w-full max-w-sm space-y-4 text-center rounded-2xl border bg-card p-8; }
   .login-tagline { @apply text-sm text-muted-foreground; }
+  /* first-run setup wizard */
+  .wizard-screen { @apply min-h-screen grid place-items-center p-6; }
+  .wizard-card { @apply w-full max-w-2xl rounded-2xl border bg-card p-8 space-y-5; }
+  .wizard-head { @apply flex items-center gap-3; }
+  .wizard-steps { @apply flex items-center gap-1.5; }
+  .wizard-dot { @apply h-1.5 w-8 rounded-full bg-border; }
+  .wizard-dot.done { @apply bg-primary/50; }
+  .wizard-dot.active { @apply bg-primary; }
+  .wizard-body { @apply min-h-[9rem]; }
+  .wizard-foot { @apply flex items-center justify-between pt-2 border-t; }
+  .wizard-pill { @apply flex items-center gap-2 rounded-md border px-3 py-2 text-sm; }
+  .wizard-pill.picked { @apply border-primary bg-primary/10; }
+
+  .login-brand { @apply flex flex-col items-center gap-2 mb-2; }
+  /* the lit mark on a dark tile — "a dark factory with the lights on" */
+  .login-mark { @apply grid place-items-center rounded-2xl; width: 76px; height: 76px;
+    color: #cbb8ff; background: #1c1a18;
+    box-shadow: 0 0 0 1px rgba(124,58,237,.35), 0 12px 40px -8px rgba(124,58,237,.55); }
+  .login-title { @apply text-xl font-semibold tracking-tight; }
+  .brand-lockup { @apply inline-flex items-center gap-2; }
+  .brand-lockup .brand-word { @apply font-semibold tracking-tight; }
   .stack { @apply flex flex-col gap-2 text-left; }
 
   /* accent borders on cards — semantic names (purple/green/yellow/red) */

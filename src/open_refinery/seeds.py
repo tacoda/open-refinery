@@ -16,6 +16,7 @@ import sqlite3
 
 from .processes import create_process
 from .repositories import create_repository
+from .settings import set_setting
 from .store import SqliteSink
 from .users import count_users, create_user
 from .work_items import create_work_item, transition
@@ -45,6 +46,9 @@ def seed(conn: sqlite3.Connection) -> dict:
     login = create_work_item(conn, web.id, kanban.id, "Add login page", dev.id)
     transition(conn, login.id, "in-progress", dev.id, audit)
     create_work_item(conn, web.id, kanban.id, "Rate-limit the public API", dev.id)
+
+    # seeded orgs are already configured — skip the first-run wizard
+    set_setting(conn, "org.onboarded", "true", admin.id)
 
     return {
         "users": {

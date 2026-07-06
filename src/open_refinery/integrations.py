@@ -18,9 +18,33 @@ from sqlmodel import Session, select
 from .crypto import decrypt, encrypt
 from .models import ConnectState, Integration, User
 
-SOURCE_KINDS = ("github", "gitlab")   # list_repos
-TRACKER_KINDS = ("jira", "linear")    # list_issues
-KINDS = SOURCE_KINDS + TRACKER_KINDS
+# Connector catalog — the single source of truth for the UI and the wizard:
+# each kind's display label, its capabilities, and the credential fields to ask
+# for. Capabilities: source (list_repos) · tracker (list_issues) · workflow
+# (discover the tool's columns/statuses, for process-from-columns).
+# (Docs/notify connectors — Confluence, Slack, Notion — are informational and
+# come later; today we connect code hosts and issue trackers.)
+CONNECTORS: dict[str, dict] = {
+    "github":        {"label": "GitHub",        "caps": ["source"],
+                      "fields": ["token"]},
+    "gitlab":        {"label": "GitLab",        "caps": ["source"],
+                      "fields": ["token"]},
+    "github-issues": {"label": "GitHub Issues", "caps": ["tracker", "workflow"],
+                      "fields": ["token", "repo"]},
+    "jira":          {"label": "Jira",          "caps": ["tracker", "workflow"],
+                      "fields": ["site", "email", "token"]},
+    "linear":        {"label": "Linear",        "caps": ["tracker", "workflow"],
+                      "fields": ["token"]},
+}
+KINDS = tuple(CONNECTORS)
+SOURCE_KINDS = tuple(k for k, c in CONNECTORS.items() if "source" in c["caps"])
+TRACKER_KINDS = tuple(k for k, c in CONNECTORS.items() if "tracker" in c["caps"])
+WORKFLOW_KINDS = tuple(k for k, c in CONNECTORS.items() if "workflow" in c["caps"])
+
+
+def connectors() -> list[dict]:
+    """Catalog for the UI/wizard: kind + label + capabilities + credential fields."""
+    return [{"kind": k, **v} for k, v in CONNECTORS.items()]
 
 
 def _get_json(url: str, headers: dict, data: bytes | None = None):
@@ -100,11 +124,58 @@ def jira_list_issues(cred):
              "state": i["fields"]["status"]["name"]} for i in data["issues"]]
 
 
+# --- GitHub Issues (tracker + workflow) -----------------------------------
+# Reuses the GitHub token. `repo` (owner/name) scopes to one repo's issues and
+# lets us discover its status-labels as columns; without it, assigned issues.
+
+def ghi_list_issues(cred):
+    repo = cred.get("repo")
+    path = (f"/repos/{repo}/issues?state=all&per_page=50" if repo
+            else "/issues?filter=assigned&state=all&per_page=50")
+    return [{"key": f"#{i['number']}", "title": i["title"], "url": i["html_url"],
+             "state": "closed" if i["state"] == "closed" else "open"}
+            for i in _gh(cred, path) if "pull_request" not in i]  # skip PRs
+
+
+def ghi_workflow(cred):
+    """A repo's `status:`-prefixed labels are its columns; else issue open/closed."""
+    repo = cred.get("repo")
+    if repo:
+        cols = [l["name"].split(":", 1)[1].strip()
+                for l in _gh(cred, f"/repos/{repo}/labels?per_page=100")
+                if l["name"].lower().startswith("status:")]
+        if cols:
+            return cols
+    return ["open", "closed"]
+
+
+# --- workflow discovery for the existing trackers -------------------------
+
+def jira_workflow(cred):
+    seen, out = set(), []
+    for s in _jira(cred, "/rest/api/3/status"):
+        name = s.get("name")
+        if name and name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
+
+
+def linear_workflow(cred):
+    q = "{ workflowStates(first: 50) { nodes { name position } } }"
+    nodes = _linear(cred, q)["data"]["workflowStates"]["nodes"]
+    return [n["name"] for n in sorted(nodes, key=lambda n: n["position"])]
+
+
 ADAPTERS = {
     "github": {"verify": github_verify, "list_repos": github_list_repos},
     "gitlab": {"verify": gitlab_verify, "list_repos": gitlab_list_repos},
-    "linear": {"verify": linear_verify, "list_issues": linear_list_issues},
-    "jira":   {"verify": jira_verify, "list_issues": jira_list_issues},
+    "github-issues": {"verify": github_verify, "list_issues": ghi_list_issues,
+                      "workflow": ghi_workflow},
+    "linear": {"verify": linear_verify, "list_issues": linear_list_issues,
+               "workflow": linear_workflow},
+    "jira":   {"verify": jira_verify, "list_issues": jira_list_issues,
+               "workflow": jira_workflow},
 }
 
 
@@ -190,3 +261,8 @@ def list_remote_repos(session: Session, integ_id: str) -> list[dict]:
 
 def list_issues(session: Session, integ_id: str) -> list[dict]:
     return _adapter_call(session, integ_id, "list_issues")
+
+
+def list_workflow(session: Session, integ_id: str) -> list[str]:
+    """The tracker's ordered columns/statuses — the stages a process can adopt."""
+    return _adapter_call(session, integ_id, "workflow")

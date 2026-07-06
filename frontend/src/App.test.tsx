@@ -13,7 +13,7 @@ vi.mock('./api', () => ({
   oauthLoginUrl: () => '',
 }))
 
-import { Drawer, EmptyRow, Overview, Packs, Toggle, ruleSentence } from './App'
+import { Drawer, EmptyRow, Overview, Packs, Pipeline, Toggle, ruleSentence } from './App'
 
 const ROLES = [
   { name: 'developer', rank: 1 },
@@ -93,6 +93,19 @@ describe('ruleSentence — policy reads as a qualified statement', () => {
   it('drops the "on" clause when resource is a wildcard', () => {
     expect(ruleSentence({ effect: 'allow', role: 'platform', action: 'invoke', resource: '*', namespace: '' }))
       .toBe('The platform role may invoke anywhere.')
+  })
+})
+
+describe('Pipeline (process, drawn)', () => {
+  it('renders stages, lights the current one, and notes feedback loops', () => {
+    render(<Pipeline stages={['spec', 'build', 'verify', 'ship']} gates={['ship']}
+      transitions={[['verify', 'build']]} current="build" />)
+    expect(screen.getByText('spec')).toBeInTheDocument()
+    expect(screen.getByText('ship')).toBeInTheDocument()
+    // current stage carries the lit class
+    expect(screen.getByText('build').className).toMatch(/current/)
+    // backward transition is surfaced as a feedback loop
+    expect(screen.getByText(/feedback:/)).toHaveTextContent('verify → build')
   })
 })
 

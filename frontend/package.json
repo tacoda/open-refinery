@@ -37,6 +37,7 @@
     "jsdom": "^29.1.1",
     "openapi-typescript": "^7.13.0",
     "oxlint": "^1.71.0",
+    "puppeteer-core": "^25.3.0",
     "swagger-ui-dist": "^5.32.8",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
