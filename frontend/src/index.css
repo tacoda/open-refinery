@@ -159,6 +159,7 @@
   .kv-row { @apply flex items-center justify-between py-1 text-sm; }
   .muted { @apply text-sm text-muted-foreground; }
   .mono { @apply font-mono text-xs text-muted-foreground; }
+  .log-error { @apply font-mono text-xs text-destructive; }
 
   .login-screen { @apply min-h-screen grid place-items-center p-6; }
   .login-card { @apply w-full max-w-sm space-y-4 text-center; }

@@ -132,3 +132,25 @@ def rollback_work_item(session: Session, item_id: str, to_stage: str, actor_id: 
         output={"to": to_stage, "plan": plan}, subject=item_id))
     session.refresh(item)
     return {"item": item, "plan": plan}
+
+
+def record_rollback_applied(session: Session, item_id: str, actor_id: str, status: str,
+                            audit: AuditSink, *, detail: str = "") -> dict:
+    """Apply-side confirmation: the harness reports whether it applied the reverse
+    plan (it — not the platform — runs git/alembic/pip). Recorded as a
+    `rollback-applied` audit event and appended to the history so the trail shows
+    the outcome, not just the intent."""
+    item = session.get(WorkItem, item_id)
+    if item is None:
+        raise UnknownWorkItem(item_id)
+    if session.get(User, actor_id) is None:
+        raise ValueError(f"unknown actor: {actor_id!r}")
+    if status not in ("applied", "failed"):
+        raise ValueError(f"status must be 'applied' or 'failed', got {status!r}")
+    outcome = {"status": status, "detail": detail}
+    _record_stage(session, item_id, item.current_stage, "rollback-applied", actor_id, outcome)
+    audit.write(Record.of(
+        recipe="rollback-applied", actor=actor_id, owner=item.owner_id,
+        inputs={"stage": item.current_stage, "process": item.process_id},
+        output=outcome, subject=item_id))
+    return outcome

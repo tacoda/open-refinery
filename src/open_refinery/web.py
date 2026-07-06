@@ -65,11 +65,17 @@ from .experiments import (
 from .ingest import ingest
 from .jobs import enqueue, get_job, list_jobs
 from .live import HUB
+from .logs import append_log, recent_logs
 from .webhooks import create_webhook, delete_webhook, list_webhooks
 from .governance import landscape
 from .packs import disable_pack, enable_pack, list_packs, list_standards
 from .postmortem import postmortem
-from .rollback import rollback_targets, rollback_work_item, stage_history
+from .rollback import (
+    record_rollback_applied,
+    rollback_targets,
+    rollback_work_item,
+    stage_history,
+)
 from .policies import (
     PolicyDenied,
     create_policy,
@@ -194,6 +200,16 @@ class AuthorizeReq(BaseModel):
     resource: str               # tool name / command / host / target kind / step
     namespace: str = ""         # per-namespace whitelist scope (blank = global)
     intent: str = ""            # declared purpose, recorded for verification/audit
+
+
+class LogLine(BaseModel):
+    line: str
+    level: str = "info"     # debug | info | warning | error
+
+
+class RollbackApplied(BaseModel):
+    status: str             # applied | failed
+    detail: str = ""
 
 
 class Move(BaseModel):
@@ -833,6 +849,22 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def rollback_item(item_id: str, body: Move, session: Session = Depends(get_session),
                       user: User = Depends(current_user)):
         return rollback_work_item(session, item_id, body.to, user.id, SqliteSink(session))
+
+    @app.post("/work-items/{item_id}/rollback/applied")
+    def rollback_applied(item_id: str, body: RollbackApplied,
+                         session: Session = Depends(get_session),
+                         user: User = Depends(current_user)):
+        return record_rollback_applied(session, item_id, user.id, body.status,
+                                       SqliteSink(session), detail=body.detail)
+
+    # --- live run logs (ephemeral, streamed over the WS hub) ---
+    @app.get("/work-items/{item_id}/logs")
+    def get_logs(item_id: str, _: User = Depends(current_user)):
+        return recent_logs(item_id)
+
+    @app.post("/work-items/{item_id}/logs", status_code=201)
+    def post_log(item_id: str, body: LogLine, _: User = Depends(current_user)):
+        return append_log(item_id, body.line, body.level)
 
     @app.get("/users")
     def get_users(session: Session = Depends(get_session),

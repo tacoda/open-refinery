@@ -94,7 +94,13 @@ from .approval_workflows import (
 from .analysis import analyze
 from .debt import audit, health, list_audits, run_audit
 from .postmortem import postmortem
-from .rollback import rollback_targets, rollback_work_item, stage_history
+from .rollback import (
+    record_rollback_applied,
+    rollback_targets,
+    rollback_work_item,
+    stage_history,
+)
+from .logs import append_log, recent_logs
 from .teams import UnknownTeam, create_team, delete_team, get_team, list_teams, set_user_team
 from .ledger import record_usage, team_usage, traffic_graph, usage_by_actor, usage_by_team
 from .concurrency import ConcurrencyExceeded, in_flight, slot
@@ -181,7 +187,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "1.16.0"
+__version__ = "1.17.0"
 
 __all__ = [
     "Factory",
@@ -305,6 +311,9 @@ __all__ = [
     "rollback_work_item",
     "rollback_targets",
     "stage_history",
+    "record_rollback_applied",
+    "append_log",
+    "recent_logs",
     "create_team",
     "list_teams",
     "get_team",

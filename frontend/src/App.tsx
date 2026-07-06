@@ -91,6 +91,7 @@ export default function App() {
         if (m.type === 'job' && m.status !== 'running') {
           toast(m.status === 'done' ? `Job ${m.kind} finished` : `Job ${m.kind} ${m.status}`)
         }
+        if (m.type === 'log') window.dispatchEvent(new CustomEvent('oref-log', { detail: m }))
       }
     } catch { setLive(false) }
     return () => ws?.close()
@@ -1632,6 +1633,18 @@ function WorkRow({ w, onMove, onAttest, onRequest, onReload }: any) {
   const [to, setTo] = useState(''), [check, setCheck] = useState('')
   const [pm, setPm] = useState<any>(null)
   const [hist, setHist] = useState<any>(null), [rbTo, setRbTo] = useState(''), [plan, setPlan] = useState<any>(null)
+  const [logs, setLogs] = useState<any[] | null>(null)
+  // live log tail: subscribe to WS-relayed log lines for this item while open
+  useEffect(() => {
+    if (logs === null) return
+    const onLog = (e: any) => { if (e.detail.subject === w.id) setLogs((ls) => [...(ls ?? []), e.detail]) }
+    window.addEventListener('oref-log', onLog)
+    return () => window.removeEventListener('oref-log', onLog)
+  }, [logs === null, w.id])
+  const showLogs = () => logs ? setLogs(null)
+    : api(`/work-items/${w.id}/logs`).then((l) => setLogs(l)).catch(fail)
+  const markApplied = (status: string) => post(`/work-items/${w.id}/rollback/applied`, { status })
+    .then(() => { toast.success(`rollback ${status}`); return api(`/work-items/${w.id}/history`).then(setHist) }).catch(fail)
   const runPm = () => pm ? setPm(null)
     : api(`/work-items/${w.id}/postmortem`).then(setPm).catch(fail)
   const showHist = () => hist ? (setHist(null), setPlan(null))
@@ -1658,10 +1671,18 @@ function WorkRow({ w, onMove, onAttest, onRequest, onReload }: any) {
           <Button variant="outline" size="sm" onClick={() => onAttest(w.id, check, false)}>Attest ✗</Button>
           <Button variant="outline" size="sm" onClick={runPm}>{pm ? 'Hide post-mortem' : 'Post-mortem'}</Button>
           <Button variant="outline" size="sm" onClick={showHist}>{hist ? 'Hide history' : 'History'}</Button>
+          <Button variant="outline" size="sm" onClick={showLogs}>{logs ? 'Hide logs' : 'Logs'}</Button>
         </div>
+        {logs && (
+          <div className="mono" style={{ marginTop: '0.6rem', borderTop: '1px solid var(--border)', paddingTop: '0.6rem', maxHeight: '12rem', overflow: 'auto' }}>
+            {logs.length ? logs.map((l: any, i: number) => (
+              <div key={i} className={l.level === 'error' ? 'log-error' : 'muted'}>{l.at?.slice(11, 19)} [{l.level}] {l.line}</div>
+            )) : <span className="muted">no logs yet — lines stream here live</span>}
+          </div>
+        )}
         {hist && (
           <div style={{ marginTop: '0.6rem', borderTop: '1px solid var(--border)', paddingTop: '0.6rem' }}>
-            <div className="mono">stages: {hist.history.map((h: any) => h.kind === 'rollback' ? `↩ ${h.stage}` : h.stage).join(' → ') || '—'}</div>
+            <div className="mono">stages: {hist.history.map((h: any) => h.kind === 'rollback' ? `↩ ${h.stage}` : h.kind === 'rollback-applied' ? `✓applied(${h.changes?.status})` : h.stage).join(' → ') || '—'}</div>
             {hist.rollback_targets.length > 0 ? (
               <div className="work-actions" style={{ marginTop: '0.4rem' }}>
                 <span className="muted">roll back to</span>
@@ -1680,6 +1701,11 @@ function WorkRow({ w, onMove, onAttest, onRequest, onReload }: any) {
                 {Object.entries(plan).filter(([k]) => k !== 'code' && k !== 'migrations').map(([cat, m]: any) => (
                   <div key={cat} className="kv-row"><span className="muted">{cat}</span><span className="mono">{Object.entries(m).map(([k, v]) => `${k}→${v}`).join(', ') || '—'}</span></div>
                 ))}
+                <div className="work-actions" style={{ marginTop: '0.4rem' }}>
+                  <span className="muted">harness applied it?</span>
+                  <Button variant="secondary" size="sm" onClick={() => markApplied('applied')}>Mark applied</Button>
+                  <Button variant="outline" size="sm" onClick={() => markApplied('failed')}>Mark failed</Button>
+                </div>
               </div>
             )}
           </div>

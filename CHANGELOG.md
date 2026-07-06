@@ -3,6 +3,22 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.17.0] — 2026-07-06
+
+### Added
+- **Live run logs + rollback apply-side (M4 on the road to 2.0).**
+  - **Live logs** — a per-work-item log tail streamed over the WS hub. A harness
+    `POST /work-items/{id}/logs` (`{line, level}`); each line is fanned out live
+    (WS `type: "log"`, keyed by the item) and kept in an in-process ring buffer
+    (`GET …/logs` for recent lines). Ephemeral, same single-process ethos as the
+    job runner / scheduler. Logs toggle per work item streams lines live.
+  - **Rollback apply-side** — the harness reports whether it applied the reverse
+    plan (it runs git/alembic/pip, not the platform): `POST
+    /work-items/{id}/rollback/applied` (`{status: applied|failed, detail}`),
+    recorded as a `rollback-applied` audit event and appended to the stage
+    history — so the trail shows the outcome, not just the intent. Mark
+    applied/failed buttons after a rollback.
+
 ## [1.16.0] — 2026-07-06
 
 ### Added
