@@ -17,6 +17,17 @@ def auth(token):
     return {"Authorization": f"Bearer {token}"}
 
 
+_dev_n = 0
+def dev_auth(client, admin_token):
+    """Create a developer (dev ops are developer-scoped) and return its auth header."""
+    global _dev_n
+    _dev_n += 1
+    tok = client.post("/users", headers=auth(admin_token),
+                      json={"email": f"dev{_dev_n}@x.dev", "password": "pw", "role": "developer"}
+                      ).json()["token"]
+    return auth(tok)
+
+
 def test_health_needs_no_auth(ctx):
     _, client, *_ = ctx
     assert client.get("/health").json() == {"status": "ok"}
@@ -87,23 +98,20 @@ def test_roles_are_a_fixed_ladder(ctx):
 
 def test_ownership_scoping_on_repos(ctx):
     _, client, _, admin_token = ctx
-    dev_token = client.post("/users", headers=auth(admin_token),
-                            json={"email": "dev@x.dev", "password": "pw", "role": "developer"}
-                            ).json()["token"]
+    d1 = dev_auth(client, admin_token)
+    d2 = dev_auth(client, admin_token)
 
-    client.post("/repositories", headers=auth(dev_token),
-                json={"name": "a", "git_url": "git@x:a.git"})
-    client.post("/repositories", headers=auth(admin_token),
-                json={"name": "b", "git_url": "git@x:b.git"})
+    client.post("/repositories", headers=d1, json={"name": "a", "git_url": "git@x:a.git"})
+    client.post("/repositories", headers=d2, json={"name": "b", "git_url": "git@x:b.git"})
 
-    # developer sees only their own; admin sees all
-    assert len(client.get("/repositories", headers=auth(dev_token)).json()) == 1
+    # each developer sees only their own; admin (oversight) sees all
+    assert len(client.get("/repositories", headers=d1).json()) == 1
     assert len(client.get("/repositories", headers=auth(admin_token)).json()) == 2
 
 
 def test_end_to_end_transition_and_audit(ctx):
     _, client, admin, admin_token = ctx
-    h = auth(admin_token)
+    h = dev_auth(client, admin_token)   # developers operate the dev chain
     repo = client.post("/repositories", headers=h,
                        json={"name": "or", "git_url": "git@x:or.git"}).json()
     proc = client.post("/processes", headers=h,
@@ -123,8 +131,8 @@ def test_end_to_end_transition_and_audit(ctx):
                       json={"to": "todo"})  # doing -> todo not allowed (doctrine)
     assert bad.status_code == 409
 
-    # audit trail records the one valid transition, subject = the item
-    events = client.get(f"/events?subject={item['id']}", headers=h).json()
+    # audit trail records the one valid transition — read by admin (oversight)
+    events = client.get(f"/events?subject={item['id']}", headers=auth(admin_token)).json()
     assert len(events) == 1 and events[0]["recipe"] == "transition"
 
 
@@ -153,12 +161,12 @@ def test_authorize_gate_allows_and_denies(ctx):
 
 def test_oversight_approval_flow(ctx):
     _, client, _, admin_token = ctx
-    h = auth(admin_token)
+    h = dev_auth(client, admin_token)
     repo = client.post("/repositories", headers=h,
                        json={"name": "or", "git_url": "git@x:or.git"}).json()
     proc = client.post("/processes", headers=h,
-                       json={"name": "flow", "archetype": "board",
-                             "stages": ["todo", "doing"], "oversight": "assisted"}).json()
+                       json={"name": "flow", "archetype": "board", "stages": ["todo", "doing"],
+                             "oversight": "assisted", "min_approver_role": "developer"}).json()
     item = client.post("/work-items", headers=h,
                        json={"repo_id": repo["id"], "process_id": proc["id"],
                              "title": "T"}).json()
@@ -168,18 +176,18 @@ def test_oversight_approval_flow(ctx):
                           json={"to": "doing"})
     assert blocked.status_code == 409
 
-    # with approve=true → applies
+    # with approve=true → applies (min approver is developer, so self-approval works)
     ok = client.post(f"/work-items/{item['id']}/transition", headers=h,
                      json={"to": "doing", "approve": True})
     assert ok.status_code == 200 and ok.json()["current_stage"] == "doing"
 
-    events = client.get(f"/events?subject={item['id']}", headers=h).json()
+    events = client.get(f"/events?subject={item['id']}", headers=auth(admin_token)).json()
     assert {e["recipe"] for e in events} == {"transition", "approval"}
 
 
 def test_duplicate_repo_conflicts(ctx):
     _, client, _, admin_token = ctx
-    h = auth(admin_token)
+    h = dev_auth(client, admin_token)
     client.post("/repositories", headers=h, json={"name": "a", "git_url": "git@x:a.git"})
     dup = client.post("/repositories", headers=h, json={"name": "b", "git_url": "git@x:a.git"})
     assert dup.status_code == 409

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 from pathlib import Path
 
@@ -419,6 +420,43 @@ class ExecuteRequest(BaseModel):
 
 # --- app ------------------------------------------------------------------
 
+# --- role authorization matrix -------------------------------------------
+# Central declaration of who may do what, enforced by middleware (returns 403).
+# First matching rule wins; anything unmatched is allowed (reads stay open for
+# oversight — dev lists are owner-scoped in their handlers). GET of operational
+# data is intentionally open so platform/admin can oversee; only *mutations* and
+# oversight/config surfaces are role-gated. Roles:
+#   developer — operates dev concerns   platform — platform concerns + authoring
+#   admin — oversight only
+_DEV = {"developer"}
+_DEV_PLAT = {"developer", "platform"}
+_PLAT = {"platform"}
+_PLAT_ADMIN = {"platform", "admin"}
+_AUTHZ_RULES: list[tuple[set[str], re.Pattern, set[str]]] = [
+    # developer operates the dev chain (writes only; reads stay open for oversight)
+    ({"POST", "PUT", "DELETE"}, re.compile(r"^/integrations(/|$)"), _DEV),
+    ({"POST", "PUT", "DELETE"}, re.compile(r"^/repositories(/|$)"), _DEV),
+    ({"POST", "PUT", "DELETE"}, re.compile(r"^/processes(/|$)"), _DEV),
+    ({"POST", "PUT", "DELETE"}, re.compile(r"^/work-items(/|$)"), _DEV),
+    # approving gated moves: developer or platform
+    ({"POST"}, re.compile(r"^/approvals/"), _DEV_PLAT),
+    # registering agents / enabling packs: developer or platform
+    ({"POST", "PUT", "DELETE"}, re.compile(r"^/harnesses(/|$)"), _DEV_PLAT),
+    ({"POST"}, re.compile(r"^/packs/[^/]+/(enable|disable)$"), _DEV_PLAT),
+    # platform config + governance authoring: platform only
+    ({"POST", "PUT", "DELETE"}, re.compile(r"^/(targets|routes|quotas|systems|policies|proposals|approval-workflows)(/|$)"), _PLAT),
+    ({"PUT"}, re.compile(r"^/routing-policy$"), _PLAT),
+    # teams + cost: platform or admin
+    ({"POST", "PUT", "DELETE"}, re.compile(r"^/teams(/|$)"), _PLAT_ADMIN),
+    ({"PUT"}, re.compile(r"^/users/[^/]+/team$"), _PLAT_ADMIN),
+    # oversight reads + org config: platform or admin
+    ({"GET"}, re.compile(r"^/(usage|traffic|experiments|events|governance)(/|$)"), _PLAT_ADMIN),
+    ({"GET", "POST"}, re.compile(r"^/audits(/|$)"), _PLAT_ADMIN),
+    ({"POST"}, re.compile(r"^/audit/purge"), _PLAT_ADMIN),
+    ({"GET", "PUT", "DELETE"}, re.compile(r"^/settings(/|$)"), _PLAT_ADMIN),
+]
+
+
 def create_app(session: Session | None = None, database_url: str = DEFAULT_DATABASE_URL) -> FastAPI:
     # Self-host API docs at /api-docs (assets bundled at build time — no CDN).
     from contextlib import asynccontextmanager
@@ -461,6 +499,22 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def get_session():
         with Session(engine) as s:
             yield s
+
+    @app.middleware("http")
+    async def enforce_roles(request, call_next):
+        """Central role authorization — 403 if the caller's role can't do this."""
+        method, path = request.method, request.url.path
+        rule = next((r for r in _AUTHZ_RULES if method in r[0] and r[1].match(path)), None)
+        if rule is not None:
+            auth = request.headers.get("authorization") or ""
+            token = auth.removeprefix("Bearer ").strip()
+            with Session(engine) as s:
+                user = (user_by_token(s, token) or session_user(s, token)) if token else None
+                role = user.role if user else None
+            if role is not None and role not in rule[2]:  # authenticated but out of scope
+                return JSONResponse({"detail": f"{role} is not authorized for this action"},
+                                    status_code=403)
+        return await call_next(request)
 
     @app.websocket("/ws")
     async def live_ws(websocket: WebSocket, token: str = ""):

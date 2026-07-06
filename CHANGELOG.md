@@ -3,6 +3,37 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.2.0] — 2026-07-06
+
+**Role authorization model.** Each role is now restricted to its concerns, enforced
+backend (403) and in the UI.
+
+### Changed
+- **Roles are scoped to responsibilities:**
+  - **developer** — operates their own dev chain (services, repos, processes,
+    agents, work, approvals) + their own insights (metrics, coverage).
+  - **platform** — platform concerns (systems, targets, teams), governance
+    authoring (policies, proposals), packs, and full org insights; approves gated
+    moves. Does not operate dev work.
+  - **admin** — **oversight only**: reporting/insights (metrics, usage, traffic,
+    audits, experiments, audit log), governance landscape, and user
+    administration (invitations, settings). No longer operates the factory.
+  - Reads of operational data stay open for oversight (owner-scoped for
+    developers); only mutations and oversight/config surfaces are role-gated.
+- **Central authorization matrix** (`_AUTHZ_RULES` + middleware) — one place
+  declares who may do what; every request is checked (403 out of scope). The UI
+  mirrors it per-view and bounces off any disallowed view.
+- **Invite your own level or lower** (was strictly lower) — a developer can invite
+  a developer; platform can invite platform or developer; admin anyone.
+
+### Notes
+- **Behavior change:** an admin can no longer create repos / move work / configure
+  platform targets — those are developer/platform actions now. Admin is the
+  oversight/administration role. (Single-tenant; adjust role assignments if you
+  relied on admin operating directly.)
+- Work still only advances through its process's defined transitions + gates
+  (no ad-hoc stage changes); rollbacks remain governed.
+
 ## [2.1.1] — 2026-07-06
 
 ### Changed

@@ -1,7 +1,7 @@
 """User invitations — role-gated email invites with an expiring token.
 
-A user invites a **strictly lower** role (admin → any below; platform → senior &
-below; senior → developer). The invite carries an expiring token (default 1 week,
+A user invites their **own level or lower** (admin → anyone; platform → platform
+or developer; developer → developer). The invite carries an expiring token (default 1 week,
 configurable) and the assigned role; the invitee opens the link and **sets their
 own password** to register. The link is emailed (email is a swappable port) and
 also returned to the inviter so it works even before email is configured.
@@ -35,8 +35,8 @@ def create_invitation(session: Session, email: str, role: str, invited_by: str,
     inviter = session.get(User, invited_by)
     if inviter is None:
         raise ValueError(f"unknown inviter: {invited_by!r}")
-    if role_rank(session, role) >= role_rank(session, inviter.role):
-        raise PolicyDenied(f"{inviter.role!r} may only invite lower roles, not {role!r}")
+    if role_rank(session, role) > role_rank(session, inviter.role):
+        raise PolicyDenied(f"{inviter.role!r} may only invite their level or lower, not {role!r}")
 
     token = secrets.token_urlsafe(32)
     expires = (datetime.now(timezone.utc) + timedelta(days=ttl_days)).isoformat()

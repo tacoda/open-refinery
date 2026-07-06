@@ -31,7 +31,7 @@ def ctx(monkeypatch):
     monkeypatch.setenv("GITHUB_CLIENT_SECRET", "csecret")
     monkeypatch.setenv("SECRET_KEY", "test-secret")
     conn = connect("sqlite:///:memory:", check_same_thread=False)
-    dev, _ = create_user(conn, "dev@x.dev", "pw", "developer")
+    dev, _ = create_user(conn, "plat@x.dev", "pw", "platform")  # targets are platform-managed
     client = TestClient(create_app(conn), follow_redirects=False)
     return conn, client, dev
 

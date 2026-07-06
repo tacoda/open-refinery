@@ -26,17 +26,14 @@ def setup():
 
 def test_role_gated_invites():
     conn, admin, platform, dev = setup()
-    # platform may invite developer, not platform (equal) or admin (higher)
+    # you may invite your own level or lower, never higher
     inv, _ = create_invitation(conn, "new@x.dev", "developer", platform.id)
     assert inv.role == "developer" and inv.status == "pending"
+    create_invitation(conn, "peer@x.dev", "platform", platform.id)   # equal level — allowed
     with pytest.raises(PolicyDenied):
-        create_invitation(conn, "x@x.dev", "platform", platform.id)  # equal role
-    with pytest.raises(PolicyDenied):
-        create_invitation(conn, "x@x.dev", "admin", platform.id)     # higher role
-    # admin may invite platform; developer may invite nobody lower (none exists)
-    create_invitation(conn, "p@x.dev", "platform", admin.id)
-    with pytest.raises(PolicyDenied):
-        create_invitation(conn, "d@x.dev", "developer", dev.id)      # no lower role
+        create_invitation(conn, "x@x.dev", "admin", platform.id)     # higher — denied
+    create_invitation(conn, "p@x.dev", "platform", admin.id)         # admin → platform
+    create_invitation(conn, "d@x.dev", "developer", dev.id)          # dev → dev (own level)
 
 
 def test_accept_sets_password_and_registers():

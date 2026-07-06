@@ -37,41 +37,49 @@ type View = 'overview' | 'work' | 'approvals' | 'repos' | 'processes' | 'systems
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
-// Role-aware navigation. Gates: 'platform' → platform+admin, 'admin' → admin,
-// 'dev' → developers only, 'invite' → anyone with a lower role to invite.
-// Developers get a trimmed, work-focused surface + read-only "My rules"; the
-// platform internals and governance *authoring* are hidden from them.
-type NavTab = { value: View; label: string; gate?: 'admin' | 'invite' | 'platform' | 'dev' }
+// Role-scoped navigation — each view lists exactly the roles it serves. This is
+// the single source of truth for the frontend; the backend enforces the same
+// matrix with 403s. Responsibilities:
+//   developer — operates their own dev concerns (services, repos, processes,
+//               agents, work) + their own insights (metrics, coverage).
+//   platform  — platform concerns (systems, targets, teams), governance
+//               authoring, and full org insights. Approves gated work.
+//   admin     — oversight only: reporting/insights, governance landscape, and
+//               user administration. Does not operate the factory.
+type NavTab = { value: View; label: string; roles: string[] }
+const ALL = ['developer', 'platform', 'admin']
 const NAV: { group: string; tabs: NavTab[] }[] = [
   { group: 'Home', tabs: [
-    { value: 'overview', label: 'Overview' } ] },
+    { value: 'overview', label: 'Overview', roles: ALL } ] },
   // ordered by entity dependency: services → repos → processes → agents → work → approvals
   { group: 'Work', tabs: [
-    { value: 'integrations', label: 'Services' },
-    { value: 'repos', label: 'Repos' }, { value: 'processes', label: 'Processes' },
-    { value: 'harnesses', label: 'Harnesses' },
-    { value: 'work', label: 'Work' }, { value: 'approvals', label: 'Approvals' } ] },
+    { value: 'integrations', label: 'Services', roles: ['developer'] },
+    { value: 'repos', label: 'Repos', roles: ['developer'] },
+    { value: 'processes', label: 'Processes', roles: ['developer'] },
+    { value: 'harnesses', label: 'Harnesses', roles: ['developer', 'platform'] },
+    { value: 'work', label: 'Work', roles: ['developer'] },
+    { value: 'approvals', label: 'Approvals', roles: ['developer', 'platform'] } ] },
   { group: 'Governance', tabs: [
-    { value: 'myrules', label: 'My rules', gate: 'dev' },   // read-only, developers
-    { value: 'policies', label: 'Policies', gate: 'platform' },
-    { value: 'proposals', label: 'Proposals', gate: 'platform' },
-    { value: 'packs', label: 'Packs' },
-    { value: 'governance', label: 'Governance', gate: 'admin' } ] },
+    { value: 'myrules', label: 'My rules', roles: ['developer'] },   // read-only
+    { value: 'policies', label: 'Policies', roles: ['platform'] },
+    { value: 'proposals', label: 'Proposals', roles: ['platform'] },
+    { value: 'packs', label: 'Packs', roles: ['developer', 'platform'] },
+    { value: 'governance', label: 'Governance', roles: ['platform', 'admin'] } ] },
   { group: 'Platform', tabs: [
-    { value: 'systems', label: 'Systems', gate: 'platform' },
-    { value: 'targets', label: 'Targets', gate: 'platform' },
-    { value: 'teams', label: 'Teams', gate: 'platform' } ] },
+    { value: 'systems', label: 'Systems', roles: ['platform'] },
+    { value: 'targets', label: 'Targets', roles: ['platform'] },
+    { value: 'teams', label: 'Teams', roles: ['platform', 'admin'] } ] },
   { group: 'Insights', tabs: [
-    { value: 'metrics', label: 'Metrics' },
-    { value: 'coverage', label: 'Coverage' },
-    { value: 'usage', label: 'Usage', gate: 'platform' },
-    { value: 'traffic', label: 'Traffic', gate: 'platform' },
-    { value: 'audits', label: 'Audits', gate: 'platform' },
-    { value: 'experiments', label: 'Experiments', gate: 'platform' },
-    { value: 'events', label: 'Audit log', gate: 'platform' } ] },
+    { value: 'metrics', label: 'Metrics', roles: ALL },
+    { value: 'coverage', label: 'Coverage', roles: ALL },
+    { value: 'usage', label: 'Usage', roles: ['platform', 'admin'] },
+    { value: 'traffic', label: 'Traffic', roles: ['platform', 'admin'] },
+    { value: 'audits', label: 'Audits', roles: ['platform', 'admin'] },
+    { value: 'experiments', label: 'Experiments', roles: ['platform', 'admin'] },
+    { value: 'events', label: 'Audit log', roles: ['platform', 'admin'] } ] },
   { group: 'Admin', tabs: [
-    { value: 'invitations', label: 'Invitations', gate: 'invite' },
-    { value: 'settings', label: 'Settings', gate: 'platform' } ] },
+    { value: 'invitations', label: 'Invitations', roles: ALL },  // invite your level or lower
+    { value: 'settings', label: 'Settings', roles: ['platform', 'admin'] } ] },
 ]
 
 // Empty-state row for a list; render inside <TableBody> when there are no rows.
@@ -192,6 +200,13 @@ export default function App() {
     document.title = me ? `Open Refinery · ${view[0].toUpperCase()}${view.slice(1)}` : 'Open Refinery'
   }, [view, me])
 
+  // Never sit on a view the role can't access (defence in depth alongside the backend).
+  useEffect(() => {
+    if (me && !NAV.flatMap((n) => n.tabs).find((t) => t.value === view)?.roles.includes(me.role)) {
+      setGroup('Home'); setView('overview')
+    }
+  }, [view, me])
+
   // Everyone lands on the visibility-first Overview (what needs attention now).
   useEffect(() => {
     if (!me) return
@@ -207,20 +222,14 @@ export default function App() {
     } else setOnboarded(true)  // developers inherit the configured org
   }, [me])
 
-  const rank = (r: string) => roles.find((x) => x.name === r)?.rank ?? 0
-  const minRank = roles.length ? Math.min(...roles.map((r) => r.rank)) : 0
-  const canInvite = !!me && rank(me.role) > minRank  // has a lower role to invite
-  // ponytail: Settings (org config) gated by name; backend enforces platform/admin.
-  const isPlatform = !!me && ['platform', 'admin'].includes(me.role)
   const isAdmin = !!me && me.role === 'admin'
   const [group, setGroup] = useState('Home')
   const [collapsed, setCollapsed] = useState(false)
   const [onboarded, setOnboarded] = useState<boolean | null>(null)
 
-  const allow = (t: NavTab) =>
-    t.gate === 'admin' ? isAdmin : t.gate === 'invite' ? canInvite
-      : t.gate === 'platform' ? isPlatform
-        : t.gate === 'dev' ? (!!me && me.role === 'developer') : true
+  const allow = (t: NavTab) => !!me && t.roles.includes(me.role)
+  // is `view` permitted for the current role? (mirrors the backend authorization)
+  const can = (v: View) => !!me && (NAV.flatMap((n) => n.tabs).find((t) => t.value === v)?.roles.includes(me.role) ?? false)
   const tabsFor = (g: string) => (NAV.find((n) => n.group === g)?.tabs ?? []).filter(allow)
   const groups = NAV.filter((n) => tabsFor(n.group).length > 0)
   // jump straight to a view from anywhere (Overview drill-in), opening its group
@@ -288,7 +297,7 @@ export default function App() {
                 </TabsList>
               {/* content order mirrors the nav (entity-dependency) standard */}
               {/* Home */}
-              <TabsContent value="overview"><Overview goto={goto} /></TabsContent>
+              <TabsContent value="overview"><Overview goto={goto} can={can} /></TabsContent>
               {/* Work: services → repos → processes → agents → work → approvals */}
               <TabsContent value="integrations"><Integrations /></TabsContent>
               <TabsContent value="repos"><Repos /></TabsContent>
@@ -297,11 +306,11 @@ export default function App() {
               <TabsContent value="work"><Work /></TabsContent>
               <TabsContent value="approvals"><Approvals /></TabsContent>
               {/* Governance */}
-              {me.role === 'developer' && <TabsContent value="myrules"><MyRules me={me} /></TabsContent>}
+              {can('myrules') && <TabsContent value="myrules"><MyRules me={me} /></TabsContent>}
               <TabsContent value="policies"><Policies /></TabsContent>
               <TabsContent value="proposals"><Proposals me={me} roles={roles} isAdmin={isAdmin} /></TabsContent>
               <TabsContent value="packs"><Packs me={me} roles={roles} /></TabsContent>
-              {isAdmin && <TabsContent value="governance"><Governance /></TabsContent>}
+              {can('governance') && <TabsContent value="governance"><Governance /></TabsContent>}
               {/* Platform */}
               <TabsContent value="systems"><Systems /></TabsContent>
               <TabsContent value="targets"><Targets /></TabsContent>
@@ -315,8 +324,8 @@ export default function App() {
               <TabsContent value="experiments"><Experiments /></TabsContent>
               <TabsContent value="events"><Events isAdmin={isAdmin} /></TabsContent>
               {/* Admin */}
-              {canInvite && <TabsContent value="invitations"><Invitations me={me} roles={roles} /></TabsContent>}
-              {isPlatform && <TabsContent value="settings"><Settings /></TabsContent>}
+              {can('invitations') && <TabsContent value="invitations"><Invitations me={me} roles={roles} /></TabsContent>}
+              {can('settings') && <TabsContent value="settings"><Settings /></TabsContent>}
               </Tabs>
             </main>
           </div>
@@ -507,7 +516,8 @@ export function Wizard({ onDone, me, roles }: { onDone: () => void; me: any; rol
   }).then(() => { reloadProcs(); toast.success('Process created') }).catch(fail)
 
   // invite step (admin) — bring in the team who'll run the factory
-  const inviteOptions = roles.filter((r) => r.name !== 'admin').map((r) => r.name)
+  const myRank = roles.find((r) => r.name === me?.role)?.rank ?? 0
+  const inviteOptions = roles.filter((r) => r.rank <= myRank).map((r) => r.name)  // your level or lower
   const [iemail, setIemail] = useState(''), [irole, setIrole] = useState('developer')
   const [invited, setInvited] = useState<string[]>([])
   const invite = () => post('/invitations', { email: iemail, role: irole, ttl_days: 7 })
@@ -1911,7 +1921,7 @@ export function Packs({ me, roles }: any) {
 function Invitations({ me, roles }: any) {
   const { rows, load } = useList('/invitations')
   const myRank = roles.find((r: Role) => r.name === me.role)?.rank ?? 0
-  const options = roles.filter((r: Role) => r.rank < myRank).map((r: Role) => r.name)  // lower roles only
+  const options = roles.filter((r: Role) => r.rank <= myRank).map((r: Role) => r.name)  // your level or lower
   const [email, setEmail] = useState(''), [role, setRole] = useState('')
   const [ttl, setTtl] = useState('7'), [link, setLink] = useState('')
   useEffect(() => { if (!role && options.length) setRole(options[0]) }, [options, role])
@@ -2339,7 +2349,7 @@ function Targets() {
 }
 
 // Visibility-first home: highlight the few actionable things, drill in for detail.
-export function Overview({ goto }: { goto: (v: any) => void }) {
+export function Overview({ goto, can = () => true }: { goto: (v: any) => void; can?: (v: any) => boolean }) {
   const [items, setItems] = useState<any[]>([])
   const [pending, setPending] = useState(0)
   const [events, setEvents] = useState<any[]>([])
@@ -2368,7 +2378,7 @@ export function Overview({ goto }: { goto: (v: any) => void }) {
       <h2 className="page-title">Overview</h2>
       <p className="muted">What needs attention now. Select a card to drill in.</p>
       <div className="highlight-grid">
-        {cards.map((c) => (
+        {cards.filter((c) => can(c.go)).map((c) => (
           <button key={c.label} className={`highlight-card${c.attn ? ' highlight-attn' : ''}`} onClick={() => goto(c.go)}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span className={c.attn ? 'highlight-num-attn' : 'highlight-num'}>{c.n}</span>
