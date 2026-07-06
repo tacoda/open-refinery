@@ -29,6 +29,23 @@ def test_me_requires_valid_token(ctx):
     assert client.get("/me", headers=auth(token)).json()["email"] == "admin@x.dev"
 
 
+def test_me_and_users_never_leak_secret_fields(ctx):
+    _, client, admin, token = ctx
+    LEAKY = {"pw_hash", "pw_salt", "token_hash", "secret"}
+    me = client.get("/me", headers=auth(token)).json()
+    assert LEAKY.isdisjoint(me) and me["email"] == "admin@x.dev"
+    users = client.get("/users", headers=auth(token)).json()
+    assert users and all(LEAKY.isdisjoint(u) for u in users)
+
+
+def test_health_areas_scores_all_three(ctx):
+    # regression: the /health route handler must not shadow the debt.health scorer
+    _, client, admin, token = ctx
+    r = client.get("/health/areas", headers=auth(token))
+    assert r.status_code == 200
+    assert {"factory", "harness", "charter"} <= set(r.json())
+
+
 def test_only_admin_creates_users(ctx):
     _, client, _, admin_token = ctx
     # admin creates a developer, gets a show-once token back

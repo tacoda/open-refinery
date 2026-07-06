@@ -3,6 +3,19 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.0.1] — 2026-07-06
+
+### Security
+- **`GET /me` no longer leaks secret fields.** It returned the raw `User` row,
+  including `pw_hash`, `pw_salt`, and `token_hash`. `/me` (and `/users`) now
+  return a safe projection (`id, email, role, team_id, created_at`) via a shared
+  `_public_user` helper. Hashes and token hashes never cross the wire.
+
+### Fixed
+- **`GET /health/areas` 500 (the Audits tab).** The `/health` route handler was
+  named `health`, shadowing the imported `debt.health` scorer, so the area-health
+  call raised `TypeError`. Renamed the handler to `healthcheck` (path unchanged).
+
 ## [2.0.0] — 2026-07-06
 
 **Feature-complete platform.** 2.0 is a milestone cut, not a breaking release —

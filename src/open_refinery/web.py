@@ -467,6 +467,11 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
             return user
         return dep
 
+    def _public_user(user: User) -> dict:
+        # safe projection — pw_hash / pw_salt / token_hash must never cross the wire
+        return {"id": user.id, "email": user.email, "role": user.role,
+                "team_id": user.team_id, "created_at": user.created_at}
+
     def owner_scope(user: User) -> str | None:
         """None = see everything (platform/admin); else scope to the user's own."""
         return None if user.role in _SEES_ALL else user.id
@@ -508,7 +513,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
 
     # --- routes ---
     @app.get("/health")
-    def health():
+    def healthcheck():  # not `health` — that name is the imported debt.health scorer
         return {"status": "ok"}
 
     @app.get("/api-docs", include_in_schema=False)
@@ -532,7 +537,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
 
     @app.get("/me")
     def me(user: User = Depends(current_user)):
-        return user
+        return _public_user(user)  # never expose pw_hash / pw_salt / token_hash
 
     @app.post("/me/token/rotate")
     def rotate_my_token(session: Session = Depends(get_session), user: User = Depends(current_user)):
@@ -869,9 +874,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     @app.get("/users")
     def get_users(session: Session = Depends(get_session),
                   _: User = Depends(require("platform", "admin"))):
-        # projected — never expose password/token hashes
-        return [{"id": u.id, "email": u.email, "role": u.role, "team_id": u.team_id}
-                for u in list_users(session)]
+        return [_public_user(u) for u in list_users(session)]  # projected, no hashes
 
     # --- teams, usage ledger, cost attribution ---
     @app.get("/teams")
