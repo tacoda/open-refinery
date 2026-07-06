@@ -36,14 +36,16 @@ When a step reaches a target, `execute()` runs the governed call site:
 ```
 execute(process, step, payload, actor)
    ├─ resolve route → candidate targets (priority; step-specific wins)  ← targets.py
+   │     └─ routing policy filters region/compliance, prefers cost      ← targets.py
+   ├─ hold the team's live concurrency slot (over cap → 429)            ← concurrency.py
    ├─ role-based invoke authorization                                   ← policies.py
    ├─ consume quota (pre-call; windowed rate caps)                      ← targets.py
    ├─ inject the target's decrypted credential (never returned)         ← crypto.py
    ├─ content-filter payload + response (secret/PII redaction)          ← policies.py
    ├─ call the backend (Anthropic / OpenAI / MCP / API / stub)          ← executor.py
    ├─ validate structured output against the target's schema
-   ├─ audit (invoke / invoke-failed) and fail over to the next route
-   └─ optionally feed an experiment's control/treatment eval
+   ├─ audit (invoke / invoke-failed) + record usage units to the ledger ← ledger.py
+   └─ optionally feed an experiment's control/treatment eval; fail over
 ```
 
 Backends dispatch by kind/provider and connect by **API key or OAuth token**; a
@@ -55,7 +57,12 @@ missing credential falls back to a stub so a fresh install works offline.
   drives every authorization check). — `users.py`
 - **Policies** are authored governed harness artifacts: `rule` (allow/deny) plus
   `skill`/`command`/`agent`. A **strict** rule can't be overridden by a lower
-  layer; strict precedence resolves along the layer graph (author role rank). —
+  layer; strict precedence resolves along the layer graph (author role rank). A
+  policy can scope to a **namespace** (per-namespace whitelists). — `policies.py`
+- **Proactive enforcement** — an org mode of `audit` (default-allow) or `strict`
+  (whitelist / default-deny), applied at the transition and invoke gates and at a
+  **pre-action `/authorize`** seam a harness calls before a tool / command /
+  host-egress action (verify identity + intent first). Every refusal is audited. —
   `policies.py`
 - **Packs** are opt-in, role-gated starter bundles (standards + example
   processes) — the curated software / platform / team-workflow canon. — `packs.py`
@@ -71,6 +78,27 @@ missing credential falls back to a stub so a fresh install works offline.
 - **Evals & experiments** — hypothesis → change → before/after evals →
   significance verdict. — `experiments.py`
 - **Webhooks** fan HMAC-signed audit events to external endpoints. — `webhooks.py`
+- **Rollbacks** revert a work item to a known-good prior stage (append-only
+  `StageHistory`) and compute a structured **reverse plan** across the whole
+  deployment (code, migrations, config, env, libraries, data, services, secret
+  refs, infra, dns — an open category set); the harness applies it and reports
+  apply-status back, all audited. — `rollback.py`
+- **Teams, usage ledger & concurrency** — teams are the unit of cost attribution;
+  a `LedgerEntry` per invoke meters units (the audit event digests them away), and
+  a team's live in-flight cap is enforced at the invoke seam. — `teams.py`,
+  `ledger.py`, `concurrency.py`
+- **Traffic graph** — a cross-agent graph (actor→target, weighted by calls +
+  units) derived from the ledger. — `ledger.py`
+
+## Runtime infrastructure (in-process, single serve)
+
+Same zero-dependency, single-process ethos throughout — each has a Redis/queue
+swap point behind the same API for multi-process later:
+
+- **Background jobs** — a thread-backed runner for long tasks (audits, ingest). — `jobs.py`
+- **Scheduler** — a serve-path daemon that enqueues due per-repo ingests. — `scheduler.py`
+- **Live channel** — an in-process pub/sub **hub** fans job status, new audit
+  events, and per-run **live logs** to the `/ws` WebSocket. — `live.py`, `logs.py`
 
 ## Ports & adapters
 

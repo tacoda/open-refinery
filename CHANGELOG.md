@@ -3,6 +3,35 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.0.0] — 2026-07-06
+
+**Feature-complete platform.** 2.0 is a milestone cut, not a breaking release —
+the schema stays frozen at 1.0 and every 1.x release since has been additive and
+backward-compatible, so upgrading from any 1.x is a drop-in `pip install -U`
+(migrations run on `serve`). No API removals, no config changes.
+
+### Road to 2.0 — what landed since 1.0
+- **Rollbacks (1.10–1.13)** — first-class, governed revert to a prior stage with
+  a full-deployment **reverse plan** (open category set: code, migrations, config,
+  env, libraries, data, services, secret refs, infra, dns).
+- **Enforcement v2 (1.14)** — pre-action `/authorize` gate (identity + intent
+  before a tool/command/host-egress action) + per-namespace whitelists.
+- **Teams + usage ledger + cost attribution + concurrency caps (1.15)**.
+- **Routing policy inputs + traffic graph (1.16)** — region / compliance / cost
+  route resolution; cross-agent traffic graph from the ledger.
+- **Live logs + rollback apply-side (1.17)**.
+- **UI/UX revamp round 2 (1.18)** — visibility-first Overview + Work board +
+  right-hand detail/action drawer.
+
+### Docs
+- README + `docs/ARCHITECTURE.md` refreshed to cover the full 1.x surface
+  (enforcement, rollbacks, teams/ledger/cost/concurrency, routing + traffic,
+  jobs/scheduler/live/logs, the visibility-first dashboard).
+
+### Deferred to 2.x
+- Postgres (the engine still guards to SQLite), MFA, Celery/Redis scale-out,
+  extending the drawer pattern to the remaining admin surfaces.
+
 ## [1.18.0] — 2026-07-06
 
 ### Changed

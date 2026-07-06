@@ -91,5 +91,7 @@ after backend changes.
 
 ## Roadmap (don't build ahead of need)
 
-See `PLAN.md`. Next: more integration providers, targets + routing + quotas,
-policy governance.
+See `PLAN.md`. **2.0.0 is released** — feature-complete platform, schema still
+frozen at 1.0 (additive-only). Deferred to 2.x: Postgres (engine still guards to
+SQLite), MFA, Celery/Redis scale-out, and extending the detail-drawer UI pattern
+to the remaining admin surfaces.

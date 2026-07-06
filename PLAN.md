@@ -400,11 +400,12 @@ item. Each milestone is a shippable minor; 2.0.0 is the cut.
 | M3 ✅ | 1.16.0 | **Routing policy inputs + traffic graph** | targets carry region/compliance/unit_cost; org routing policy (`GET/PUT /routing-policy`) filters on region/compliance + prefers cost; unmet requirement → no route. Traffic graph (`GET /traffic`) from the ledger — actor→target edges weighted by calls+units. Migration v14. |
 | M4 ✅ | 1.17.0 | **Live logs + rollback apply-side** | per-run **live log tail** over the WS hub (`POST/GET /work-items/{id}/logs`, in-process ring buffer, `type:"log"`); **rollback apply-status** — harness reports applied/failed (`POST …/rollback/applied`), recorded as `rollback-applied` audit event + history row (closes the "we only emit the plan" gap). |
 | M5 ✅ | 1.18.0 | **UI/UX revamp round 2** | Visibility-first **Overview** home (glanceable highlight cards for the few actionable things — approvals/denials/failures/rollbacks-to-apply/WIP — with drill-in) + **Work board** grouped by stage where a card opens a right-hand **detail/action Drawer** (move/attest/history/rollback/logs/post-mortem). Reusable `Drawer` slide-over. Broader Vitest. UI-only, no schema change; admin tables unchanged. Next (2.x): extend the drawer pattern to the remaining admin surfaces. |
-| M? | — | **(reserved)** | Item the user will recall — slot before 2.0. |
-| M6 | 2.0.0 | **Cut 2.0** | Docs + upgrade pass covering 1.1–1.19 (packs, governance graph, systems, ingest, enforcement, post-mortem, jobs, scheduler, WS, rollbacks, teams, traffic graph); final polish; tag 2.0.0. |
+| M6 ✅ | 2.0.0 | **Cut 2.0** | Docs pass (README + ARCHITECTURE refreshed for the full 1.x surface); milestone cut — schema still frozen at 1.0, all 1.x additive + backward-compatible, so any 1.x → 2.0 is a drop-in upgrade. Tagged 2.0.0. |
 
-**2.0-defining:** M1 (security) + M5 (visibility). Rest rounds out the ◐ table.
-**Deferred to 2.x (infra):** Postgres, MFA, Celery/Redis scale-out.
+**Road to 2.0 complete — 2.0.0 released.** 2.0-defining: M1 (security) + M5
+(visibility). **Deferred to 2.x:** Postgres, MFA, Celery/Redis scale-out, the
+drawer pattern across the remaining admin surfaces (+ a reserved slot dropped for
+now — revisit later).
 
 ## Roadmap
 

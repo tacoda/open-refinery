@@ -32,11 +32,31 @@ with `pip install` and one command; manage everything from the web dashboard.
 - **Human approval gates** — gated steps need recorded sign-off: inline, or an
   **async approval queue** with **chained approvals** (an ordered role chain,
   distinct signer per slot) for higher-risk moves.
+- **Proactive enforcement** — an org-wide mode of `audit` (default-allow, opt-in
+  deny) or **`strict`** (whitelist / default-deny). A **pre-action authorize**
+  seam lets a harness verify identity + intent against policy *before* it runs a
+  tool / command / host-egress action; **per-namespace whitelists** scope rules;
+  every refused attempt is audited.
+- **First-class rollbacks** — revert a work item to a known-good prior stage and
+  compute a structured **reverse plan** that unwinds the whole deployment: code,
+  DB migrations, config, env, libraries, data, services, secret refs, infra,
+  DNS — any surface the PR touched. The harness applies it and reports back;
+  the platform governs + audits.
+- **Teams, cost attribution & concurrency caps** — group users into teams; a
+  usage ledger meters units per governed invoke and rolls up cost by team; a
+  team's live in-flight concurrency cap is enforced at the invoke seam.
+- **Routing policy inputs + traffic graph** — route resolution filters targets on
+  region / compliance tags and can prefer lowest cost; a cross-agent traffic
+  graph shows who sends how much to which target.
 - Ships work through **customizable processes** — ordered steps with feedback
   loops (board or doctrine archetypes).
 - Records a **complete, attributed audit trail** — who did what, to which work
   item, with what inputs — fans it out to **webhooks**, and derives **metrics**
   plus **debt-audit health scores** (factory / harness / charter) with insights.
+- **Runs live** — background job runner, scheduled ingest, and a WebSocket live
+  channel (job status, new audit events, per-run **live logs**) feeding a
+  **visibility-first dashboard** (an overview that surfaces what needs attention,
+  a work board, and a right-hand detail/action drawer).
 - Enforces **ownership** with **admin-configurable roles**: developers see their
   own work; platform sets org-wide policy; admins audit everything.
 
@@ -67,21 +87,27 @@ Man-Month* — is the condition under which adding effort actually adds
 throughput, whereas work requiring communication incurs overhead that a central
 agent bottleneck would impose.
 
-> Status: **1.0.0 — schema frozen** (post-1.0 changes are additive-only). The
-> full governed loop is in place: **admin-configurable roles**; **policies** as
-> authored harness artifacts (rule / skill / command / agent) with a **strict**
-> override lock and layered precedence; **packs** — a curated marketplace of
-> starter standards + processes (TDD, ATDD, spec-driven, code-review, CI/CD,
-> observability, tech-debt…); **per-layer approval workflows** (accept / deny /
-> feedback, auto-escalating) that govern changes to governance itself; the
-> **executor** with real **Anthropic / OpenAI / MCP / API** backends (API key or
-> OAuth), routing, and windowed quotas; **governance landscape + analysis**
-> (overrides, drift, poison flags); **repo coverage & debt-audit health** with
-> GitHub **ingest**; **evals & experiments**; **webhooks**; oversight, the async
-> approval queue + chained approvals, metrics, and a full audit trail. Config
-> lives in the **database, not the env** — encrypted, UI-managed, so **only
-> `SECRET_KEY` is required in the environment**. Self-hosted API docs with live
-> "Try it out" at `/api-docs`. See [CHANGELOG.md](https://github.com/tacoda/open-refinery/blob/main/CHANGELOG.md).
+> Status: **2.0.0 — feature-complete platform** (schema frozen at 1.0; every
+> release since is additive, backward-compatible — no breaking change at 2.0).
+> The full governed loop plus the platform around it is in place: **admin-
+> configurable roles**; **policies** as authored harness artifacts (rule / skill
+> / command / agent) with a **strict** override lock and layered precedence;
+> **proactive enforcement** (`audit` / `strict` modes, a pre-action `/authorize`
+> gate, per-namespace whitelists); **packs** — a curated marketplace of starter
+> standards + processes; **per-layer approval workflows** that govern changes to
+> governance itself; the **executor** with real **Anthropic / OpenAI / MCP / API**
+> backends (API key or OAuth), **routing policy inputs** (region / compliance /
+> cost) and windowed quotas; **teams + usage ledger + cost attribution +
+> concurrency caps**; a cross-agent **traffic graph**; **first-class rollbacks**
+> (full-deployment reverse plans, apply-side reporting); **governance landscape +
+> analysis**; **repo coverage & debt-audit health** with GitHub **ingest** (on a
+> schedule); **evals & experiments**; **webhooks**; **background jobs** and a
+> **WebSocket live channel** with per-run **live logs**; oversight, the async
+> approval queue + chained approvals, metrics, agent-run **post-mortems**, and a
+> full audit trail — behind a **visibility-first dashboard**. Config lives in the
+> **database, not the env** — encrypted, UI-managed, so **only `SECRET_KEY` is
+> required in the environment**. Self-hosted API docs with live "Try it out" at
+> `/api-docs`. See [CHANGELOG.md](https://github.com/tacoda/open-refinery/blob/main/CHANGELOG.md).
 
 ## Quickstart
 
@@ -203,8 +229,10 @@ artifact, record = factory.produce("upper", actor="ian", text="hello")
 | Auditability    | `AuditSink` (`MemorySink`, `JsonlSink`) — append-only trail  |
 | Logging         | stdlib `logging`, logger name `open_refinery`               |
 | Oversight       | Per-process autonomy levels L0–L4; gated steps need recorded approvals |
-| Observability   | `GET /metrics` — WIP, event counts, per-actor activity, lead times over the audit trail |
-| Governance      | *(roadmap)* policy layer that constrains what may be produced |
+| Observability   | `GET /metrics` — WIP, event counts, per-actor activity, lead times; `GET /traffic` — cross-agent traffic graph; per-run live logs |
+| Governance      | Policy layer (`audit` / `strict` enforcement, layered strict overrides, per-namespace whitelists) + pre-action `/authorize` gate |
+| Reversibility   | First-class rollbacks — revert to a prior stage + a full-deployment reverse plan, applied by the harness and audited |
+| Cost & limits   | Teams + usage ledger + cost attribution; live concurrency caps; windowed quotas; region / compliance / cost routing inputs |
 
 ## Durable audit trail
 
