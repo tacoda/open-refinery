@@ -155,7 +155,8 @@ def _apply_policy_create(session: Session, prop: ChangeProposal) -> str:
     policy = create_policy(session, p.get("effect", "allow"), prop.proposed_by,
                            role=p.get("role", "*"), action=p.get("action", "*"),
                            resource=p.get("resource", "*"), strict=p.get("strict"),
-                           kind=p.get("kind", "rule"), content=p.get("content", ""))
+                           kind=p.get("kind", "rule"), content=p.get("content", ""),
+                           namespace=p.get("namespace", ""))
     return policy.id
 
 

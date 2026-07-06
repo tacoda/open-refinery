@@ -68,7 +68,7 @@ from .live import HUB
 from .logs import append_log, recent_logs
 from .webhooks import create_webhook, delete_webhook, list_webhooks
 from .governance import landscape
-from .packs import disable_pack, enable_pack, list_packs, list_standards
+from .packs import disable_pack, enable_pack, list_packs, list_standards, pack_detail
 from .postmortem import postmortem
 from .rollback import (
     record_rollback_applied,
@@ -745,6 +745,13 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     @app.get("/packs")
     def get_packs(session: Session = Depends(get_session), _: User = Depends(current_user)):
         return list_packs(session)
+
+    @app.get("/packs/{key}")
+    def get_pack(key: str, session: Session = Depends(get_session), _: User = Depends(current_user)):
+        detail = pack_detail(session, key)
+        if detail is None:
+            raise HTTPException(status_code=404, detail=f"unknown pack: {key}")
+        return detail
 
     @app.post("/packs/{key}/enable")
     def enable_a_pack(key: str, session: Session = Depends(get_session),

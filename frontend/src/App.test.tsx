@@ -13,7 +13,7 @@ vi.mock('./api', () => ({
   oauthLoginUrl: () => '',
 }))
 
-import { Drawer, EmptyRow, Overview, Packs } from './App'
+import { Drawer, EmptyRow, Overview, Packs, Toggle, ruleSentence } from './App'
 
 const ROLES = [
   { name: 'developer', rank: 1 },
@@ -62,8 +62,37 @@ describe('Packs marketplace', () => {
       { key: 'ci-cd', role: 'platform', title: 'CI/CD', description: 'delivery', enabled: false },
     ])
     render(<Packs me={{ role: 'developer' }} roles={ROLES} />)
-    const btn = await screen.findByRole('button', { name: 'Enable' })
-    expect(btn).toBeDisabled()
+    const sw = await screen.findByRole('switch', { name: /enable CI\/CD/i })
+    expect(sw).toBeDisabled()
+    expect(sw).toHaveAttribute('aria-checked', 'false')
+  })
+})
+
+describe('Toggle switch', () => {
+  it('reflects on/off via aria-checked and fires onChange with the toggled value', () => {
+    const onChange = vi.fn()
+    const { rerender } = render(<Toggle on={false} onChange={onChange} label="x" />)
+    const sw = screen.getByRole('switch')
+    expect(sw).toHaveAttribute('aria-checked', 'false')
+    fireEvent.click(sw)
+    expect(onChange).toHaveBeenCalledWith(true)
+    rerender(<Toggle on={true} onChange={onChange} label="x" />)
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
+  })
+})
+
+describe('ruleSentence — policy reads as a qualified statement', () => {
+  it('deny with role + action + resource + namespace', () => {
+    expect(ruleSentence({ effect: 'deny', role: 'developer', action: 'transition', resource: 'done', namespace: 'payments' }))
+      .toBe('The developer role may not transition on done in the payments namespace.')
+  })
+  it('allow with wildcards reads as anyone / any action / anywhere', () => {
+    expect(ruleSentence({ effect: 'allow', role: '*', action: '*', resource: '*', namespace: '' }))
+      .toBe('Anyone may perform any action anywhere.')
+  })
+  it('drops the "on" clause when resource is a wildcard', () => {
+    expect(ruleSentence({ effect: 'allow', role: 'platform', action: 'invoke', resource: '*', namespace: '' }))
+      .toBe('The platform role may invoke anywhere.')
   })
 })
 

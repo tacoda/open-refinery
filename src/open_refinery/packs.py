@@ -218,6 +218,205 @@ PACKS: tuple[Pack, ...] = (
               "compliance-reviewer: before close, confirm the change meets the org's binding "
               "policies (e.g. HIPAA); flag anything that doesn't."},
          )),
+
+    # ── developer tier ──────────────────────────────────────────────────────
+    Pack("secure-coding", "developer", "Secure coding",
+         "Write code that resists the common vulnerability classes.", (
+             ("input-validation", "Validate untrusted input",
+              "Validate and normalize everything crossing a trust boundary; reject by default."),
+             ("injection", "Prevent injection",
+              "Parameterize queries and commands; never build them by string concatenation."),
+             ("authz-checks", "Check authorization every time",
+              "Enforce access at the resource, not the route; don't trust client-supplied identity."),
+             ("no-secrets-in-code", "No secrets in code",
+              "Keep credentials out of source and logs; load from a secret store at runtime."),
+             ("least-privilege", "Least privilege",
+              "Grant the narrowest scope that works; expire and rotate access."),
+         ),
+         artifacts=(
+             {"kind": "command", "layer": "harness", "namespace": "canon/secure-coding", "content":
+              "security-review: check input validation, injection, authz, secret handling, and "
+              "dependency risk; return {passed, findings, severity}."},
+         )),
+    Pack("api-design", "developer", "API design",
+         "Design APIs that are predictable and evolvable.", (
+             ("contract-first", "Contract first",
+              "Agree the schema/contract before implementing; generate types from it."),
+             ("versioning", "Version deliberately",
+              "Version breaking changes; add fields additively; never repurpose a field."),
+             ("idempotency", "Idempotency",
+              "Make writes safe to retry (idempotency keys); network calls will be retried."),
+             ("pagination", "Pagination & limits",
+              "Page large collections; bound every list response; document the limits."),
+             ("error-shape", "Consistent errors",
+              "Return a stable, typed error shape with codes a client can branch on."),
+         )),
+    Pack("refactoring", "developer", "Refactoring",
+         "Change structure without changing behavior.", (
+             ("tests-green", "Tests green throughout",
+              "Refactor only under a passing test suite; run it before and after each step."),
+             ("small-steps", "Small steps",
+              "Rename, extract, inline in tiny commits; a broken step should point at one change."),
+             ("no-behavior-change", "No behavior change",
+              "A refactor changes structure, not behavior; separate refactors from feature changes."),
+             ("boy-scout", "Leave it cleaner",
+              "Make in-scope cleanups as you pass through; avoid big-bang rewrites."),
+         )),
+    Pack("performance", "developer", "Performance",
+         "Make it fast — after making it correct.", (
+             ("measure-first", "Measure first",
+              "Profile before optimizing; fix the measured bottleneck, not the guessed one."),
+             ("budgets", "Performance budgets",
+              "Set budgets (latency, payload, queries) and fail the build when they regress."),
+             ("avoid-premature", "Avoid premature optimization",
+              "Prefer clarity until a measurement says otherwise; document any speed-for-clarity trade."),
+             ("cache-carefully", "Cache carefully",
+              "Cache with explicit invalidation and TTLs; a stale cache is a correctness bug."),
+         )),
+    Pack("accessibility", "developer", "Accessibility",
+         "Build UIs everyone can use.", (
+             ("semantic-html", "Semantic markup",
+              "Use the right element for the job; semantics give assistive tech meaning for free."),
+             ("keyboard", "Keyboard operable",
+              "Everything works without a mouse; visible focus, logical tab order, no traps."),
+             ("contrast", "Color & contrast",
+              "Meet WCAG contrast; never encode meaning in color alone."),
+             ("aria-sparingly", "ARIA sparingly",
+              "Prefer native elements; add ARIA only when semantics are missing, and test it."),
+         )),
+    Pack("data-engineering", "developer", "Data engineering",
+         "Build pipelines that stay trustworthy.", (
+             ("idempotent-jobs", "Idempotent jobs",
+              "Make jobs safe to re-run; reprocessing a window must not double-count."),
+             ("schema-contracts", "Schema contracts",
+              "Version data schemas; validate on read; evolve additively (expand/contract)."),
+             ("data-quality", "Data quality checks",
+              "Assert freshness, volume, and null/range expectations; alert on violations."),
+             ("backfills", "Safe backfills",
+              "Plan backfills as reversible, rate-limited batches with a verification step."),
+         )),
+    Pack("prompt-engineering", "developer", "Prompt engineering",
+         "Author reliable model-driven steps (harness-side).", (
+             ("clear-instructions", "Clear instructions",
+              "State the task, constraints, and output contract explicitly; show one example."),
+             ("structured-output", "Structured output",
+              "Demand a schema (JSON/tool) for anything machine-consumed or audited, not prose."),
+             ("evals", "Evaluate changes",
+              "Gate prompt changes on an eval set; measure before/after, don't eyeball."),
+             ("context-hygiene", "Context hygiene",
+              "Give the model only what it needs; stale or excess context degrades output."),
+         )),
+
+    # ── platform tier ───────────────────────────────────────────────────────
+    Pack("containers", "platform", "Containers & orchestration",
+         "Package and run services predictably.", (
+             ("immutable-images", "Immutable images",
+              "Build once, promote the same artifact across environments; never patch in place."),
+             ("small-images", "Minimal images",
+              "Start from slim/distroless bases; fewer packages, smaller attack surface."),
+             ("resource-limits", "Requests & limits",
+              "Set CPU/memory requests and limits so one workload can't starve the node."),
+             ("health-probes", "Health probes",
+              "Expose liveness/readiness probes; don't route traffic before ready."),
+         )),
+    Pack("iac", "platform", "Infrastructure as code",
+         "Declare infrastructure; never click-ops it.", (
+             ("declarative", "Declarative",
+              "Describe desired state in versioned code; the tool reconciles reality to it."),
+             ("plan-before-apply", "Plan before apply",
+              "Review a diff/plan before applying; applies go through the same review as code."),
+             ("state-management", "Manage state",
+              "Store state remotely with locking; never edit it by hand."),
+             ("no-manual-drift", "No manual drift",
+              "Change infra only through code; detect and reconcile out-of-band drift."),
+         )),
+    Pack("secrets-management", "platform", "Secrets management",
+         "Handle credentials without leaking them.", (
+             ("no-plaintext", "No plaintext secrets",
+              "Never store secrets in code, config, or logs; use a vault/secret store."),
+             ("rotation", "Rotate regularly",
+              "Rotate credentials on a schedule and on compromise; automate it."),
+             ("short-lived", "Prefer short-lived",
+              "Use short-lived, scoped tokens over long-lived static keys where possible."),
+             ("least-scope", "Least scope",
+              "Scope each secret to one consumer and the narrowest permission set."),
+         )),
+    Pack("incident-response", "platform", "Incident response",
+         "Respond to incidents calmly and consistently.", (
+             ("sev-levels", "Severity levels",
+              "Define sev levels with clear criteria so response matches impact."),
+             ("single-commander", "One incident commander",
+              "A single commander coordinates; responders own workstreams, not the whole."),
+             ("comms-cadence", "Communicate on a cadence",
+              "Post regular status updates to a known channel; over-communicate during impact."),
+             ("runbooks", "Runbooks",
+              "Keep tested runbooks for known failure modes; link them from alerts."),
+         ),
+         processes=(
+             {"name": "Incident", "archetype": "doctrine",
+              "stages": ["detect", "triage", "mitigate", "resolve", "review"],
+              "transitions": [["detect", "triage"], ["triage", "mitigate"], ["mitigate", "resolve"],
+                              ["resolve", "review"], ["mitigate", "triage"]],
+              "gates": ["review"]},
+         )),
+    Pack("cost-optimization", "platform", "Cost optimization (FinOps)",
+         "Treat spend as an engineering metric.", (
+             ("measure-spend", "Measure spend",
+              "Attribute cost to teams/services with tagging; you can't optimize what you can't see."),
+             ("rightsizing", "Rightsize",
+              "Match resources to real usage; reclaim idle and over-provisioned capacity."),
+             ("autoscale", "Autoscale",
+              "Scale with demand; don't pay peak prices for trough load."),
+             ("budgets-alerts", "Budgets & alerts",
+              "Set budgets per team/service and alert on anomalous spend early."),
+         )),
+    Pack("release-management", "platform", "Release management",
+         "Ship versions predictably.", (
+             ("semver", "Semantic versioning",
+              "Communicate change intent through versions; breaking changes bump major."),
+             ("changelogs", "Keep a changelog",
+              "Record notable changes per release so consumers can upgrade with confidence."),
+             ("feature-flags", "Feature flags",
+              "Decouple deploy from release; dark-launch and ramp behind flags."),
+             ("deprecation", "Deprecation policy",
+              "Announce, provide a migration path, and set a sunset date before removing."),
+         )),
+
+    # ── admin tier ──────────────────────────────────────────────────────────
+    Pack("compliance-frameworks", "admin", "Compliance frameworks",
+         "Map controls to a framework and keep evidence.", (
+             ("control-mapping", "Map controls",
+              "Map each framework control (SOC2/ISO/HIPAA/GDPR) to a concrete, owned safeguard."),
+             ("evidence", "Collect evidence continuously",
+              "Automate evidence capture; an audit should be a query, not a scramble."),
+             ("audit-cadence", "Audit cadence",
+              "Review controls on a schedule; treat gaps as tracked, owned work items."),
+         ),
+         artifacts=(
+             {"kind": "agent", "layer": "factory", "namespace": "org/compliance", "content":
+              "control-mapper: for a change, identify affected controls and confirm evidence "
+              "exists; flag unmapped or unevidenced controls."},
+         )),
+    Pack("risk-management", "admin", "Risk management",
+         "Make risk explicit and owned.", (
+             ("risk-register", "Risk register",
+              "Maintain a register: likelihood, impact, owner, and mitigation for each risk."),
+             ("threat-modeling", "Threat modeling",
+              "Threat-model significant changes; ask what can go wrong before it does."),
+             ("risk-acceptance", "Explicit acceptance",
+              "Accepted risks are recorded, time-boxed, and signed off by an accountable owner."),
+         )),
+    Pack("data-privacy", "admin", "Data privacy",
+         "Handle personal data lawfully and minimally.", (
+             ("data-minimization", "Minimize",
+              "Collect only what you need, for only as long as you need it."),
+             ("retention", "Retention policy",
+              "Define and enforce retention; delete on schedule, not never."),
+             ("pii-handling", "Handle PII carefully",
+              "Classify, encrypt, and restrict access to personal data; log access."),
+             ("dsar", "Data-subject requests",
+              "Have a process to find, export, and erase a subject's data on request."),
+         )),
 )
 
 _BY_KEY = {p.key: p for p in PACKS}
@@ -233,6 +432,26 @@ def list_packs(session: Session) -> list[dict]:
     return [{"key": p.key, "role": p.role, "title": p.title,
              "description": p.description, "enabled": states.get(p.key, False)}
             for p in PACKS]
+
+
+def pack_detail(session: Session, key: str) -> dict | None:
+    """A pack's full contents — examples of what enabling it seeds: standards,
+    example processes, and governed policy artifacts. Read-only preview."""
+    pack = pack_by_key(key)
+    if pack is None:
+        return None
+    enabled = (session.get(PackState, key) or PackState(key=key)).enabled
+    return {
+        "key": pack.key, "role": pack.role, "title": pack.title,
+        "description": pack.description, "enabled": enabled,
+        "standards": [{"topic": t, "title": ti, "body": b} for t, ti, b in pack.standards],
+        "processes": [{"name": s["name"], "archetype": s.get("archetype", ""),
+                       "stages": s.get("stages", [])} for s in pack.processes],
+        "artifacts": [{"kind": a.get("kind", "rule"), "effect": a.get("effect", "allow"),
+                       "role": a.get("role", "*"), "action": a.get("action", "*"),
+                       "resource": a.get("resource", "*"), "namespace": a.get("namespace", ""),
+                       "content": a.get("content", "")} for a in pack.artifacts],
+    }
 
 
 def _authorize(session: Session, pack: Pack, user: User) -> None:

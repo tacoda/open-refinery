@@ -8,6 +8,7 @@ from open_refinery import (
     enable_pack,
     list_packs,
     list_standards,
+    pack_detail,
 )
 
 
@@ -24,6 +25,16 @@ def test_catalog_lists_packs_disabled_by_default():
     packs = {p["key"]: p for p in list_packs(conn)}
     assert "software-general" in packs and packs["software-general"]["enabled"] is False
     assert packs["org-policy"]["role"] == "admin"
+
+
+def test_pack_detail_exposes_contents_and_enabled_state():
+    conn, dev, *_ = setup()
+    d = pack_detail(conn, "software-general")
+    assert d and d["title"] and d["enabled"] is False
+    assert len(d["standards"]) > 0 and all({"topic", "title", "body"} <= set(s) for s in d["standards"])
+    enable_pack(conn, "software-general", dev)
+    assert pack_detail(conn, "software-general")["enabled"] is True
+    assert pack_detail(conn, "nope") is None
 
 
 def test_enable_seeds_standards_idempotently():

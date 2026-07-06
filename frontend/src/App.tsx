@@ -49,6 +49,16 @@ export function EmptyRow({ show, cols, children }: { show: boolean; cols: number
   return <TableRow><TableCell colSpan={cols} className="muted">{children}</TableCell></TableRow>
 }
 
+// Modern on/off switch. aria-checked drives both a11y and the CSS knob position.
+export function Toggle({ on, disabled, onChange, label }: { on: boolean; disabled?: boolean; onChange: (v: boolean) => void; label?: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} aria-label={label ?? 'toggle'}
+            className="switch" disabled={disabled} onClick={() => onChange(!on)}>
+      <span className="switch-knob" />
+    </button>
+  )
+}
+
 // Right-hand slide-over: select an item → its detail + actions appear here.
 export function Drawer({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: any }) {
   useEffect(() => {
@@ -351,10 +361,11 @@ function Repos() {
   return (
     <section className="page">
       <h2 className="page-title">Repositories</h2>
-      <div className="toolbar">
-        <Input className="field" placeholder="name" value={name} onChange={(e) => setName(e.target.value)} />
-        <Input className="field" placeholder="git url" value={url} onChange={(e) => setUrl(e.target.value)} />
-        <Button onClick={add}>Add repo</Button>
+      <p className="muted">A repository is a project you govern — add one here or import from a connected integration.</p>
+      <div className="field-form">
+        <Field label="Name"><Input className="field" placeholder="e.g. checkout-api" value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label="Git URL"><Input className="field" placeholder="git@github.com:org/repo.git" value={url} onChange={(e) => setUrl(e.target.value)} /></Field>
+        <Button onClick={add} disabled={!name || !url}>Add repo</Button>
       </div>
       <Card><CardContent>
         <Table>
@@ -405,27 +416,34 @@ function Processes() {
   return (
     <section className="page">
       <h2 className="page-title">Processes</h2>
-      <div className="toolbar">
-        <Input className="field" placeholder="name" value={name} onChange={(e) => setName(e.target.value)} />
-        <Select value={arch} onValueChange={(v) => setArch(v ?? '')}>
-          <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-          <SelectContent><SelectItem value="board">board</SelectItem><SelectItem value="doctrine">doctrine</SelectItem></SelectContent>
-        </Select>
-        <Input className="field" placeholder="steps (comma)" value={stages} onChange={(e) => setStages(e.target.value)} />
-        <Select value={oversight} onValueChange={(v) => setOversight(v ?? '')}>
-          <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-          <SelectContent>{['dark', 'autonomous', 'supervised', 'assisted', 'manual'].map((o) =>
-            <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
-        </Select>
-        <Input className="field" placeholder="gated steps (comma)" value={gates} onChange={(e) => setGates(e.target.value)} />
-        <Select value={minApprover} onValueChange={(v) => setMinApprover(v ?? '')}>
-          <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-          <SelectContent>{roleRows.map((r: any) =>
-            <SelectItem key={r.name} value={r.name}>approver: {r.name}+</SelectItem>)}</SelectContent>
-        </Select>
-        <Input className="field" placeholder="approval chain (roles, comma)" value={chain}
-               onChange={(e) => setChain(e.target.value)} />
-        <Button onClick={add}>Add process</Button>
+      <p className="muted">A process is the ordered steps work moves through, plus its oversight — which steps are gated and who must approve.</p>
+      <div className="field-form">
+        <Field label="Name"><Input className="field" placeholder="e.g. Feature" value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label="Type">
+          <Select value={arch} onValueChange={(v) => setArch(v ?? '')}>
+            <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="board">board</SelectItem><SelectItem value="doctrine">doctrine</SelectItem></SelectContent>
+          </Select>
+        </Field>
+        <Field label="Steps (in order)"><Input className="field" placeholder="todo, doing, done" value={stages} onChange={(e) => setStages(e.target.value)} /></Field>
+        <Field label="Oversight">
+          <Select value={oversight} onValueChange={(v) => setOversight(v ?? '')}>
+            <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+            <SelectContent>{['dark', 'autonomous', 'supervised', 'assisted', 'manual'].map((o) =>
+              <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+          </Select>
+        </Field>
+        <Field label="Gated steps"><Input className="field" placeholder="blank = none" value={gates} onChange={(e) => setGates(e.target.value)} /></Field>
+        <Field label="Min approver role">
+          <Select value={minApprover} onValueChange={(v) => setMinApprover(v ?? '')}>
+            <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+            <SelectContent>{roleRows.map((r: any) =>
+              <SelectItem key={r.name} value={r.name}>{r.name}+</SelectItem>)}</SelectContent>
+          </Select>
+        </Field>
+        <Field label="Approval chain (roles)"><Input className="field" placeholder="blank = single approver" value={chain}
+               onChange={(e) => setChain(e.target.value)} /></Field>
+        <Button onClick={add} disabled={!name}>Add process</Button>
       </div>
       <Card><CardContent>
         <Table>
@@ -465,22 +483,25 @@ function Integrations() {
   return (
     <section className="page">
       <h2 className="page-title">Integrations</h2>
+      <p className="muted">Connect a source host or issue tracker by token or OAuth; credentials are encrypted at rest.</p>
       <Card>
         <CardHeader><CardTitle>Connect a service</CardTitle></CardHeader>
         <CardContent>
-          <div className="toolbar">
-            <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
-              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-              <SelectContent>{KINDS.map(([v, label]) =>
-                <SelectItem key={v} value={v}>{label}</SelectItem>)}</SelectContent>
-            </Select>
-            {isJira && <Input className="field" placeholder="site (acme.atlassian.net)"
-                              value={site} onChange={(e) => setSite(e.target.value)} />}
-            {isJira && <Input className="field" placeholder="email"
-                              value={email} onChange={(e) => setEmail(e.target.value)} />}
-            <Input className="field" placeholder="access token" type="password" value={token}
-                   onChange={(e) => setToken(e.target.value)} />
-            <Button onClick={connectToken}>Connect with token</Button>
+          <div className="field-form">
+            <Field label="Service">
+              <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                <SelectContent>{KINDS.map(([v, label]) =>
+                  <SelectItem key={v} value={v}>{label}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            {isJira && <Field label="Site"><Input className="field" placeholder="acme.atlassian.net"
+                              value={site} onChange={(e) => setSite(e.target.value)} /></Field>}
+            {isJira && <Field label="Email"><Input className="field" placeholder="you@acme.com"
+                              value={email} onChange={(e) => setEmail(e.target.value)} /></Field>}
+            <Field label="Access token"><Input className="field" placeholder="paste token" type="password" value={token}
+                   onChange={(e) => setToken(e.target.value)} /></Field>
+            <Button onClick={connectToken} disabled={!token}>Connect with token</Button>
             {providers[kind] && (
               <Button variant="outline" onClick={connectOAuth}>Connect with OAuth</Button>
             )}
@@ -488,6 +509,7 @@ function Integrations() {
         </CardContent>
       </Card>
       <div className="work-list">
+        {!rows.length && <p className="muted">No integrations connected yet.</p>}
         {rows.map((i) => <IntegrationCard key={i.id} integ={i} onChange={load} />)}
       </div>
     </section>
@@ -559,8 +581,30 @@ function SyncPanel({ integ }: any) {
   )
 }
 
+// A labeled field: a small uppercase label above its control, so the policy
+// form reads left-to-right in the same order a person would state the rule.
+export function Field({ label, children }: { label: string; children: any }) {
+  return <div className="field-group"><span className="field-label">{label}</span>{children}</div>
+}
+
+// Read a rule policy back as a plain, well-qualified sentence.
+export function ruleSentence(p: any): string {
+  const who = !p.role || p.role === '*' ? 'Anyone' : `The ${p.role} role`
+  const verb = p.effect === 'deny' ? 'may not' : 'may'
+  const act = !p.action || p.action === '*' ? 'perform any action' : p.action
+  const on = p.resource && p.resource !== '*' ? ` on ${p.resource}` : ''
+  const where = p.namespace ? ` in the ${p.namespace} namespace` : ' anywhere'
+  return `${who} ${verb} ${act}${on}${where}.`
+}
+
+const POLICY_ACTIONS = ['transition', 'invoke', 'rollback', 'tool', 'command', 'egress', '*']
+const LAYER_HINT: Record<string, string> = {
+  factory: 'factory · org-wide service', harness: 'harness · agent tooling', charter: 'charter · repo/project',
+}
+
 function Policies() {
   const { rows, load } = useList('/policies')
+  const { rows: roles } = useList('/roles')
   const [kind, setKind] = useState('rule')
   const [effect, setEffect] = useState('deny'), [role, setRole] = useState('*')
   const [action, setAction] = useState('transition'), [resource, setResource] = useState('*')
@@ -579,47 +623,80 @@ function Policies() {
       <Card>
         <CardHeader><CardTitle>Add a governed artifact (rule / skill / command / agent)</CardTitle></CardHeader>
         <CardContent>
-          <div className="toolbar">
-            <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
-              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-              <SelectContent>{['rule', 'skill', 'command', 'agent'].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
-            </Select>
+          <p className="muted">A <strong>rule</strong> states who may (or may not) do what, and where. Fill the fields left to right — the preview reads it back as a sentence before you add it.</p>
+          <div className="field-form">
+            <Field label="Type">
+              <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                <SelectContent>{['rule', 'skill', 'command', 'agent'].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
             {kind === 'rule' ? (
               <>
-                <Select value={effect} onValueChange={(v) => setEffect(v ?? '')}>
-                  <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-                  <SelectContent>{['deny', 'allow'].map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
-                </Select>
-                <Input className="field" placeholder="role (* = any)" value={role} onChange={(e) => setRole(e.target.value)} />
-                <Input className="field" placeholder="action (transition / *)" value={action} onChange={(e) => setAction(e.target.value)} />
-                <Input className="field" placeholder="resource (step / *)" value={resource} onChange={(e) => setResource(e.target.value)} />
-                <Input className="field" placeholder="namespace (blank = global)" value={namespace} onChange={(e) => setNamespace(e.target.value)} />
+                <Field label="Effect">
+                  <Select value={effect} onValueChange={(v) => setEffect(v ?? '')}>
+                    <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                    <SelectContent>{['deny', 'allow'].map((e) => <SelectItem key={e} value={e}>{e === 'deny' ? 'Deny' : 'Allow'}</SelectItem>)}</SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Who (role)">
+                  <Select value={role} onValueChange={(v) => setRole(v ?? '')}>
+                    <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="*">any role</SelectItem>
+                      {roles.map((r: any) => <SelectItem key={r.name} value={r.name}>{r.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Action">
+                  <Input className="field" list="policy-actions" placeholder="* = any action" value={action} onChange={(e) => setAction(e.target.value)} />
+                  <datalist id="policy-actions">{POLICY_ACTIONS.map((a) => <option key={a} value={a} />)}</datalist>
+                </Field>
+                <Field label="On (resource)">
+                  <Input className="field" placeholder="* = anything" value={resource} onChange={(e) => setResource(e.target.value)} />
+                </Field>
+                <Field label="Where (namespace)">
+                  <Input className="field" placeholder="blank = everywhere" value={namespace} onChange={(e) => setNamespace(e.target.value)} />
+                </Field>
+                <Field label="Layer">
+                  <Select value={layer} onValueChange={(v) => setLayer(v ?? '')}>
+                    <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                    <SelectContent>{['factory', 'harness', 'charter'].map((l) => <SelectItem key={l} value={l}>{LAYER_HINT[l]}</SelectItem>)}</SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Lock">
+                  <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', height: '2.25rem' }}>
+                    <input type="checkbox" checked={strict} onChange={(e) => setStrict(e.target.checked)} />
+                    no lower layer can override
+                  </label>
+                </Field>
               </>
             ) : (
-              <Input className="field" placeholder={`${kind} content`} value={content} onChange={(e) => setContent(e.target.value)} />
+              <Field label={`${kind} content`}>
+                <Input className="field" style={{ width: '20rem' }} placeholder={`what this ${kind} says`} value={content} onChange={(e) => setContent(e.target.value)} />
+              </Field>
             )}
-            <Select value={layer} onValueChange={(v) => setLayer(v ?? '')}>
-              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-              <SelectContent>{['factory', 'harness', 'charter'].map((l) => <SelectItem key={l} value={l}>layer: {l}</SelectItem>)}</SelectContent>
-            </Select>
-            <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <input type="checkbox" checked={strict} onChange={(e) => setStrict(e.target.checked)} />
-              strict (no lower-layer override)
-            </label>
-            <Button onClick={add}>Add</Button>
+            <Button onClick={add}>Add {kind}</Button>
           </div>
+          {kind === 'rule' && (
+            <div className="policy-preview">
+              <span className="policy-sentence">{ruleSentence({ effect, role, action, resource, namespace })}</span>
+              {' '}
+              <Badge variant="outline">{layer} layer</Badge>
+              {strict && <> <Badge>locked</Badge></>}
+            </div>
+          )}
           <Table>
-            <TableHeader><TableRow><TableHead>Kind</TableHead><TableHead>Layer</TableHead><TableHead>Effect</TableHead><TableHead>Role</TableHead><TableHead>Action</TableHead><TableHead>Resource</TableHead><TableHead>Namespace</TableHead><TableHead>Strict</TableHead><TableHead /></TableRow></TableHeader>
-            <TableBody><EmptyRow show={!rows.length} cols={10}>Nothing here yet.</EmptyRow>{rows.map((p) => (
+            <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Rule</TableHead><TableHead>Layer</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody><EmptyRow show={!rows.length} cols={4}>Nothing here yet.</EmptyRow>{rows.map((p) => (
               <TableRow key={p.id}>
                 <TableCell><Badge variant="outline">{p.kind}</Badge></TableCell>
-                <TableCell className="mono">{p.layer}</TableCell>
-                <TableCell>{p.kind === 'rule' ? <Badge variant={p.effect === 'deny' ? 'destructive' : 'secondary'}>{p.effect}</Badge> : <span className="mono">{p.content}</span>}</TableCell>
-                <TableCell className="mono">{p.role}</TableCell>
-                <TableCell className="mono">{p.action}</TableCell>
-                <TableCell className="mono">{p.resource}</TableCell>
-                <TableCell className="mono">{p.namespace || '—'}</TableCell>
-                <TableCell>{p.strict ? <Badge>strict</Badge> : ''}</TableCell>
+                <TableCell>
+                  {p.kind === 'rule'
+                    ? <span className="policy-sentence"><Badge variant={p.effect === 'deny' ? 'destructive' : 'secondary'}>{p.effect}</Badge> {ruleSentence(p)}</span>
+                    : <span className="mono">{p.content}</span>}
+                </TableCell>
+                <TableCell>{p.layer} {p.strict && <Badge>locked</Badge>}</TableCell>
                 <TableCell><Button variant="outline" size="sm" onClick={() => del(p.id)}>Delete</Button></TableCell>
               </TableRow>
             ))}</TableBody>
@@ -668,13 +745,13 @@ function Settings() {
       <Card>
         <CardHeader><CardTitle>Configuration (stored encrypted; values never shown)</CardTitle></CardHeader>
         <CardContent>
-          <div className="toolbar">
-            <Input className="field" placeholder="key (e.g. github.client_id)" value={key}
-                   list="setting-hints" onChange={(e) => setKey(e.target.value)} />
+          <div className="field-form">
+            <Field label="Key"><Input className="field" placeholder="e.g. github.client_id" value={key}
+                   list="setting-hints" onChange={(e) => setKey(e.target.value)} /></Field>
             <datalist id="setting-hints">{SETTING_HINTS.map((h) => <option key={h} value={h} />)}</datalist>
-            <Input className="field" placeholder="value" type="password" value={value}
-                   onChange={(e) => setValue(e.target.value)} />
-            <Button onClick={save}>Save</Button>
+            <Field label="Value"><Input className="field" placeholder="stored encrypted" type="password" value={value}
+                   onChange={(e) => setValue(e.target.value)} /></Field>
+            <Button onClick={save} disabled={!key}>Save</Button>
           </div>
           <Table>
             <TableHeader><TableRow><TableHead>Configured key</TableHead><TableHead /></TableRow></TableHeader>
@@ -754,19 +831,21 @@ function Experiments() {
       <Card>
         <CardHeader><CardTitle>New experiment (hypothesis → change → before/after evals)</CardTitle></CardHeader>
         <CardContent>
-          <div className="toolbar">
-            <Input className="field" placeholder="name" value={name} onChange={(e) => setName(e.target.value)} />
-            <Select value={layer} onValueChange={(v) => setLayer(v ?? '')}>
-              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-              <SelectContent>{['project', 'platform', 'harness', 'charter'].map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
-            </Select>
-            <Input className="field" placeholder="hypothesis" value={hyp} onChange={(e) => setHyp(e.target.value)} />
-            <Input className="field" placeholder="change under test" value={change} onChange={(e) => setChange(e.target.value)} />
-            <Button onClick={create} disabled={!name}>Create</Button>
+          <div className="field-form">
+            <Field label="Name"><Input className="field" placeholder="e.g. terser prompt" value={name} onChange={(e) => setName(e.target.value)} /></Field>
+            <Field label="Layer">
+              <Select value={layer} onValueChange={(v) => setLayer(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                <SelectContent>{['project', 'platform', 'harness', 'charter'].map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            <Field label="Hypothesis"><Input className="field" placeholder="we believe X will improve Y" value={hyp} onChange={(e) => setHyp(e.target.value)} /></Field>
+            <Field label="Change under test"><Input className="field" placeholder="what you're changing" value={change} onChange={(e) => setChange(e.target.value)} /></Field>
+            <Button onClick={create} disabled={!name}>Create experiment</Button>
           </div>
           <Table>
             <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Layer</TableHead><TableHead>Hypothesis</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
-            <TableBody><EmptyRow show={!rows.length} cols={9}>No pending invitations.</EmptyRow>{rows.map((e: any) => (
+            <TableBody><EmptyRow show={!rows.length} cols={5}>No experiments yet — state a hypothesis above.</EmptyRow>{rows.map((e: any) => (
               <TableRow key={e.id} style={{ cursor: 'pointer', fontWeight: sel === e.id ? 600 : 400 }}
                         onClick={() => { setSel(e.id); setAnalysis(null) }}>
                 <TableCell>{e.name}</TableCell>
@@ -784,14 +863,16 @@ function Experiments() {
         <Card>
           <CardHeader><CardTitle>Record eval + analyze</CardTitle></CardHeader>
           <CardContent>
-            <div className="toolbar">
-              <Select value={phase} onValueChange={(v) => setPhase(v ?? '')}>
-                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-                <SelectContent>{['before', 'after'].map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-              </Select>
-              <Input className="field" placeholder="metric" value={metric} onChange={(e) => setMetric(e.target.value)} />
-              <Input className="field" placeholder="samples (comma numbers)" value={samples} onChange={(e) => setSamples(e.target.value)} />
-              <Input className="field" placeholder="round" value={round} onChange={(e) => setRound(e.target.value)} />
+            <div className="field-form">
+              <Field label="Phase">
+                <Select value={phase} onValueChange={(v) => setPhase(v ?? '')}>
+                  <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                  <SelectContent>{['before', 'after'].map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                </Select>
+              </Field>
+              <Field label="Metric"><Input className="field" placeholder="e.g. score" value={metric} onChange={(e) => setMetric(e.target.value)} /></Field>
+              <Field label="Samples"><Input className="field" placeholder="comma numbers: 0.8, 0.9" value={samples} onChange={(e) => setSamples(e.target.value)} /></Field>
+              <Field label="Round"><Input className="field" type="number" placeholder="1" value={round} onChange={(e) => setRound(e.target.value)} /></Field>
               <Button onClick={rec} disabled={!samples}>Record</Button>
               <Button variant="outline" onClick={analyze}>Analyze</Button>
             </div>
@@ -886,11 +967,14 @@ function Coverage() {
   return (
     <section className="page">
       <h2 className="page-title">Repo coverage & drift</h2>
-      <div className="toolbar">
-        <Select value={repoId} onValueChange={(v) => setRepoId(v ?? '')}>
-          <SelectTrigger className="field"><SelectValue placeholder="repository…" /></SelectTrigger>
-          <SelectContent>{repos.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
-        </Select>
+      <p className="muted">Pick a repository to see how much of its claimed behavior is actually enforced, and where the surfaces drift.</p>
+      <div className="field-form">
+        <Field label="Repository">
+          <Select value={repoId} onValueChange={(v) => setRepoId(v ?? '')}>
+            <SelectTrigger className="field"><SelectValue placeholder="repository…" /></SelectTrigger>
+            <SelectContent>{repos.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
+          </Select>
+        </Field>
         {cov && <Badge variant={cov.score >= 80 ? 'default' : cov.score >= 50 ? 'secondary' : 'destructive'}>health {cov.score}</Badge>}
         {cov && <span className="muted">covered {cov.covered} · partial {cov.partial} · imitation {cov.imitation} / {cov.total}</span>}
         <Button variant="outline" size="sm" disabled={!repoId}
@@ -926,18 +1010,24 @@ function Coverage() {
       <Card>
         <CardHeader><CardTitle>Claims</CardTitle></CardHeader>
         <CardContent>
-          <div className="toolbar">
-            <Select value={surface} onValueChange={(v) => setSurface(v ?? '')}>
-              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-              <SelectContent>{['charter', 'harness', 'code'].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-            </Select>
-            <Input className="field" placeholder="claimed behavior" value={text} onChange={(e) => setText(e.target.value)} />
-            <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-              <input type="checkbox" checked={hasI} onChange={(e) => setHasI(e.target.checked)} /> instruction
-            </label>
-            <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-              <input type="checkbox" checked={hasG} onChange={(e) => setHasG(e.target.checked)} /> gate
-            </label>
+          <div className="field-form">
+            <Field label="Surface">
+              <Select value={surface} onValueChange={(v) => setSurface(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                <SelectContent>{['charter', 'harness', 'code'].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            <Field label="Claimed behavior"><Input className="field" placeholder="what it claims to do" value={text} onChange={(e) => setText(e.target.value)} /></Field>
+            <Field label="Backed by">
+              <div className="switch-row" style={{ height: '2.25rem' }}>
+                <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <input type="checkbox" checked={hasI} onChange={(e) => setHasI(e.target.checked)} /> instruction
+                </label>
+                <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <input type="checkbox" checked={hasG} onChange={(e) => setHasG(e.target.checked)} /> gate
+                </label>
+              </div>
+            </Field>
             <Button onClick={add} disabled={!repoId || !text}>Add claim</Button>
           </div>
           <Table>
@@ -973,14 +1063,16 @@ function Proposals({ me, roles, isAdmin }: any) {
 
   // propose a change (policy rule) or a free-text suggestion that cascades up
   const [pkind, setPkind] = useState('policy')
-  const [layer, setLayer] = useState(''), [effect, setEffect] = useState('deny')
+  const [tier, setTier] = useState(''), [effect, setEffect] = useState('deny')
+  const [pRole, setPRole] = useState('*')
   const [pAction, setPAction] = useState('invoke'), [resource, setResource] = useState('*')
+  const [pNamespace, setPNamespace] = useState('')
   const [strict, setStrict] = useState(false), [idea, setIdea] = useState('')
-  useEffect(() => { if (!layer && roleNames.length) setLayer(roleNames[0]) }, [roleNames, layer])
+  useEffect(() => { if (!tier && roleNames.length) setTier(roleNames[0]) }, [roleNames, tier])
   const propose = () => post('/proposals', pkind === 'suggestion'
-    ? { target_kind: 'suggestion', action: 'adopt', layer, payload: { text: idea } }
-    : { target_kind: 'policy', action: 'create', layer,
-        payload: { effect, action: pAction, resource, strict, kind: 'rule' } })
+    ? { target_kind: 'suggestion', action: 'adopt', layer: tier, payload: { text: idea } }
+    : { target_kind: 'policy', action: 'create', layer: tier,
+        payload: { effect, role: pRole, action: pAction, resource, namespace: pNamespace, strict, kind: 'rule' } })
     .then(() => { setIdea(''); load() }).catch(fail)
 
   const act = (p: any, decision: string) =>
@@ -995,19 +1087,24 @@ function Proposals({ me, roles, isAdmin }: any) {
 
       {isAdmin && (
         <Card>
-          <CardHeader><CardTitle>Approval workflow per layer (admin)</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Approval workflows (admin)</CardTitle></CardHeader>
           <CardContent>
-            <div className="toolbar">
-              <Select value={wfLayer} onValueChange={(v) => setWfLayer(v ?? '')}>
-                <SelectTrigger className="field"><SelectValue placeholder="layer…" /></SelectTrigger>
-                <SelectContent>{roleNames.map((r: string) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-              </Select>
-              <Input className="field" placeholder="chain: roles comma-sep (e.g. platform, admin)" value={wfChain} onChange={(e) => setWfChain(e.target.value)} />
+            <p className="muted">For each governance <strong>tier</strong> (a role), set the ordered chain of roles that must sign off on a change to it — a distinct signer per slot. No workflow set → a change cascades up the role ladder.</p>
+            <div className="field-form">
+              <Field label="Tier (role)">
+                <Select value={wfLayer} onValueChange={(v) => setWfLayer(v ?? '')}>
+                  <SelectTrigger className="field"><SelectValue placeholder="role…" /></SelectTrigger>
+                  <SelectContent>{roleNames.map((r: string) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                </Select>
+              </Field>
+              <Field label="Approval chain (roles, in order)">
+                <Input className="field" style={{ width: '20rem' }} placeholder="e.g. platform, admin" value={wfChain} onChange={(e) => setWfChain(e.target.value)} />
+              </Field>
               <Button onClick={saveWf}>Save workflow</Button>
             </div>
             <Table>
-              <TableHeader><TableRow><TableHead>Layer</TableHead><TableHead>Chain</TableHead></TableRow></TableHeader>
-              <TableBody>{wfRows.map((w: any) => (
+              <TableHeader><TableRow><TableHead>Tier</TableHead><TableHead>Must be approved by</TableHead></TableRow></TableHeader>
+              <TableBody><EmptyRow show={!wfRows.length} cols={2}>No workflows — changes cascade up the ladder by default.</EmptyRow>{wfRows.map((w: any) => (
                 <TableRow key={w.layer}><TableCell>{w.layer}</TableCell><TableCell className="mono">{(w.chain || []).join(' → ')}</TableCell></TableRow>
               ))}</TableBody>
             </Table>
@@ -1016,35 +1113,68 @@ function Proposals({ me, roles, isAdmin }: any) {
       )}
 
       <Card>
-        <CardHeader><CardTitle>Propose — a policy rule, or an idea that cascades up</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Propose a change</CardTitle></CardHeader>
         <CardContent>
-          <div className="toolbar">
-            <Select value={pkind} onValueChange={(v) => setPkind(v ?? '')}>
-              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="policy">policy rule</SelectItem><SelectItem value="suggestion">suggestion</SelectItem></SelectContent>
-            </Select>
-            <Select value={layer} onValueChange={(v) => setLayer(v ?? '')}>
-              <SelectTrigger className="field"><SelectValue placeholder="layer…" /></SelectTrigger>
-              <SelectContent>{roleNames.map((r: string) => <SelectItem key={r} value={r}>layer: {r}</SelectItem>)}</SelectContent>
-            </Select>
+          <p className="muted">Propose a <strong>policy rule</strong> (fill it in like a statement — the preview reads it back), or a free-text <strong>suggestion</strong>. It then walks the review tier's approval chain.</p>
+          <div className="field-form">
+            <Field label="Proposal">
+              <Select value={pkind} onValueChange={(v) => setPkind(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="policy">policy rule</SelectItem><SelectItem value="suggestion">suggestion</SelectItem></SelectContent>
+              </Select>
+            </Field>
             {pkind === 'policy' ? (
               <>
-                <Select value={effect} onValueChange={(v) => setEffect(v ?? '')}>
-                  <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-                  <SelectContent>{['deny', 'allow'].map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
-                </Select>
-                <Input className="field" placeholder="action" value={pAction} onChange={(e) => setPAction(e.target.value)} />
-                <Input className="field" placeholder="resource" value={resource} onChange={(e) => setResource(e.target.value)} />
-                <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <input type="checkbox" checked={strict} onChange={(e) => setStrict(e.target.checked)} /> strict
-                </label>
+                <Field label="Effect">
+                  <Select value={effect} onValueChange={(v) => setEffect(v ?? '')}>
+                    <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                    <SelectContent>{['deny', 'allow'].map((e) => <SelectItem key={e} value={e}>{e === 'deny' ? 'Deny' : 'Allow'}</SelectItem>)}</SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Who (role)">
+                  <Select value={pRole} onValueChange={(v) => setPRole(v ?? '')}>
+                    <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="*">any role</SelectItem>
+                      {roleNames.map((r: string) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Action">
+                  <Input className="field" list="policy-actions" placeholder="* = any action" value={pAction} onChange={(e) => setPAction(e.target.value)} />
+                </Field>
+                <Field label="On (resource)">
+                  <Input className="field" placeholder="* = anything" value={resource} onChange={(e) => setResource(e.target.value)} />
+                </Field>
+                <Field label="Where (namespace)">
+                  <Input className="field" placeholder="blank = everywhere" value={pNamespace} onChange={(e) => setPNamespace(e.target.value)} />
+                </Field>
+                <Field label="Lock">
+                  <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', height: '2.25rem' }}>
+                    <input type="checkbox" checked={strict} onChange={(e) => setStrict(e.target.checked)} /> no lower layer overrides
+                  </label>
+                </Field>
               </>
             ) : (
-              <Input className="field" placeholder="your idea (escalates up the ladder)" value={idea} onChange={(e) => setIdea(e.target.value)} />
+              <Field label="Your idea">
+                <Input className="field" style={{ width: '24rem' }} placeholder="what should change (escalates up the ladder)" value={idea} onChange={(e) => setIdea(e.target.value)} />
+              </Field>
             )}
+            <Field label="Review tier (role)">
+              <Select value={tier} onValueChange={(v) => setTier(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue placeholder="role…" /></SelectTrigger>
+                <SelectContent>{roleNames.map((r: string) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
             <Button onClick={propose} disabled={pkind === 'suggestion' && !idea}>Propose</Button>
           </div>
-          <p className="muted">No configured workflow? A proposal cascades up the role ladder from your level (accept / deny / feedback at each step).</p>
+          {pkind === 'policy' && (
+            <div className="policy-preview">
+              <span className="policy-sentence">{ruleSentence({ effect, role: pRole, action: pAction, resource, namespace: pNamespace })}</span>
+              {strict && <> <Badge>locked</Badge></>}
+              {' '}<span className="muted">— reviewed by the {tier} tier{'’'}s chain.</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1052,15 +1182,15 @@ function Proposals({ me, roles, isAdmin }: any) {
         <CardContent>
           <Table>
             <TableHeader><TableRow>
-              <TableHead>Change</TableHead><TableHead>Layer</TableHead><TableHead>Chain</TableHead>
+              <TableHead>Proposed change</TableHead><TableHead>Review tier</TableHead><TableHead>Progress</TableHead>
               <TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
-            <TableBody><EmptyRow show={!rows.length} cols={9}>No policies yet — add a rule or artifact above.</EmptyRow>{rows.map((p: any) => (
+            <TableBody><EmptyRow show={!rows.length} cols={5}>No proposals yet — propose a change above.</EmptyRow>{rows.map((p: any) => (
               <TableRow key={p.id}>
-                <TableCell className="mono">{p.target_kind === 'suggestion'
-                  ? `suggestion · ${p.payload?.text ?? ''}`
-                  : `${p.target_kind}/${p.action} · ${p.payload?.effect} ${p.payload?.action}/${p.payload?.resource}${p.payload?.strict ? ' (strict)' : ''}`}</TableCell>
+                <TableCell>{p.target_kind === 'suggestion'
+                  ? <span><Badge variant="outline">suggestion</Badge> {p.payload?.text ?? ''}</span>
+                  : <span className="policy-sentence"><Badge variant={p.payload?.effect === 'deny' ? 'destructive' : 'secondary'}>{p.payload?.effect}</Badge> {ruleSentence(p.payload || {})}{p.payload?.strict ? ' (locked)' : ''}</span>}</TableCell>
                 <TableCell>{p.layer}</TableCell>
-                <TableCell className="mono">{(p.chain || []).map((r: string, i: number) => i === p.current && p.status === 'pending' ? `[${r}]` : r).join(' → ')}</TableCell>
+                <TableCell className="mono">{(p.chain || []).map((r: string, i: number) => i === p.current && p.status === 'pending' ? `▶ ${r}` : r).join(' → ')}</TableCell>
                 <TableCell><Badge variant={p.status === 'denied' ? 'destructive' : p.status === 'accepted' ? 'default' : 'secondary'}>{p.status}</Badge></TableCell>
                 <TableCell>
                   {canReview(p) && <span style={{ display: 'flex', gap: '0.3rem' }}>
@@ -1095,6 +1225,10 @@ function Governance() {
         </Badge>
         <span className="muted">set `policy.enforcement` in Settings to change</span>
       </div>
+      <p className="muted">{g.enforcement === 'strict'
+        ? 'Strict: an action is blocked unless a rule explicitly allows it (whitelist). Refusals are audited.'
+        : 'Audit: an action is allowed unless a rule denies it. Denials are audited.'}
+        {' '}Higher-authority layers win; a locked (strict) rule can’t be overridden from below.</p>
 
       <Card>
         <CardHeader><CardTitle>Roles</CardTitle></CardHeader>
@@ -1115,18 +1249,16 @@ function Governance() {
         <CardContent>
           {g.layers.length === 0 && <p className="muted">No rules defined.</p>}
           {g.layers.map((layer: any) => (
-            <div key={layer.rank}>
-              <div className="kv-row"><span className="muted">rank {layer.rank}</span></div>
+            <div key={layer.rank} style={{ marginBottom: '.8rem' }}>
+              <div className="field-label">Authored by {layer.rules[0]?.author_role ?? `rank ${layer.rank}`} · rank {layer.rank}</div>
               <Table>
-                <TableHeader><TableRow><TableHead>Effect</TableHead><TableHead>Role</TableHead><TableHead>Action</TableHead><TableHead>Resource</TableHead><TableHead>Author</TableHead><TableHead>Strict</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead>Rule</TableHead><TableHead /></TableRow></TableHeader>
                 <TableBody>{layer.rules.map((p: any) => (
                   <TableRow key={p.id}>
-                    <TableCell><Badge variant={p.effect === 'deny' ? 'destructive' : 'secondary'}>{p.effect}</Badge></TableCell>
-                    <TableCell className="mono">{p.role}</TableCell>
-                    <TableCell className="mono">{p.action}</TableCell>
-                    <TableCell className="mono">{p.resource}</TableCell>
-                    <TableCell className="mono">{p.author_role}</TableCell>
-                    <TableCell>{p.strict ? <Badge>strict</Badge> : ''}</TableCell>
+                    <TableCell className="policy-sentence">
+                      <Badge variant={p.effect === 'deny' ? 'destructive' : 'secondary'}>{p.effect}</Badge> {ruleSentence(p)}
+                    </TableCell>
+                    <TableCell>{p.strict && <Badge>locked</Badge>}</TableCell>
                   </TableRow>
                 ))}</TableBody>
               </Table>
@@ -1136,22 +1268,17 @@ function Governance() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Overrides — strict rules shadowing a lower layer</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Overrides — where a locked rule shadows a lower layer</CardTitle></CardHeader>
         <CardContent>
           {g.overrides.length === 0
-            ? <p className="muted">No overrides.</p>
-            : (
-              <Table>
-                <TableHeader><TableRow><TableHead>Winner (strict)</TableHead><TableHead>Shadowed</TableHead><TableHead>On</TableHead></TableRow></TableHeader>
-                <TableBody>{g.overrides.map((o: any, i: number) => (
-                  <TableRow key={i}>
-                    <TableCell><Badge>{o.winner.author_role}</Badge> {o.winner.effect}</TableCell>
-                    <TableCell><Badge variant="outline">{o.shadowed.author_role}</Badge> {o.shadowed.effect}</TableCell>
-                    <TableCell className="mono">{o.winner.action} / {o.winner.resource}</TableCell>
-                  </TableRow>
-                ))}</TableBody>
-              </Table>
-            )}
+            ? <p className="muted">No overrides — no locked rule is currently shadowing a lower layer.</p>
+            : g.overrides.map((o: any, i: number) => (
+                <div key={i} className="policy-sentence" style={{ padding: '.3rem 0' }}>
+                  <Badge>{o.winner.author_role}</Badge>’s locked <strong>{o.winner.effect}</strong> on{' '}
+                  <span className="mono">{o.winner.action}/{o.winner.resource}</span> overrides{' '}
+                  <Badge variant="outline">{o.shadowed.author_role}</Badge>’s <strong>{o.shadowed.effect}</strong>.
+                </div>
+              ))}
         </CardContent>
       </Card>
     </section>
@@ -1165,6 +1292,8 @@ export function Packs({ me, roles }: any) {
   const toggle = (p: any) =>
     api(`/packs/${p.key}/${p.enabled ? 'disable' : 'enable'}`, { method: 'POST' })
       .then(load).catch(fail)
+  const [detail, setDetail] = useState<any>(null)
+  const openDetail = (key: string) => api(`/packs/${key}`).then(setDetail).catch(fail)
 
   const layers = Array.from(new Set(rows.map((p: any) => p.role)))
     .sort((a: any, b: any) => rank(a) - rank(b))
@@ -1190,11 +1319,13 @@ export function Packs({ me, roles }: any) {
                   <p className="muted">{p.description}</p>
                   <div className="work-actions">
                     <Badge variant="secondary">{p.role}</Badge>
+                    <Button variant="ghost" size="sm" onClick={() => openDetail(p.key)}>View details</Button>
                     <span className="app-spacer" />
-                    <Button size="sm" variant={p.enabled ? 'outline' : 'default'}
-                            disabled={!canManage(p.role)} onClick={() => toggle(p)}>
-                      {p.enabled ? 'Disable' : 'Enable'}
-                    </Button>
+                    <div className="switch-row">
+                      <span className="muted">{p.enabled ? 'on' : 'off'}</span>
+                      <Toggle on={p.enabled} disabled={!canManage(p.role)}
+                              label={`enable ${p.title}`} onChange={() => toggle(p)} />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1202,6 +1333,46 @@ export function Packs({ me, roles }: any) {
           </div>
         </div>
       ))}
+
+      <Drawer open={!!detail} title={detail?.title ?? ''} onClose={() => setDetail(null)}>
+        {detail && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div><Badge variant="secondary">{detail.role}</Badge>{detail.enabled && <> <Badge>enabled</Badge></>}
+              <p className="muted" style={{ marginTop: '.4rem' }}>{detail.description}</p></div>
+
+            {detail.standards.length > 0 && <div>
+              <div className="field-label">Standards it seeds</div>
+              {detail.standards.map((s: any, i: number) => (
+                <div key={i} style={{ marginTop: '.5rem' }}>
+                  <div><Badge variant="outline">{s.topic}</Badge> <strong>{s.title}</strong></div>
+                  <p className="muted" style={{ margin: '.2rem 0 0' }}>{s.body}</p>
+                </div>
+              ))}
+            </div>}
+
+            {detail.processes.length > 0 && <div>
+              <div className="field-label">Example processes</div>
+              {detail.processes.map((pr: any, i: number) => (
+                <div key={i} className="kv-row"><span>{pr.name} <span className="muted">({pr.archetype})</span></span>
+                  <span className="mono">{(pr.stages || []).join(' → ')}</span></div>
+              ))}
+            </div>}
+
+            {detail.artifacts.length > 0 && <div>
+              <div className="field-label">Governed artifacts</div>
+              {detail.artifacts.map((a: any, i: number) => (
+                <div key={i} className="policy-sentence" style={{ marginTop: '.3rem' }}>
+                  <Badge variant="outline">{a.kind}</Badge>{' '}
+                  {a.kind === 'rule' ? ruleSentence(a) : a.content}
+                </div>
+              ))}
+            </div>}
+
+            {!detail.standards.length && !detail.processes.length && !detail.artifacts.length &&
+              <p className="muted">This pack has no seeded content.</p>}
+          </div>
+        )}
+      </Drawer>
     </section>
   )
 }
@@ -1224,14 +1395,16 @@ function Invitations({ me, roles }: any) {
       <Card>
         <CardHeader><CardTitle>Invite a user (they set their own password)</CardTitle></CardHeader>
         <CardContent>
-          <div className="toolbar">
-            <Input className="field" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <Select value={role} onValueChange={(v) => setRole(v ?? '')}>
-              <SelectTrigger className="field"><SelectValue placeholder="role…" /></SelectTrigger>
-              <SelectContent>{options.map((r: string) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-            </Select>
-            <Input className="field" placeholder="expires (days)" value={ttl} onChange={(e) => setTtl(e.target.value)} />
-            <Button onClick={invite}>Send invite</Button>
+          <div className="field-form">
+            <Field label="Email"><Input className="field" placeholder="new.user@acme.com" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+            <Field label="Role">
+              <Select value={role} onValueChange={(v) => setRole(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue placeholder="role…" /></SelectTrigger>
+                <SelectContent>{options.map((r: string) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            <Field label="Expires (days)"><Input className="field" type="number" placeholder="7" value={ttl} onChange={(e) => setTtl(e.target.value)} /></Field>
+            <Button onClick={invite} disabled={!email || !role}>Send invite</Button>
           </div>
           {link && <div className="kv-row"><span className="muted">invite link</span><span className="mono">{link}</span></div>}
         </CardContent>
@@ -1239,7 +1412,7 @@ function Invitations({ me, roles }: any) {
       <Card><CardContent>
         <Table>
           <TableHeader><TableRow><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Expires</TableHead><TableHead /></TableRow></TableHeader>
-          <TableBody><EmptyRow show={!rows.length} cols={9}>No integrations connected.</EmptyRow>{rows.map((i) => (
+          <TableBody><EmptyRow show={!rows.length} cols={4}>No pending invitations.</EmptyRow>{rows.map((i) => (
             <TableRow key={i.id}>
               <TableCell>{i.email}</TableCell>
               <TableCell><Badge variant="secondary">{i.role}</Badge></TableCell>
@@ -1272,10 +1445,10 @@ function Teams() {
       <Card>
         <CardHeader><CardTitle>New team</CardTitle></CardHeader>
         <CardContent>
-          <div className="toolbar">
-            <Input className="field" placeholder="name" value={name} onChange={(e) => setName(e.target.value)} />
-            <Input className="field" type="number" min="0" placeholder="max concurrency" value={cap} onChange={(e) => setCap(e.target.value)} />
-            <Button onClick={add} disabled={!name}>Create</Button>
+          <div className="field-form">
+            <Field label="Team name"><Input className="field" placeholder="e.g. payments" value={name} onChange={(e) => setName(e.target.value)} /></Field>
+            <Field label="Max concurrent invokes"><Input className="field" type="number" min="0" placeholder="0 = unlimited" value={cap} onChange={(e) => setCap(e.target.value)} /></Field>
+            <Button onClick={add} disabled={!name}>Create team</Button>
           </div>
         </CardContent>
       </Card>
@@ -1377,20 +1550,25 @@ function Systems() {
       <Card>
         <CardHeader><CardTitle>New system</CardTitle></CardHeader>
         <CardContent>
-          <div className="toolbar">
-            <Input className="field" placeholder="name" value={name} onChange={(e) => setName(e.target.value)} />
-            <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
-              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-              <SelectContent>{['service', 'microservices', 'server'].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
-            </Select>
-            <Button onClick={add} disabled={!name}>Create</Button>
+          <div className="field-form">
+            <Field label="System name"><Input className="field" placeholder="e.g. checkout" value={name} onChange={(e) => setName(e.target.value)} /></Field>
+            <Field label="Kind">
+              <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                <SelectContent>{['service', 'microservices', 'server'].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            <Button onClick={add} disabled={!name}>Create system</Button>
           </div>
-          <div className="toolbar">
-            {repos.map((r: any) => (
-              <Button key={r.id} size="sm" variant={picked.includes(r.id) ? 'default' : 'outline'}
-                      onClick={() => toggle(r.id)}>{r.name}</Button>
-            ))}
-            {!repos.length && <span className="muted">no repositories yet</span>}
+          <div className="field-group" style={{ marginTop: '.75rem' }}>
+            <span className="field-label">Member repositories (click to include)</span>
+            <div className="toolbar">
+              {repos.map((r: any) => (
+                <Button key={r.id} size="sm" variant={picked.includes(r.id) ? 'default' : 'outline'}
+                        onClick={() => toggle(r.id)}>{r.name}</Button>
+              ))}
+              {!repos.length && <span className="muted">no repositories yet — add one under Repos</span>}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -1432,15 +1610,16 @@ function RoutingPolicyEditor() {
     require_region: region, require_compliance: comp.split(',').map((s) => s.trim()).filter(Boolean), prefer,
   }) }).then(() => toast.success('routing policy saved')).catch(fail)
   return (
-    <div className="toolbar" style={{ marginTop: '0.4rem' }}>
-      <span className="muted">routing policy:</span>
-      <Input className="field" placeholder="require region" value={region} onChange={(e) => setRegion(e.target.value)} />
-      <Input className="field" placeholder="require compliance (csv)" value={comp} onChange={(e) => setComp(e.target.value)} />
-      <Select value={prefer} onValueChange={(v) => setPrefer(v ?? 'priority')}>
-        <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-        <SelectContent>{['priority', 'cost'].map((p) => <SelectItem key={p} value={p}>prefer: {p}</SelectItem>)}</SelectContent>
-      </Select>
-      <Button variant="secondary" size="sm" onClick={save}>Save policy</Button>
+    <div className="field-form" style={{ marginTop: '0.6rem' }}>
+      <Field label="Require region"><Input className="field" placeholder="blank = any" value={region} onChange={(e) => setRegion(e.target.value)} /></Field>
+      <Field label="Require compliance"><Input className="field" placeholder="hipaa, soc2 (csv)" value={comp} onChange={(e) => setComp(e.target.value)} /></Field>
+      <Field label="Prefer">
+        <Select value={prefer} onValueChange={(v) => setPrefer(v ?? 'priority')}>
+          <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+          <SelectContent>{['priority', 'cost'].map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+        </Select>
+      </Field>
+      <Button variant="secondary" size="sm" onClick={save}>Save routing policy</Button>
     </div>
   )
 }
@@ -1523,18 +1702,20 @@ function Targets() {
       <Card>
         <CardHeader><CardTitle>Add a target</CardTitle></CardHeader>
         <CardContent>
-          <div className="toolbar">
-            <Input className="field" placeholder="name" value={name} onChange={(e) => setName(e.target.value)} />
-            <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
-              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-              <SelectContent>{['model', 'mcp', 'api'].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
-            </Select>
-            <Input className="field" placeholder="endpoint / model id" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} />
-            <Input className="field" placeholder="token (optional)" type="password" value={token} onChange={(e) => setToken(e.target.value)} />
-            <Input className="field" placeholder="region (e.g. eu)" value={region} onChange={(e) => setRegion(e.target.value)} />
-            <Input className="field" placeholder="compliance (csv: hipaa,soc2)" value={compliance} onChange={(e) => setCompliance(e.target.value)} />
-            <Input className="field" type="number" min="0" placeholder="unit cost" value={cost} onChange={(e) => setCost(e.target.value)} />
-            <Button onClick={addTarget}>Add target</Button>
+          <div className="field-form">
+            <Field label="Name"><Input className="field" placeholder="e.g. opus" value={name} onChange={(e) => setName(e.target.value)} /></Field>
+            <Field label="Kind">
+              <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                <SelectContent>{['model', 'mcp', 'api'].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            <Field label="Endpoint / model id"><Input className="field" placeholder="claude-opus-4-8 / URL" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} /></Field>
+            <Field label="Token (optional)"><Input className="field" placeholder="API key" type="password" value={token} onChange={(e) => setToken(e.target.value)} /></Field>
+            <Field label="Region"><Input className="field" placeholder="e.g. eu (optional)" value={region} onChange={(e) => setRegion(e.target.value)} /></Field>
+            <Field label="Compliance tags"><Input className="field" placeholder="hipaa, soc2 (csv)" value={compliance} onChange={(e) => setCompliance(e.target.value)} /></Field>
+            <Field label="Unit cost"><Input className="field" type="number" min="0" placeholder="0" value={cost} onChange={(e) => setCost(e.target.value)} /></Field>
+            <Button onClick={addTarget} disabled={!name}>Add target</Button>
           </div>
           <RoutingPolicyEditor />
           <Table>
@@ -1565,18 +1746,23 @@ function Targets() {
       <Card>
         <CardHeader><CardTitle>Routes</CardTitle></CardHeader>
         <CardContent>
-          <div className="toolbar">
-            <Select value={rProc} onValueChange={(v) => setRProc(v ?? '')}>
-              <SelectTrigger className="field"><SelectValue placeholder="process…" /></SelectTrigger>
-              <SelectContent>{procs.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-            </Select>
-            <Select value={rTarget} onValueChange={(v) => setRTarget(v ?? '')}>
-              <SelectTrigger className="field"><SelectValue placeholder="target…" /></SelectTrigger>
-              <SelectContent>{targets.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
-            </Select>
-            <Input className="field" placeholder="step (optional)" value={rStep} onChange={(e) => setRStep(e.target.value)} />
-            <Input className="field" placeholder="priority" value={rPrio} onChange={(e) => setRPrio(e.target.value)} />
-            <Button onClick={addRoute}>Add route</Button>
+          <p className="muted">Point a process (optionally a specific step) at a target; higher priority wins, with failover to the next.</p>
+          <div className="field-form">
+            <Field label="Process">
+              <Select value={rProc} onValueChange={(v) => setRProc(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue placeholder="process…" /></SelectTrigger>
+                <SelectContent>{procs.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            <Field label="Target">
+              <Select value={rTarget} onValueChange={(v) => setRTarget(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue placeholder="target…" /></SelectTrigger>
+                <SelectContent>{targets.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            <Field label="Step"><Input className="field" placeholder="blank = any step" value={rStep} onChange={(e) => setRStep(e.target.value)} /></Field>
+            <Field label="Priority"><Input className="field" type="number" placeholder="0" value={rPrio} onChange={(e) => setRPrio(e.target.value)} /></Field>
+            <Button onClick={addRoute} disabled={!rProc || !rTarget}>Add route</Button>
           </div>
           <Table>
             <TableHeader><TableRow><TableHead>Process</TableHead><TableHead>Step</TableHead><TableHead>Target</TableHead><TableHead>Priority</TableHead></TableRow></TableHeader>
@@ -1595,14 +1781,16 @@ function Targets() {
       <Card>
         <CardHeader><CardTitle>Quotas</CardTitle></CardHeader>
         <CardContent>
-          <div className="toolbar">
-            <Select value={qTarget} onValueChange={(v) => setQTarget(v ?? '')}>
-              <SelectTrigger className="field"><SelectValue placeholder="target…" /></SelectTrigger>
-              <SelectContent>{targets.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
-            </Select>
-            <Input className="field" placeholder="limit (units)" value={qLimit} onChange={(e) => setQLimit(e.target.value)} />
-            <Input className="field" placeholder="window secs (0 = lifetime)" value={qWindow} onChange={(e) => setQWindow(e.target.value)} />
-            <Button onClick={addQuota}>Add quota</Button>
+          <div className="field-form">
+            <Field label="Target">
+              <Select value={qTarget} onValueChange={(v) => setQTarget(v ?? '')}>
+                <SelectTrigger className="field"><SelectValue placeholder="target…" /></SelectTrigger>
+                <SelectContent>{targets.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            <Field label="Limit (units)"><Input className="field" type="number" placeholder="e.g. 1000" value={qLimit} onChange={(e) => setQLimit(e.target.value)} /></Field>
+            <Field label="Window (seconds)"><Input className="field" type="number" placeholder="0 = lifetime" value={qWindow} onChange={(e) => setQWindow(e.target.value)} /></Field>
+            <Button onClick={addQuota} disabled={!qTarget || !qLimit}>Add quota</Button>
           </div>
           <Table>
             <TableHeader><TableRow><TableHead>Target</TableHead><TableHead>Used / Limit</TableHead></TableRow></TableHeader>
@@ -1700,17 +1888,21 @@ function Work() {
     <section className="page">
       <h2 className="page-title">Work</h2>
       <p className="muted">Your work by stage. Select an item to act on it.</p>
-      <div className="toolbar">
-        <Input className="field" placeholder="title" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <Select value={repo} onValueChange={(v) => setRepo(v ?? '')}>
-          <SelectTrigger className="field"><SelectValue placeholder="repo…" /></SelectTrigger>
-          <SelectContent>{repos.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={proc} onValueChange={(v) => setProc(v ?? '')}>
-          <SelectTrigger className="field"><SelectValue placeholder="process…" /></SelectTrigger>
-          <SelectContent>{procs.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-        </Select>
-        <Button onClick={add}>Ship work</Button>
+      <div className="field-form">
+        <Field label="Title"><Input className="field" placeholder="what needs doing" value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+        <Field label="Repository">
+          <Select value={repo} onValueChange={(v) => setRepo(v ?? '')}>
+            <SelectTrigger className="field"><SelectValue placeholder="repo…" /></SelectTrigger>
+            <SelectContent>{repos.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
+          </Select>
+        </Field>
+        <Field label="Process">
+          <Select value={proc} onValueChange={(v) => setProc(v ?? '')}>
+            <SelectTrigger className="field"><SelectValue placeholder="process…" /></SelectTrigger>
+            <SelectContent>{procs.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+          </Select>
+        </Field>
+        <Button onClick={add} disabled={!title || !repo || !proc}>Ship work</Button>
       </div>
 
       {rows.length === 0
@@ -1881,8 +2073,8 @@ function Events({ isAdmin }: any) {
     <section className="page">
       <h2 className="page-title">Audit trail</h2>
       {isAdmin && (
-        <div className="toolbar">
-          <Input className="field" placeholder="retention days" value={days} onChange={(e) => setDays(e.target.value)} />
+        <div className="field-form">
+          <Field label="Retention (days)"><Input className="field" type="number" placeholder="90" value={days} onChange={(e) => setDays(e.target.value)} /></Field>
           <Button variant="outline" onClick={purge}>Purge older than {days || '90'}d</Button>
         </div>
       )}

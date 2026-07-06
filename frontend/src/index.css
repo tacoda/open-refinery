@@ -175,6 +175,23 @@
   .drawer-head { @apply flex items-center justify-between border-b pb-3 mb-3; }
   .drawer-title { @apply text-lg font-semibold tracking-tight; }
 
+  /* labeled, statement-structured policy form (governance) */
+  .field-form { @apply flex flex-wrap items-end gap-3; }
+  .field-group { @apply flex flex-col gap-1; }
+  .field-label { @apply text-xs font-semibold uppercase tracking-wide text-muted-foreground; }
+  .policy-preview { @apply mt-4 rounded-md border-l-4 border-primary bg-card p-3 text-sm; }
+  .policy-sentence { @apply text-sm; }
+
+  /* modern on/off toggle switch */
+  .switch { position:relative; width:2.6rem; height:1.5rem; border-radius:999px; border:none;
+    cursor:pointer; padding:0; background:var(--border); transition:background .15s ease; flex:none; }
+  .switch:disabled { opacity:.45; cursor:not-allowed; }
+  .switch[aria-checked="true"] { @apply bg-primary; }
+  .switch-knob { position:absolute; top:2px; left:2px; width:1.1rem; height:1.1rem; border-radius:999px;
+    background:#fff; transition:transform .15s ease; box-shadow:0 1px 2px rgba(0,0,0,.3); }
+  .switch[aria-checked="true"] .switch-knob { transform:translateX(1.1rem); }
+  .switch-row { display:flex; align-items:center; gap:.5rem; }
+
   .metric-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
   .kv-row { @apply flex items-center justify-between py-1 text-sm; }
   .muted { @apply text-sm text-muted-foreground; }

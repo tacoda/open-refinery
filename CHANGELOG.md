@@ -3,6 +3,42 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.0.2] — 2026-07-06
+
+### Added
+- **16 new packs** for broader canon coverage (catalog 15 → 31), including the
+  requested **security** and **compliance**:
+  - developer: secure-coding, api-design, refactoring, performance, accessibility,
+    data-engineering, prompt-engineering
+  - platform: containers, iac, secrets-management, incident-response (ships an
+    Incident process), cost-optimization, release-management
+  - admin: compliance-frameworks (ships a control-mapper agent), risk-management,
+    data-privacy
+- **Pack detail view** — `GET /packs/{key}` returns a pack's standards / example
+  processes / governed artifacts; each marketplace card has a **View details**
+  link that opens a drawer previewing what enabling it seeds.
+
+### Changed
+- **UI consistency pass across every tab.** All input-bearing forms now use a
+  labeled-field layout with plain-language intros, sensible empty states, and
+  guarded submit buttons — Work, Repos, Processes, Policies, Proposals, Packs,
+  Governance, Systems, Integrations, Targets, Teams, Coverage, Experiments,
+  Events, Invitations, Settings.
+- **Governance reads as statements.** Policies, Proposals, and the Governance
+  landscape render rules as plain sentences (via a shared `ruleSentence`), with a
+  live preview while authoring. Proposal terminology clarified ("review tier
+  (role)" vs a policy's artifact layer).
+- **Packs use a modern on/off toggle** instead of enable/disable buttons.
+
+### Fixed
+- **`GET /me` / `GET /users` secret-field leak** — no longer return `pw_hash`,
+  `pw_salt`, or `token_hash` (safe projection via `_public_user`).
+- **`GET /health/areas` 500 (Audits tab)** — the `/health` route handler shadowed
+  the imported `debt.health` scorer; renamed to `healthcheck`.
+- **Proposed policy rules now carry `role` + `namespace`** through the approval
+  applier, so an accepted proposal creates the same rule that was previewed.
+- Two copy-paste empty-state strings corrected (Experiments, Invitations).
+
 ## [2.0.1] — 2026-07-06
 
 ### Security

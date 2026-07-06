@@ -136,6 +136,7 @@ from .packs import (
     enable_pack,
     list_packs,
     list_standards,
+    pack_detail,
 )
 from .policies import (
     PolicyDenied,
@@ -187,7 +188,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "2.0.1"
+__version__ = "2.0.2"
 
 __all__ = [
     "Factory",
@@ -289,6 +290,7 @@ __all__ = [
     "enforcement_mode",
     "scan_content",
     "list_packs",
+    "pack_detail",
     "enable_pack",
     "disable_pack",
     "list_standards",
