@@ -73,8 +73,14 @@
 
 <header class="hero">
   <div class="wrap">
-    <div class="brand">◆ Open Refinery</div>
-    <div style="margin:1.2rem 0 .2rem"><span class="tag">Open source · self-hosted · v2.0</span></div>
+    <div class="brand">
+      <svg width="20" height="20" viewBox="0 0 32 32" fill="none" style="vertical-align:-3px;margin-right:4px">
+        <path d="M9 16 H15 M17 16 H23" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".5"/>
+        <circle cx="7" cy="16" r="3" stroke="currentColor" stroke-width="1.6" opacity=".7"/>
+        <circle cx="16" cy="16" r="3" stroke="currentColor" stroke-width="1.6" opacity=".85"/>
+        <circle cx="25" cy="16" r="3.4" fill="#7c3aed"/><circle cx="25" cy="16" r="1.2" fill="#fff"/>
+      </svg>Open Refinery</div>
+    <div style="margin:1.2rem 0 .2rem"><span class="tag">Open source · self-hosted · v2.1</span></div>
     <h1>An open factory to<br><span class="accent">shine light into the dark.</span></h1>
     <p class="lede">The self-hosted platform layer that governs AI-driven software work —
       so every change is <strong>authorized, owned, provenanced, and audited</strong>.
@@ -165,6 +171,12 @@
         <p>Resolve routes on <strong>region / compliance / cost</strong> inputs — an unmet requirement blocks the call, it isn't silently downgraded. A cross-agent <strong>traffic graph</strong> shows who sends how much to which target.</p></div>
       <div class="card feature"><h3>Live runtime</h3>
         <p>Background jobs, scheduled ingest, and a WebSocket live channel — job status, new audit events, and per-run <strong>live logs</strong> stream to the dashboard, no polling.</p></div>
+      <div class="card feature"><h3>Coding-agent auth</h3>
+        <p>Give Claude Code (and other harnesses) a governed identity — via <strong>OAuth device flow</strong> or a token. Every action the agent takes is authorized and audited under its role, exactly like a person.</p></div>
+      <div class="card feature"><h3>Guided setup</h3>
+        <p>A first-run wizard takes the first admin from sign-up to a running factory: connect your tools, import a repo, adopt standards, and shape the first process <strong>from your own tracker's columns</strong> — then ship a work item.</p></div>
+      <div class="card feature"><h3>Connect your tools</h3>
+        <p>GitHub, GitLab, GitHub Issues, Jira, Linear — code hosts and issue trackers, by <strong>OAuth or token</strong>. Trackers expose their columns for workflow discovery so processes match your board.</p></div>
       <div class="card feature"><h3>Coverage &amp; drift</h3>
         <p>Ingest a repo's charter/harness/code, then surface coverage, drift, and <strong>imitation surfaces</strong> with 0–100 health scores.</p></div>
       <div class="card feature"><h3>Governance analysis</h3>
