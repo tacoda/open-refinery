@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 // Mock the API module so components render against controlled data (no network).
@@ -13,7 +13,7 @@ vi.mock('./api', () => ({
   oauthLoginUrl: () => '',
 }))
 
-import { EmptyRow, Packs } from './App'
+import { Drawer, EmptyRow, Overview, Packs } from './App'
 
 const ROLES = [
   { name: 'developer', rank: 1 },
@@ -64,5 +64,48 @@ describe('Packs marketplace', () => {
     render(<Packs me={{ role: 'developer' }} roles={ROLES} />)
     const btn = await screen.findByRole('button', { name: 'Enable' })
     expect(btn).toBeDisabled()
+  })
+})
+
+describe('Drawer', () => {
+  it('renders nothing when closed', () => {
+    render(<Drawer open={false} title="X" onClose={() => {}}>body</Drawer>)
+    expect(screen.queryByText('body')).not.toBeInTheDocument()
+  })
+  it('shows title + children and closes on the close button', () => {
+    const onClose = vi.fn()
+    render(<Drawer open title="Detail" onClose={onClose}>body</Drawer>)
+    expect(screen.getByText('Detail')).toBeInTheDocument()
+    expect(screen.getByText('body')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalled()
+  })
+})
+
+describe('Overview (visibility-first home)', () => {
+  beforeEach(() => { api.mockReset() })
+
+  const byPath = (map: Record<string, any>) => (p: string) =>
+    Promise.resolve(map[p.split('?')[0]] ?? (map[p] ?? []))
+
+  it('highlights actionable counts and drills in on click', async () => {
+    api.mockImplementation(byPath({
+      '/work-items': [{ id: 'a', current_stage: 'doing' }, { id: 'b', current_stage: 'doing' }],
+      '/approvals': [{ id: 'r1' }],
+      '/events': [{ recipe: 'denied' }, { recipe: 'invoke-failed' }, { recipe: 'rollback' }],
+    }))
+    const goto = vi.fn()
+    render(<Overview goto={goto} />)
+    await waitFor(() => expect(screen.getByText('Approvals awaiting')).toBeInTheDocument())
+    // 1 pending approval, 2 work items, 1 denial, 1 failure, 1 rollback-to-apply
+    expect(screen.getByText('Approvals awaiting').previousSibling).toHaveTextContent('1')
+    fireEvent.click(screen.getByText('Approvals awaiting'))
+    expect(goto).toHaveBeenCalledWith('approvals')
+  })
+
+  it('empty state: zero counts, no work-by-stage rows', async () => {
+    api.mockImplementation(byPath({ '/work-items': [], '/approvals': [], '/events': [] }))
+    render(<Overview goto={() => {}} />)
+    await waitFor(() => expect(screen.getByText(/No work items yet/)).toBeInTheDocument())
   })
 })

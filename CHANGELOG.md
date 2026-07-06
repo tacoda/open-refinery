@@ -3,6 +3,29 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.18.0] — 2026-07-06
+
+### Changed
+- **UI/UX revamp round 2 — visibility-first, workflow-oriented (M5 on the road to
+  2.0).** The core loop moves off the CRUD wall:
+  - **Overview home** (new default landing) — surfaces the few things needing
+    attention as glanceable highlight cards (approvals awaiting, policy denials,
+    failed invokes, rollbacks to apply, work in progress), the actionable ones
+    accented; each card drills straight into its view. Plus a work-by-stage
+    summary.
+  - **Work board** — work items are shown as a board grouped by stage (not a
+    table of action rows). Selecting a card opens a **right-hand detail drawer**
+    with that item's stage, actions (move, approve, attest), history + rollback,
+    live logs, and post-mortem — the secondary operations live in the drawer, not
+    inline everywhere.
+  - **Reusable `Drawer` slide-over** (overlay + Esc-to-close) as the detail/action
+    surface pattern.
+  - Broader Vitest coverage (Drawer open/close, Overview highlights + drill-in +
+    empty state).
+
+UI-only — no API or schema change. Admin/config tables are unchanged and remain
+reachable; the revamp centers the workflow surface.
+
 ## [1.17.0] — 2026-07-06
 
 ### Added

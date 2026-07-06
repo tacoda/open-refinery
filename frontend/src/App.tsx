@@ -13,13 +13,15 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
-type View = 'work' | 'approvals' | 'repos' | 'processes' | 'systems' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics' | 'teams' | 'usage' | 'traffic'
+type View = 'overview' | 'work' | 'approvals' | 'repos' | 'processes' | 'systems' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics' | 'teams' | 'usage' | 'traffic'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
 // Grouped navigation: one group is shown at a time (progressive disclosure).
 type NavTab = { value: View; label: string; gate?: 'admin' | 'invite' | 'platform' }
 const NAV: { group: string; tabs: NavTab[] }[] = [
+  { group: 'Home', tabs: [
+    { value: 'overview', label: 'Overview' } ] },
   { group: 'Work', tabs: [
     { value: 'work', label: 'Work' }, { value: 'approvals', label: 'Approvals' },
     { value: 'repos', label: 'Repos' }, { value: 'processes', label: 'Processes' } ] },
@@ -47,11 +49,34 @@ export function EmptyRow({ show, cols, children }: { show: boolean; cols: number
   return <TableRow><TableCell colSpan={cols} className="muted">{children}</TableCell></TableRow>
 }
 
+// Right-hand slide-over: select an item → its detail + actions appear here.
+export function Drawer({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: any }) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
+  if (!open) return null
+  return (
+    <>
+      <div className="drawer-overlay" onClick={onClose} />
+      <aside className="drawer" role="dialog" aria-label={title}>
+        <div className="drawer-head">
+          <span className="drawer-title">{title}</span>
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close">✕</Button>
+        </div>
+        {children}
+      </aside>
+    </>
+  )
+}
+
 export default function App() {
   const [token, setTok] = useState(getToken())
   const [me, setMe] = useState<any>(null)
   const [roles, setRoles] = useState<Role[]>([])  // admin-configurable authority ladder
-  const [view, setView] = useState<View>('work')
+  const [view, setView] = useState<View>('overview')
 
   // capture an OAuth result handed back in the URL fragment
   useEffect(() => {
@@ -115,7 +140,7 @@ export default function App() {
   // ponytail: Settings (org config) gated by name; backend enforces platform/admin.
   const isPlatform = !!me && ['platform', 'admin'].includes(me.role)
   const isAdmin = !!me && me.role === 'admin'
-  const [group, setGroup] = useState('Work')
+  const [group, setGroup] = useState('Home')
 
   const allow = (t: NavTab) =>
     t.gate === 'admin' ? isAdmin : t.gate === 'invite' ? canInvite
@@ -123,6 +148,12 @@ export default function App() {
   const tabsFor = (g: string) => (NAV.find((n) => n.group === g)?.tabs ?? []).filter(allow)
   const groups = NAV.filter((n) => tabsFor(n.group).length > 0)
   const openGroup = (g: string) => { setGroup(g); const t = tabsFor(g)[0]; if (t) setView(t.value) }
+  // jump straight to a view from anywhere (Overview drill-in), opening its group
+  const goto = (v: View) => {
+    const g = NAV.find((n) => n.tabs.some((t) => t.value === v))
+    if (g) setGroup(g.group)
+    setView(v)
+  }
 
   return (
     <>
@@ -155,6 +186,7 @@ export default function App() {
                   <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
                 ))}
               </TabsList>
+              <TabsContent value="overview"><Overview goto={goto} /></TabsContent>
               <TabsContent value="work"><Work /></TabsContent>
               <TabsContent value="approvals"><Approvals /></TabsContent>
               <TabsContent value="repos"><Repos /></TabsContent>
@@ -1587,6 +1619,59 @@ function Targets() {
   )
 }
 
+// Visibility-first home: highlight the few actionable things, drill in for detail.
+export function Overview({ goto }: { goto: (v: any) => void }) {
+  const [items, setItems] = useState<any[]>([])
+  const [pending, setPending] = useState(0)
+  const [events, setEvents] = useState<any[]>([])
+  useEffect(() => {
+    api('/work-items').then(setItems).catch(() => {})
+    api('/approvals?status=pending').then((r) => setPending(r.length)).catch(() => {})
+    api('/events').then(setEvents).catch(() => {})  // 403 for some roles → stays empty
+  }, [])
+  const count = (recipe: string) => events.filter((e) => e.recipe === recipe).length
+  const denials = count('denied')
+  const failures = count('invoke-failed')
+  const pendingApply = Math.max(0, count('rollback') - count('rollback-applied'))
+  const byStage = items.reduce((m: Record<string, number>, w) => {
+    m[w.current_stage] = (m[w.current_stage] ?? 0) + 1; return m
+  }, {})
+
+  const cards = [
+    { label: 'Approvals awaiting', n: pending, go: 'approvals', attn: pending > 0 },
+    { label: 'Work in progress', n: items.length, go: 'work', attn: false },
+    { label: 'Policy denials', n: denials, go: 'events', attn: denials > 0 },
+    { label: 'Failed invokes', n: failures, go: 'events', attn: failures > 0 },
+    { label: 'Rollbacks to apply', n: pendingApply, go: 'work', attn: pendingApply > 0 },
+  ]
+  return (
+    <section className="page">
+      <h2 className="page-title">Overview</h2>
+      <p className="muted">What needs attention now. Select a card to drill in.</p>
+      <div className="highlight-grid">
+        {cards.map((c) => (
+          <button key={c.label} className={`highlight-card${c.attn ? ' highlight-attn' : ''}`} onClick={() => goto(c.go)}>
+            <div className={c.attn ? 'highlight-num-attn' : 'highlight-num'}>{c.n}</div>
+            <div className="muted">{c.label}</div>
+          </button>
+        ))}
+      </div>
+      <Card>
+        <CardHeader><CardTitle>Work by stage</CardTitle></CardHeader>
+        <CardContent>
+          {items.length ? (
+            <div className="toolbar">
+              {Object.entries(byStage).map(([s, n]) => (
+                <Badge key={s} variant="secondary">{s}: {n}</Badge>
+              ))}
+            </div>
+          ) : <span className="muted">No work items yet — start one under Work.</span>}
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
 function Work() {
   const { rows, load } = useList('/work-items')
   const [repos, setRepos] = useState<any[]>([])
@@ -1606,9 +1691,15 @@ function Work() {
   const requestApproval = (id: string, to: string) =>
     post(`/work-items/${id}/request-approval`, { to })
       .then(() => toast.success('approval requested')).catch(fail)
+  const [selId, setSelId] = useState<string | null>(null)
+  const selected = rows.find((r) => r.id === selId) ?? null  // re-derive so it tracks reloads
+  const stages: string[] = []
+  for (const w of rows) if (!stages.includes(w.current_stage)) stages.push(w.current_stage)
+
   return (
     <section className="page">
-      <h2 className="page-title">Work items</h2>
+      <h2 className="page-title">Work</h2>
+      <p className="muted">Your work by stage. Select an item to act on it.</p>
       <div className="toolbar">
         <Input className="field" placeholder="title" value={title} onChange={(e) => setTitle(e.target.value)} />
         <Select value={repo} onValueChange={(v) => setRepo(v ?? '')}>
@@ -1621,15 +1712,33 @@ function Work() {
         </Select>
         <Button onClick={add}>Ship work</Button>
       </div>
-      <div className="work-list">
-        {rows.map((w) => <WorkRow key={w.id} w={w} onMove={move} onAttest={attest}
-                                  onRequest={requestApproval} onReload={load} />)}
-      </div>
+
+      {rows.length === 0
+        ? <Card><CardContent><p className="muted">No work items yet — name one above and ship it to start the governed loop.</p></CardContent></Card>
+        : (
+          <div className="board">
+            {stages.map((s) => (
+              <div key={s} className="board-col">
+                <div className="board-col-head"><span>{s}</span><Badge variant="secondary">{rows.filter((w) => w.current_stage === s).length}</Badge></div>
+                {rows.filter((w) => w.current_stage === s).map((w) => (
+                  <button key={w.id} className={`board-card${selId === w.id ? ' board-card-selected' : ''}`} onClick={() => setSelId(w.id)}>
+                    <div className="work-title">{w.title}</div>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+
+      <Drawer open={!!selected} title={selected?.title ?? ''} onClose={() => setSelId(null)}>
+        {selected && <WorkRow bare w={selected} onMove={move} onAttest={attest}
+                              onRequest={requestApproval} onReload={load} />}
+      </Drawer>
     </section>
   )
 }
 
-function WorkRow({ w, onMove, onAttest, onRequest, onReload }: any) {
+function WorkRow({ w, onMove, onAttest, onRequest, onReload, bare }: any) {
   const [to, setTo] = useState(''), [check, setCheck] = useState('')
   const [pm, setPm] = useState<any>(null)
   const [hist, setHist] = useState<any>(null), [rbTo, setRbTo] = useState(''), [plan, setPlan] = useState<any>(null)
@@ -1658,7 +1767,7 @@ function WorkRow({ w, onMove, onAttest, onRequest, onReload }: any) {
     <Card>
       <CardContent>
         <div className="work-head">
-          <span className="work-title">{w.title}</span>
+          {!bare && <span className="work-title">{w.title}</span>}
           <Badge>{w.current_stage}</Badge>
         </div>
         <div className="work-actions">

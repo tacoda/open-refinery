@@ -155,6 +155,26 @@
   .work-title { @apply font-medium; }
   .work-actions { @apply flex flex-wrap items-center gap-2 pt-1; }
 
+  /* visibility-first board + right-hand detail drawer (UI round 2) */
+  .board { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); align-items: start; }
+  .board-col { @apply rounded-lg border bg-card p-3 space-y-2; }
+  .board-col-head { @apply flex items-center justify-between text-sm font-medium; }
+  .board-card { @apply w-full text-left rounded-md border p-2 transition-colors; }
+  .board-card:hover { @apply bg-accent; }
+  .board-card-selected { @apply border-primary ring-1 ring-primary; }
+
+  .highlight-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .highlight-card { @apply rounded-lg border bg-card p-4 text-left transition-colors; }
+  .highlight-card:hover { @apply bg-accent; }
+  .highlight-num { @apply text-3xl font-semibold tracking-tight; }
+  .highlight-attn { @apply border-primary; }
+  .highlight-num-attn { @apply text-3xl font-semibold tracking-tight text-primary; }
+
+  .drawer-overlay { @apply fixed inset-0 z-40 bg-black/30; }
+  .drawer { @apply fixed right-0 top-0 z-50 h-full w-full max-w-md overflow-y-auto border-l bg-background p-5 shadow-xl; }
+  .drawer-head { @apply flex items-center justify-between border-b pb-3 mb-3; }
+  .drawer-title { @apply text-lg font-semibold tracking-tight; }
+
   .metric-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
   .kv-row { @apply flex items-center justify-between py-1 text-sm; }
   .muted { @apply text-sm text-muted-foreground; }
