@@ -133,26 +133,8 @@ export interface paths {
         /** Get Roles */
         get: operations["get_roles_roles_get"];
         put?: never;
-        /** Add Role */
-        post: operations["add_role_roles_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/roles/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
         post?: never;
-        /** Remove Role */
-        delete: operations["remove_role_roles__name__delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2099,13 +2081,6 @@ export interface components {
             /** Git Url */
             git_url: string;
         };
-        /** NewRole */
-        NewRole: {
-            /** Name */
-            name: string;
-            /** Rank */
-            rank: number;
-        };
         /** NewRoute */
         NewRoute: {
             /** Process Id */
@@ -2545,74 +2520,6 @@ export interface operations {
                 authorization?: string | null;
             };
             path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    add_role_roles_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NewRole"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    remove_role_roles__name__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                name: string;
-            };
             cookie?: never;
         };
         requestBody?: never;

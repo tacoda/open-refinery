@@ -144,10 +144,8 @@ from .users import (
     User,
     authenticate,
     count_users,
-    create_role,
     create_session,
     create_user,
-    delete_role,
     list_roles,
     list_users,
     role_rank,
@@ -256,11 +254,6 @@ class Move(BaseModel):
 
 class RequestApproval(BaseModel):
     to: str
-
-
-class NewRole(BaseModel):
-    name: str
-    rank: int
 
 
 class NewInvitation(BaseModel):
@@ -595,18 +588,10 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     # --- roles (admin-configurable authority ladder) ---
     @app.get("/roles")
     def get_roles(session: Session = Depends(get_session), _: User = Depends(current_user)):
-        return list_roles(session)  # any authed user: forms need the role list
+        return list_roles(session)  # fixed ladder: developer < platform < admin
 
-    @app.post("/roles", status_code=201)
-    def add_role(body: NewRole, session: Session = Depends(get_session),
-                 _: User = Depends(require("admin"))):
-        return create_role(session, body.name, body.rank)
-
-    @app.delete("/roles/{name}")
-    def remove_role(name: str, session: Session = Depends(get_session),
-                    _: User = Depends(require("admin"))):
-        delete_role(session, name)
-        return {"status": "deleted"}
+    # Roles are a fixed three-tier ladder (developer / platform / admin) — arbitrary
+    # roles proved confusing, so creating/deleting them is intentionally not exposed.
 
     # --- governance landscape (admin read view) ---
     @app.get("/governance")

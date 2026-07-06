@@ -3,6 +3,27 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.1.1] — 2026-07-06
+
+### Changed
+- **App flow ordered by entity dependency.** The nav (and the content order it
+  mirrors) now runs services → repos → processes → harnesses → work → approvals —
+  the order you actually build things in. The onboarding wizard follows the same
+  flow.
+- **Services available to everyone who needs them.** Integrations moved out of the
+  platform-only group into the main flow as **"Services"** (ungated, owner-scoped)
+  so platform *and* developers can connect the code hosts / trackers they use.
+  The page is titled "Services" to match its nav label.
+- **Admin onboarding invites the team.** The setup wizard gains an admin-only
+  **Invite** step (platform/developer teammates who inherit the configured org).
+- **Menu and content share one standard** — `TabsContent` render order matches the
+  sidebar exactly, grouped and entity-ordered.
+
+### Removed
+- **Arbitrary configurable roles.** Roles are a fixed three-tier ladder
+  (developer / platform / admin); the create/delete-role API is no longer exposed
+  (arbitrary roles proved confusing). `GET /roles` remains for form dropdowns.
+
 ## [2.1.0] — 2026-07-06
 
 A large UX + onboarding + agent-auth release.

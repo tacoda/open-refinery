@@ -45,10 +45,12 @@ type NavTab = { value: View; label: string; gate?: 'admin' | 'invite' | 'platfor
 const NAV: { group: string; tabs: NavTab[] }[] = [
   { group: 'Home', tabs: [
     { value: 'overview', label: 'Overview' } ] },
+  // ordered by entity dependency: services → repos → processes → agents → work → approvals
   { group: 'Work', tabs: [
-    { value: 'work', label: 'Work' }, { value: 'approvals', label: 'Approvals' },
+    { value: 'integrations', label: 'Services' },
     { value: 'repos', label: 'Repos' }, { value: 'processes', label: 'Processes' },
-    { value: 'harnesses', label: 'Harnesses' } ] },
+    { value: 'harnesses', label: 'Harnesses' },
+    { value: 'work', label: 'Work' }, { value: 'approvals', label: 'Approvals' } ] },
   { group: 'Governance', tabs: [
     { value: 'myrules', label: 'My rules', gate: 'dev' },   // read-only, developers
     { value: 'policies', label: 'Policies', gate: 'platform' },
@@ -57,7 +59,6 @@ const NAV: { group: string; tabs: NavTab[] }[] = [
     { value: 'governance', label: 'Governance', gate: 'admin' } ] },
   { group: 'Platform', tabs: [
     { value: 'systems', label: 'Systems', gate: 'platform' },
-    { value: 'integrations', label: 'Integrations', gate: 'platform' },
     { value: 'targets', label: 'Targets', gate: 'platform' },
     { value: 'teams', label: 'Teams', gate: 'platform' } ] },
   { group: 'Insights', tabs: [
@@ -235,7 +236,7 @@ export default function App() {
       {!token || !me
         ? <Entry onToken={(t) => { setToken(t); setTok(t) }} />
         : onboarded === false
-        ? <Wizard onDone={() => setOnboarded(true)} />
+        ? <Wizard onDone={() => setOnboarded(true)} me={me} roles={roles} />
         : (
           <div className={`app-shell${collapsed ? ' collapsed' : ''}`}>
             <aside className="sidebar">
@@ -285,30 +286,37 @@ export default function App() {
                     <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
                   ))}
                 </TabsList>
+              {/* content order mirrors the nav (entity-dependency) standard */}
+              {/* Home */}
               <TabsContent value="overview"><Overview goto={goto} /></TabsContent>
-              <TabsContent value="work"><Work /></TabsContent>
-              <TabsContent value="approvals"><Approvals /></TabsContent>
+              {/* Work: services → repos → processes → agents → work → approvals */}
+              <TabsContent value="integrations"><Integrations /></TabsContent>
               <TabsContent value="repos"><Repos /></TabsContent>
               <TabsContent value="processes"><Processes /></TabsContent>
               <TabsContent value="harnesses"><Harnesses me={me} roles={roles} /></TabsContent>
-              <TabsContent value="systems"><Systems /></TabsContent>
-              <TabsContent value="teams"><Teams /></TabsContent>
-              <TabsContent value="usage"><Usage /></TabsContent>
-              <TabsContent value="traffic"><Traffic /></TabsContent>
-              <TabsContent value="integrations"><Integrations /></TabsContent>
-              <TabsContent value="targets"><Targets /></TabsContent>
+              <TabsContent value="work"><Work /></TabsContent>
+              <TabsContent value="approvals"><Approvals /></TabsContent>
+              {/* Governance */}
               {me.role === 'developer' && <TabsContent value="myrules"><MyRules me={me} /></TabsContent>}
               <TabsContent value="policies"><Policies /></TabsContent>
-              <TabsContent value="packs"><Packs me={me} roles={roles} /></TabsContent>
               <TabsContent value="proposals"><Proposals me={me} roles={roles} isAdmin={isAdmin} /></TabsContent>
+              <TabsContent value="packs"><Packs me={me} roles={roles} /></TabsContent>
+              {isAdmin && <TabsContent value="governance"><Governance /></TabsContent>}
+              {/* Platform */}
+              <TabsContent value="systems"><Systems /></TabsContent>
+              <TabsContent value="targets"><Targets /></TabsContent>
+              <TabsContent value="teams"><Teams /></TabsContent>
+              {/* Insights */}
+              <TabsContent value="metrics"><Metrics /></TabsContent>
               <TabsContent value="coverage"><Coverage /></TabsContent>
+              <TabsContent value="usage"><Usage /></TabsContent>
+              <TabsContent value="traffic"><Traffic /></TabsContent>
               <TabsContent value="audits"><Audits /></TabsContent>
               <TabsContent value="experiments"><Experiments /></TabsContent>
+              <TabsContent value="events"><Events isAdmin={isAdmin} /></TabsContent>
+              {/* Admin */}
               {canInvite && <TabsContent value="invitations"><Invitations me={me} roles={roles} /></TabsContent>}
               {isPlatform && <TabsContent value="settings"><Settings /></TabsContent>}
-              {isAdmin && <TabsContent value="governance"><Governance /></TabsContent>}
-              <TabsContent value="events"><Events isAdmin={isAdmin} /></TabsContent>
-              <TabsContent value="metrics"><Metrics /></TabsContent>
               </Tabs>
             </main>
           </div>
@@ -448,8 +456,14 @@ function useList(path: string) {
 // First-run setup wizard — the first admin goes from signed-up to a running
 // factory: connect a service, import a repo, enable a pack, shape the first
 // process from the tracker's own columns, ship the first work item.
-const WIZ_STEPS = ['Welcome', 'Connect', 'Repository', 'Standards', 'Process', 'First work']
-export function Wizard({ onDone }: { onDone: () => void }) {
+// Onboarding follows the entity dependency direction: services → repos →
+// processes → first work. Admins also invite the team who'll run the factory.
+const WIZ_BASE = ['Welcome', 'Connect', 'Repository', 'Standards', 'Process', 'First work']
+export function Wizard({ onDone, me, roles }: { onDone: () => void; me: any; roles: Role[] }) {
+  const isAdmin = me?.role === 'admin'
+  const steps = isAdmin
+    ? [...WIZ_BASE.slice(0, 5), 'Invite', 'First work']  // invite before shipping
+    : WIZ_BASE
   const [step, setStep] = useState(0)
   const [catalog, setCatalog] = useState<any[]>([])
   const [integs, setIntegs] = useState<any[]>([])
@@ -492,15 +506,23 @@ export function Wizard({ onDone }: { onDone: () => void }) {
     stages: pstages.split(',').map((s) => s.trim()).filter(Boolean),
   }).then(() => { reloadProcs(); toast.success('Process created') }).catch(fail)
 
-  // step 5 — first work item
+  // invite step (admin) — bring in the team who'll run the factory
+  const inviteOptions = roles.filter((r) => r.name !== 'admin').map((r) => r.name)
+  const [iemail, setIemail] = useState(''), [irole, setIrole] = useState('developer')
+  const [invited, setInvited] = useState<string[]>([])
+  const invite = () => post('/invitations', { email: iemail, role: irole, ttl_days: 7 })
+    .then(() => { setInvited((v) => [...v, `${iemail} (${irole})`]); setIemail(''); toast.success('Invitation sent') }).catch(fail)
+
+  // first work item
   const [wtitle, setWtitle] = useState(''), [wrepo, setWrepo] = useState(''), [wproc, setWproc] = useState('')
   const ship = () => post('/work-items', { repo_id: wrepo, process_id: wproc, title: wtitle })
     .then(() => toast.success('Work shipped')).catch(fail)
 
   const finish = () => api('/onboarding/complete', { method: 'POST' }).then(onDone).catch(fail)
-  const next = () => setStep((s) => Math.min(s + 1, WIZ_STEPS.length - 1))
+  const next = () => setStep((s) => Math.min(s + 1, steps.length - 1))
   const back = () => setStep((s) => Math.max(s - 1, 0))
-  const last = step === WIZ_STEPS.length - 1
+  const cur = steps[step]
+  const last = step === steps.length - 1
 
   return (
     <div className="wizard-screen">
@@ -509,31 +531,31 @@ export function Wizard({ onDone }: { onDone: () => void }) {
           <div className="login-mark" style={{ width: 44, height: 44 }}><LogoMark size={26} /></div>
           <div>
             <h1 className="login-title">Set up your factory</h1>
-            <p className="login-tagline">Step {step + 1} of {WIZ_STEPS.length} · {WIZ_STEPS[step]}</p>
+            <p className="login-tagline">Step {step + 1} of {steps.length} · {cur}</p>
           </div>
           <span className="app-spacer" />
           <div className="wizard-steps">
-            {WIZ_STEPS.map((_, i) => <span key={i} className={`wizard-dot${i === step ? ' active' : i < step ? ' done' : ''}`} />)}
+            {steps.map((_, i) => <span key={i} className={`wizard-dot${i === step ? ' active' : i < step ? ' done' : ''}`} />)}
           </div>
         </div>
 
         <div className="wizard-body">
-          {step === 0 && (
+          {cur === 'Welcome' && (
             <div className="space-y-2">
               <p>Welcome. In a few steps you'll connect your tools, import a repository, adopt a set of standards, and shape the first process from your own board — then ship a work item through it.</p>
               <p className="muted">You're the first user, so what you set up here becomes the org default. Later teammates inherit it.</p>
             </div>
           )}
 
-          {step === 1 && (
+          {cur === 'Connect' && (
             <div className="space-y-3">
-              <p className="muted">Connect a code host and/or an issue tracker — OAuth is the one-click path; a token works too. (Or skip and add later.)</p>
+              <p className="muted">Connect the services you need — a code host and/or an issue tracker. OAuth is the one-click path; a token works too. (Or skip and add later.)</p>
               <ConnectService onConnected={reloadInteg} />
               <div className="toolbar">{integs.map((i) => <Badge key={i.id} variant="secondary">{i.kind} · {i.account}</Badge>)}</div>
             </div>
           )}
 
-          {step === 2 && (
+          {cur === 'Repository' && (
             <div className="space-y-3">
               <p className="muted">Import a repository from a connected code host, or add one by URL.</p>
               {sources.length > 0 && (
@@ -560,7 +582,7 @@ export function Wizard({ onDone }: { onDone: () => void }) {
             </div>
           )}
 
-          {step === 3 && (
+          {cur === 'Standards' && (
             <div className="space-y-3">
               <p className="muted">Adopt a starter set of standards & processes. Enable what fits (you can add more later).</p>
               <div className="board">{packs.slice(0, 9).map((p: any) => (
@@ -572,7 +594,7 @@ export function Wizard({ onDone }: { onDone: () => void }) {
             </div>
           )}
 
-          {step === 4 && (
+          {cur === 'Process' && (
             <div className="space-y-3">
               <p className="muted">Shape your first process. Pull the stages from a connected tracker's board, or type your own.</p>
               {trackers.length > 0 && (
@@ -602,7 +624,24 @@ export function Wizard({ onDone }: { onDone: () => void }) {
             </div>
           )}
 
-          {step === 5 && (
+          {cur === 'Invite' && (
+            <div className="space-y-3">
+              <p className="muted">Bring in the team who'll run the factory. Invite users at platform or developer level — they inherit everything you set up here.</p>
+              <div className="field-form">
+                <Field label="Email"><Input className="field" placeholder="teammate@acme.com" value={iemail} onChange={(e) => setIemail(e.target.value)} /></Field>
+                <Field label="Role">
+                  <Select value={irole} onValueChange={(v) => setIrole(v ?? '')}>
+                    <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                    <SelectContent>{inviteOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                  </Select>
+                </Field>
+                <Button onClick={invite} disabled={!iemail}>Send invite</Button>
+              </div>
+              <div className="toolbar">{invited.map((v, i) => <Badge key={i} variant="secondary">{v}</Badge>)}</div>
+            </div>
+          )}
+
+          {cur === 'First work' && (
             <div className="space-y-3">
               <p className="muted">Ship your first work item through the process you just built.</p>
               <div className="field-form">
@@ -937,8 +976,8 @@ function Integrations() {
   const { rows, load } = useList('/integrations')
   return (
     <section className="page">
-      <h2 className="page-title">Integrations</h2>
-      <p className="muted">Connect a code host or issue tracker. OAuth is the preferred one-click path; a token works too. Credentials are encrypted at rest.</p>
+      <h2 className="page-title">Services</h2>
+      <p className="muted">Connect the services you use — a code host or issue tracker. OAuth is the preferred one-click path; a token works too. Credentials are encrypted at rest.</p>
       <Card>
         <CardHeader><CardTitle>Connect a service</CardTitle></CardHeader>
         <CardContent><ConnectService onConnected={load} /></CardContent>
