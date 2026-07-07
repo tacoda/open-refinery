@@ -8,6 +8,11 @@ keeps other backends within reach.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
+import os
+import threading
 from pathlib import Path
 
 from sqlalchemy.engine import Engine
@@ -16,8 +21,22 @@ from sqlmodel import Session, SQLModel, create_engine, select
 
 from . import models  # noqa: F401 — import registers tables in SQLModel.metadata
 from .audit import AuditSink, MemorySink  # noqa: F401 — re-exported for convenience
-from .models import Event
+from .models import AuditChainState, Event
 from .provenance import Record
+
+# The hashed fields — the immutable record. prev_hash/entry_hash are excluded.
+_CHAIN_FIELDS = ("artifact_id", "recipe", "actor", "owner", "input_digest",
+                 "output_digest", "subject", "created_at")
+_chain_lock = threading.Lock()  # single-process: serialize chain appends
+
+
+def _canonical(e: Event | dict) -> str:
+    d = e if isinstance(e, dict) else e.__dict__
+    return json.dumps({k: d.get(k) for k in _CHAIN_FIELDS}, sort_keys=True, default=str)
+
+
+def _entry_hash(prev_hash: str, e: Event | dict) -> str:
+    return hashlib.sha256((prev_hash + _canonical(e)).encode()).hexdigest()
 
 DEFAULT_DATABASE_URL = "sqlite:///open-refinery.db"
 
@@ -67,6 +86,24 @@ def _init_schema(engine: Engine) -> None:
     from .users import ensure_default_roles
     with Session(engine) as s:
         ensure_default_roles(s)
+        _backfill_chain(s)  # chain any pre-2.3 events so upgraded installs verify
+
+
+def _backfill_chain(session: Session) -> None:
+    """One-time: hash-chain events that predate the tamper-evident chain, in
+    created_at order, establishing the baseline head. No-op once chained."""
+    unchained = list(session.exec(select(Event).where(Event.entry_hash == "")
+                                  .order_by(Event.created_at)))
+    if not unchained:
+        return
+    state = session.get(AuditChainState, "head") or AuditChainState(id="head", head="")
+    for e in unchained:
+        e.prev_hash = state.head
+        e.entry_hash = _entry_hash(state.head, e)
+        state.head = e.entry_hash
+        session.add(e)
+    session.add(state)
+    session.commit()
 
 
 def connect(database_url: str = DEFAULT_DATABASE_URL, *, check_same_thread: bool = True) -> Session:
@@ -83,8 +120,15 @@ class SqlSink:
         self._session = session
 
     def write(self, record: Record) -> None:
-        self._session.add(Event(**record.to_dict()))
-        self._session.commit()
+        event = Event(**record.to_dict())
+        with _chain_lock:  # link into the tamper-evident chain
+            state = self._session.get(AuditChainState, "head") or AuditChainState(id="head", head="")
+            event.prev_hash = state.head
+            event.entry_hash = _entry_hash(state.head, event)
+            state.head = event.entry_hash
+            self._session.add(event)
+            self._session.add(state)
+            self._session.commit()
         from .webhooks import deliver
         deliver(self._session, record)  # fan out to registered endpoints (best-effort)
         from .live import HUB
@@ -134,3 +178,79 @@ def query_events(
         stmt = stmt.where(Event.created_at <= until)
     stmt = stmt.order_by(Event.created_at.desc()).limit(limit)
     return list(session.exec(stmt))
+
+
+# --- tamper-evident chain: verify + signed export ------------------------
+
+def _ordered_chain(session: Session) -> list[Event]:
+    """Reconstruct the audit events in chain order by following prev→entry links.
+    Robust to purge (an earlier segment removed) — starts at the earliest event
+    whose prev_hash is no longer present."""
+    events = list(session.exec(select(Event)))
+    by_prev = {e.prev_hash: e for e in events}
+    entries = {e.entry_hash for e in events}
+    starts = [e for e in events if e.prev_hash not in entries]  # genesis or post-purge head
+    if len(starts) != 1:
+        return events  # forked/ambiguous — verify() will report the break
+    ordered, cur = [], starts[0]
+    seen = set()
+    while cur is not None and cur.entry_hash not in seen:
+        ordered.append(cur)
+        seen.add(cur.entry_hash)
+        cur = by_prev.get(cur.entry_hash)
+    return ordered
+
+
+def verify_chain(session: Session) -> dict:
+    """Recompute every event's hash and walk the links. Any edit, insertion, or
+    mid-chain deletion breaks it. Returns {ok, count, head, broken_at?}."""
+    events = list(session.exec(select(Event)))
+    if not events:
+        return {"ok": True, "count": 0, "head": ""}
+    ordered = _ordered_chain(session)
+    if len(ordered) != len(events):
+        return {"ok": False, "count": len(events), "broken_at": "chain link (fork or gap)"}
+    prev = ordered[0].prev_hash
+    for e in ordered:
+        if e.prev_hash != prev or _entry_hash(e.prev_hash, e) != e.entry_hash:
+            return {"ok": False, "count": len(events), "broken_at": e.artifact_id}
+        prev = e.entry_hash
+    head = (session.get(AuditChainState, "head") or AuditChainState()).head
+    if head and head != prev:
+        return {"ok": False, "count": len(events), "broken_at": "head mismatch (tail removed)"}
+    return {"ok": True, "count": len(events), "head": prev}
+
+
+_CSV_COLS = ("created_at", "recipe", "actor", "owner", "subject",
+             "input_digest", "output_digest", "prev_hash", "entry_hash")
+
+
+def events_csv(session: Session, **filters) -> str:
+    """The (optionally filtered) audit trail as CSV — for spreadsheets/auditors.
+    Includes the chain hashes so an exported sheet is still tamper-evident."""
+    import csv
+    import io
+    rows = query_events(session, **filters)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(_CSV_COLS)
+    for e in rows:
+        w.writerow([getattr(e, c) if getattr(e, c) is not None else "" for c in _CSV_COLS])
+    return buf.getvalue()
+
+
+def _sign(payload: str) -> str:
+    key = (os.environ.get("SECRET_KEY") or "").encode()
+    return hmac.new(key, payload.encode(), hashlib.sha256).hexdigest()
+
+
+def export_chain(session: Session) -> dict:
+    """A portable, signed audit export an external auditor can verify independently:
+    recompute the hash chain, then check the HMAC over the head with SECRET_KEY."""
+    ordered = _ordered_chain(session)
+    rows = [{**{k: getattr(e, k) for k in _CHAIN_FIELDS},
+             "prev_hash": e.prev_hash, "entry_hash": e.entry_hash} for e in ordered]
+    head = ordered[-1].entry_hash if ordered else ""
+    return {"events": rows, "count": len(rows), "chain_head": head,
+            "algorithm": "sha256 chain + hmac-sha256(SECRET_KEY) over head",
+            "signature": _sign(head)}

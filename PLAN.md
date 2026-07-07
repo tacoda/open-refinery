@@ -415,6 +415,80 @@ for Claude Code et al. — role-scoped service accounts, token + OAuth device fl
 governed by the proactive controls); concept visuals (process pipeline, layer
 lattice, icon/trend cards, humanized metrics). Migration v15.
 
+**2.2.0 (role authorization model).** Developer/platform/admin scoped to their
+concerns, enforced backend (403 via a central `_AUTHZ_RULES` matrix + middleware)
+and UI; admin re-scoped to oversight-only; invites at your level or lower.
+
+## Governance-maturity track (2.3.0 → 2.7.0) — regulated / large-org oversight
+
+Ten features that make "prove your governance" a button, sequenced by dependency
+and buyer pull. Guiding constraints: **keep the dashboard simple** (each feature
+adds a focused surface, reuses the drawer/overview patterns); **schema frozen at
+1.0** (additive tables/columns + a migration per DB change); every new capability
+is itself audited and role-scoped.
+
+### Phase 1 — Provable governance (the audit/evidence trio) → 2.3.0
+*Why:* regulated buyers ask "prove the control existed and the log wasn't
+altered." This phase answers it. Highest pull; foundational for later phases.
+- **1.1 Tamper-evident audit ✅** — events hash-chained (`entry_hash =
+  sha256(prev+fields)`), `GET /audit/verify` (detects edits/insertions/mid-
+  deletions), signed export (`/audit/export`, HMAC over head) + **filtered CSV
+  export** (`/audit/export.csv`). Upgrade backfill chains pre-2.3 events. UI:
+  Verify-trail seal + Export CSV/signed. Migration v16. Shipped 2.3.0. Also folded
+  in more concept visuals (approval chains + work-item history as pipelines).
+- **1.2 Versioned policy history** — every policy change versioned (who/when/why,
+  diff, effective-dating, per-version approval record); point-in-time "what
+  policy was in effect at T". New `policy_versions` table.
+- **1.3 Compliance evidence packs + auditor role** — one-click framework-mapped
+  bundle (SOC2 / ISO 27001 / HIPAA / GDPR) from audit + policies + attestations;
+  a time-boxed **read-only auditor** login. Depends on 1.1 + 1.2.
+
+### Phase 2 — Proactive oversight → 2.4.0
+*Why:* "lights-on" = catch and route problems before the post-mortem.
+- **2.1 Governance notifications** — alert rules ("notify security on any strict
+  denial", "on policy change") out to Slack / email / webhook. Channel infra the
+  rest of the phase uses. (Adds the deferred Slack connector as a notify sink.)
+- **2.2 Approval SLAs + escalation + segregation-of-duties** — gated moves that
+  age out auto-escalate + raise a breach alert; enforce author ≠ approver /
+  distinct signers, with an SoD report.
+- **2.3 Anomaly / behavioral alerting** — flag denial spikes, off-hours agent
+  activity, harness-over-norm, privilege drift, mass changes. Overview "Attention"
+  feed. Uses 2.1 to notify.
+
+### Phase 3 — Enterprise identity & access → 2.5.0
+*Why:* non-negotiable for large orgs; closes the deferred MFA item.
+- **3.1 SSO (SAML / OIDC) + MFA** — log in via the org IdP; enforce MFA. Keeps the
+  fixed three-role model, fed from the IdP.
+- **3.2 SCIM provisioning + group→role mapping** — auto provision/deprovision;
+  map IdP groups to developer/platform/admin.
+- **3.3 Access recertification campaigns** — scheduled "re-attest access/roles"
+  campaigns tracked to completion, overdue flagged. Depends on 3.1/3.2.
+
+### Phase 4 — Data governance & resilience → 2.6.0
+*Why:* regulated data can't cross the wrong boundary; emergencies must stay
+accountable.
+- **4.1 Data classification + residency** — tag repos/work/targets with a data
+  class (PII/PHI/secret) + residency. New columns; additive.
+- **4.2 DLP enforcement per class** — extend the routing/egress gates to enforce
+  by data class + per-class redaction rules.
+- **4.3 Break-glass emergency access** — controlled, time-boxed, heavily-audited
+  override that forces a mandatory post-incident review.
+
+### Phase 5 — Reporting & trust → 2.7.0
+*Why:* push posture to the accountable; make the platform's own governance
+legible. (Not a 3.0 cut — more is planned before 3.0.)
+- **5.1 Scheduled signed reports** — periodic PDF/CSV of posture, denials,
+  approvals, coverage, SoD (signed per 1.1). Depends on 1.1 + 1.3.
+- **5.2 Trust page + docs pass** — optional public read-only posture page; full
+  docs/upgrade pass.
+
+**Feature → phase map:** 1→P1.1 · 2→P1.3 · 3→P1.2 · 4→P2.3 · 5→P2.2 · 6→P4.3 ·
+7→P3.1/3.2 · 8→P4.1/4.2 · 9→P3.3 · 10→P2.1 (notify) + P5.1 (reports).
+
+**Backlog (honorable mentions):** usage/cost budgets with hard caps · legal hold /
+immutable retention · multi-environment promotion gates (dev→staging→prod) ·
+Postgres / Celery-Redis scale-out (deferred infra).
+
 ## Roadmap
 
 | Version | Deliverable                                                          |

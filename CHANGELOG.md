@@ -3,6 +3,27 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.3.0] — 2026-07-07
+
+### Added
+- **Tamper-evident audit (governance-maturity Phase 1.1).** Every audit event is
+  hash-chained to the previous (`entry_hash = sha256(prev_hash + canonical
+  fields)`). `GET /audit/verify` recomputes the chain and flags any edit,
+  insertion, or mid-chain deletion. `GET /audit/export` returns a portable,
+  **signed** record (HMAC-SHA256 over the chain head with `SECRET_KEY`) an auditor
+  can verify independently. Upgrades backfill the chain over existing events.
+  UI: a "Verify trail" seal on the Audit log.
+- **CSV audit export** — `GET /audit/export.csv` (filter by actor / recipe /
+  subject / date), with the chain hashes included so the sheet stays
+  tamper-evident. Export CSV / Export signed buttons on the Audit log.
+- **More concept visuals** — approval chains (Proposals + Approvals queue) and
+  work-item stage history now render as **pipelines** (current step lit), joining
+  the process pipeline + governance layer lattice.
+
+### Migration
+- **v16** — `events.prev_hash` / `events.entry_hash` (indexed) + new
+  `audit_chain_state` table. Reversible downgrade appended.
+
 ## [2.2.0] — 2026-07-06
 
 **Role authorization model.** Each role is now restricted to its concerns, enforced

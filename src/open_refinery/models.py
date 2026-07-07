@@ -284,6 +284,17 @@ class Event(SQLModel, table=True):
     output_digest: str
     subject: str | None = Field(default=None, index=True)
     created_at: str = Field(default_factory=now_iso, index=True)
+    # tamper-evident hash chain: entry_hash = sha256(prev_hash + canonical fields).
+    # Editing any event breaks the recompute; a signed export proves origin.
+    prev_hash: str = ""
+    entry_hash: str = Field(default="", index=True)
+
+
+class AuditChainState(SQLModel, table=True):
+    """Single-row running head of the audit hash chain."""
+    __tablename__ = "audit_chain_state"
+    id: str = Field(default="head", primary_key=True)
+    head: str = ""
 
 
 class ApprovalRequest(SQLModel, table=True):

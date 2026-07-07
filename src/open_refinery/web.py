@@ -17,7 +17,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlmodel import Session
@@ -120,7 +120,16 @@ from .repositories import (
     set_ingest_schedule,
 )
 from .settings import delete_setting, get_setting, list_setting_keys, set_setting
-from .store import DEFAULT_DATABASE_URL, SqliteSink, engine_for, purge_events, query_events
+from .store import (
+    DEFAULT_DATABASE_URL,
+    SqliteSink,
+    engine_for,
+    events_csv,
+    export_chain,
+    purge_events,
+    query_events,
+    verify_chain,
+)
 from .concurrency import ConcurrencyExceeded
 from .ledger import traffic_graph, usage_by_actor, usage_by_team
 from .teams import create_team, delete_team, list_teams, set_user_team
@@ -452,7 +461,7 @@ _AUTHZ_RULES: list[tuple[set[str], re.Pattern, set[str]]] = [
     # oversight reads + org config: platform or admin
     ({"GET"}, re.compile(r"^/(usage|traffic|experiments|events|governance)(/|$)"), _PLAT_ADMIN),
     ({"GET", "POST"}, re.compile(r"^/audits(/|$)"), _PLAT_ADMIN),
-    ({"POST"}, re.compile(r"^/audit/purge"), _PLAT_ADMIN),
+    ({"GET", "POST"}, re.compile(r"^/audit(/|$)"), _PLAT_ADMIN),
     ({"GET", "PUT", "DELETE"}, re.compile(r"^/settings(/|$)"), _PLAT_ADMIN),
 ]
 
@@ -1120,6 +1129,27 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def purge_audit(days: int, session: Session = Depends(get_session),
                     _: User = Depends(require("admin"))):
         return {"purged": purge_events(session, days)}  # retention: drop events older than `days`
+
+    @app.get("/audit/verify")
+    def audit_verify(session: Session = Depends(get_session),
+                     _: User = Depends(require("platform", "admin"))):
+        return verify_chain(session)  # recompute the tamper-evident hash chain
+
+    @app.get("/audit/export")
+    def audit_export(session: Session = Depends(get_session),
+                     _: User = Depends(require("platform", "admin"))):
+        return export_chain(session)  # portable, signed export for external auditors
+
+    @app.get("/audit/export.csv")
+    def audit_export_csv(session: Session = Depends(get_session),
+                         _: User = Depends(require("platform", "admin")),
+                         actor: str | None = None, recipe: str | None = None,
+                         subject: str | None = None, since: str | None = None,
+                         until: str | None = None, limit: int = 10000):
+        csv_text = events_csv(session, actor=actor, recipe=recipe, subject=subject,
+                              since=since, until=until, limit=limit)
+        return PlainTextResponse(csv_text, media_type="text/csv",
+                                 headers={"Content-Disposition": "attachment; filename=audit.csv"})
 
     @app.get("/metrics")
     def metrics(session: Session = Depends(get_session), user: User = Depends(current_user)):

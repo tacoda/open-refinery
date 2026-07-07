@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { api, post, getToken, setToken, clearToken, oauthLoginUrl } from './api'
+import { api, post, download, getToken, setToken, clearToken, oauthLoginUrl } from './api'
 import { getTheme, applyTheme, watchSystem, type Theme } from './theme'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -1706,7 +1706,7 @@ function Proposals({ me, roles, isAdmin }: any) {
                   ? <span><Badge variant="outline">suggestion</Badge> {p.payload?.text ?? ''}</span>
                   : <span className="policy-sentence"><Badge variant={p.payload?.effect === 'deny' ? 'destructive' : 'secondary'}>{p.payload?.effect}</Badge> {ruleSentence(p.payload || {})}{p.payload?.strict ? ' (locked)' : ''}</span>}</TableCell>
                 <TableCell>{p.layer}</TableCell>
-                <TableCell className="mono">{(p.chain || []).map((r: string, i: number) => i === p.current && p.status === 'pending' ? `▶ ${r}` : r).join(' → ')}</TableCell>
+                <TableCell><Pipeline stages={p.chain || []} current={p.status === 'pending' ? (p.chain || [])[p.current] : undefined} /></TableCell>
                 <TableCell><Badge variant={p.status === 'denied' ? 'destructive' : p.status === 'accepted' ? 'default' : 'secondary'}>{p.status}</Badge></TableCell>
                 <TableCell>
                   {canReview(p) && <span style={{ display: 'flex', gap: '0.3rem' }}>
@@ -2527,7 +2527,11 @@ function WorkRow({ w, onMove, onAttest, onRequest, onReload, bare }: any) {
         )}
         {hist && (
           <div style={{ marginTop: '0.6rem', borderTop: '1px solid var(--border)', paddingTop: '0.6rem' }}>
-            <div className="mono">stages: {hist.history.map((h: any) => h.kind === 'rollback' ? `↩ ${h.stage}` : h.kind === 'rollback-applied' ? `✓applied(${h.changes?.status})` : h.stage).join(' → ') || '—'}</div>
+            <Pipeline
+              stages={hist.history.filter((h: any) => h.kind !== 'rollback-applied')
+                .map((h: any) => h.stage).filter((s: string, i: number, a: string[]) => a.indexOf(s) === i)}
+              current={w.current_stage} />
+            <div className="mono" style={{ marginTop: '.3rem' }}>timeline: {hist.history.map((h: any) => h.kind === 'rollback' ? `↩ ${h.stage}` : h.kind === 'rollback-applied' ? `✓applied(${h.changes?.status})` : h.stage).join(' → ') || '—'}</div>
             {hist.rollback_targets.length > 0 ? (
               <div className="work-actions" style={{ marginTop: '0.4rem' }}>
                 <span className="muted">roll back to</span>
@@ -2593,8 +2597,8 @@ function Approvals() {
                   <Badge variant="outline">{signed}/{r.required_roles.length} signed</Badge>
                   {next && <Badge>next: {next}</Badge>}
                 </div>
+                <Pipeline stages={r.required_roles} current={next ?? undefined} />
                 <div className="work-actions">
-                  <span className="mono">chain: {r.required_roles.join(' → ')}</span>
                   <Button size="sm" onClick={() => act(r.id, 'approve')}>Approve</Button>
                   <Button variant="outline" size="sm" onClick={() => act(r.id, 'reject')}>Reject</Button>
                 </div>
@@ -2611,11 +2615,23 @@ function Approvals() {
 function Events({ isAdmin }: any) {
   const { rows, load } = useList('/events?limit=100')
   const [days, setDays] = useState('90')
+  const [chain, setChain] = useState<any>(null)
   const purge = () => post(`/audit/purge?days=${Number(days) || 90}`, {})
     .then((r) => { toast.success(`Purged ${r.purged} event(s)`); load() }).catch(fail)
+  const verify = () => api('/audit/verify').then(setChain).catch(fail)
   return (
     <section className="page">
       <h2 className="page-title">Audit trail</h2>
+      <p className="muted">Tamper-evident: every event is hash-chained to the previous. Verify the chain, or export a signed record for auditors.</p>
+      <div className="field-form">
+        <Button variant="secondary" onClick={verify}>Verify trail</Button>
+        {chain && <Badge variant={chain.ok ? 'default' : 'destructive'}>
+          {chain.ok ? `✓ intact · ${chain.count} events` : `✗ broken at ${chain.broken_at}`}
+        </Badge>}
+        <span className="app-spacer" />
+        <Button variant="outline" onClick={() => download('/audit/export.csv', 'audit.csv').catch(fail)}>Export CSV</Button>
+        <Button variant="outline" onClick={() => download('/audit/export', 'audit-signed.json').catch(fail)}>Export signed</Button>
+      </div>
       {isAdmin && (
         <div className="field-form">
           <Field label="Retention (days)"><Input className="field" type="number" placeholder="90" value={days} onChange={(e) => setDays(e.target.value)} /></Field>

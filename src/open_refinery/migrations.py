@@ -79,6 +79,11 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE users ADD COLUMN kind TEXT NOT NULL DEFAULT 'human';"
     "ALTER TABLE users ADD COLUMN harness_kind TEXT;"
     "ALTER TABLE users ADD COLUMN owner_id TEXT;",
+    # v16 (2.3.0): tamper-evident audit — hash-chain columns on events (entry_hash
+    # indexed → create the index too). audit_chain_state is a new table.
+    "ALTER TABLE events ADD COLUMN prev_hash TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE events ADD COLUMN entry_hash TEXT NOT NULL DEFAULT '';"
+    "CREATE INDEX IF NOT EXISTS ix_events_entry_hash ON events (entry_hash);",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -111,6 +116,9 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE users DROP COLUMN kind;"
     "ALTER TABLE users DROP COLUMN harness_kind;"
     "ALTER TABLE users DROP COLUMN owner_id;",                                           # v15
+    "DROP INDEX IF EXISTS ix_events_entry_hash;"
+    "ALTER TABLE events DROP COLUMN prev_hash;"
+    "ALTER TABLE events DROP COLUMN entry_hash;",                                        # v16
 ]
 
 

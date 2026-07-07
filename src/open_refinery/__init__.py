@@ -21,7 +21,15 @@ from .processes import (
     get_process,
     list_processes,
 )
-from .store import SqliteSink, connect, purge_events, query_events
+from .store import (
+    SqliteSink,
+    connect,
+    events_csv,
+    export_chain,
+    purge_events,
+    query_events,
+    verify_chain,
+)
 from .attestations import (
     AttestationFailed,
     AttestationMissing,
@@ -205,7 +213,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "2.2.0"
+__version__ = "2.3.0"
 
 __all__ = [
     "Factory",
@@ -222,6 +230,9 @@ __all__ = [
     "connect",
     "query_events",
     "purge_events",
+    "verify_chain",
+    "export_chain",
+    "events_csv",
     "User",
     "DEFAULT_ROLES",
     "role_rank",
