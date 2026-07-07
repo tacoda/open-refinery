@@ -171,6 +171,8 @@ from .policies import (
     enforce,
     enforcement_mode,
     list_policies,
+    list_policy_versions,
+    policies_in_effect_at,
     scan_content,
 )
 from .migrations import migrate_to, run_migrations
@@ -213,7 +215,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "2.3.0"
+__version__ = "2.4.0"
 
 __all__ = [
     "Factory",
@@ -316,6 +318,8 @@ __all__ = [
     "PolicyDenied",
     "create_policy",
     "list_policies",
+    "list_policy_versions",
+    "policies_in_effect_at",
     "delete_policy",
     "decide",
     "enforce",

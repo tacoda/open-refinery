@@ -1695,6 +1695,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/policies/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Policy History */
+        get: operations["policy_history_policies_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/policies/at": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Policy At */
+        get: operations["policy_at_policies_at_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/policies/{policy_id}": {
         parameters: {
             query?: never;
@@ -2078,6 +2112,11 @@ export interface components {
              * @default
              */
             namespace: string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
         };
         /** NewProcess */
         NewProcess: {
@@ -6288,9 +6327,77 @@ export interface operations {
             };
         };
     };
+    policy_history_policies_history_get: {
+        parameters: {
+            query?: {
+                policy_id?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    policy_at_policies_at_get: {
+        parameters: {
+            query: {
+                t: string;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     remove_policy_policies__policy_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                note?: string;
+            };
             header?: {
                 authorization?: string | null;
             };

@@ -229,6 +229,30 @@ class Policy(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
+class PolicyVersion(SQLModel, table=True):
+    """Immutable change-log entry for a policy — who/when/why + a full snapshot.
+    Enables point-in-time reconstruction ("what policy was in effect at T") and
+    diffs between versions. Append-only; never edited."""
+    __tablename__ = "policy_versions"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    policy_id: str = Field(index=True)
+    version: int = 1
+    change: str = "created"          # created | updated | deleted
+    # snapshot of the policy at this version
+    kind: str = "rule"
+    effect: str = "allow"
+    role: str = "*"
+    action: str = "*"
+    resource: str = "*"
+    strict: bool = False
+    layer: str = "charter"
+    content: str = ""
+    namespace: str = ""
+    changed_by: str | None = None
+    note: str = ""                   # why the change was made
+    created_at: str = Field(default_factory=now_iso)
+
+
 class Invitation(SQLModel, table=True):
     __tablename__ = "invitations"
     id: str = Field(default_factory=new_id, primary_key=True)

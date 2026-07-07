@@ -3,6 +3,22 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.4.0] — 2026-07-07
+
+### Added
+- **Versioned policy history (governance-maturity Phase 1.2).** Every policy
+  create/delete is recorded as an immutable `PolicyVersion` — a full snapshot plus
+  who/when/why. `GET /policies/history` (optionally per policy) returns the change
+  log; `GET /policies/at?t=<ISO>` reconstructs the exact rule set **in effect at a
+  point in time** (answers auditors' "what control existed when X happened?").
+  Policy create now takes an optional `note`; delete records the actor + note.
+  UI: a History drawer on Policies with a point-in-time picker + change log
+  (each entry rendered as a rule sentence).
+
+### Notes
+- `policy_versions` is a new table (create_all) — no schema migration. Pack- and
+  proposal-created policies are versioned automatically.
+
 ## [2.3.0] — 2026-07-07
 
 ### Added

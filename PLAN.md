@@ -436,9 +436,10 @@ altered." This phase answers it. Highest pull; foundational for later phases.
   export** (`/audit/export.csv`). Upgrade backfill chains pre-2.3 events. UI:
   Verify-trail seal + Export CSV/signed. Migration v16. Shipped 2.3.0. Also folded
   in more concept visuals (approval chains + work-item history as pipelines).
-- **1.2 Versioned policy history** — every policy change versioned (who/when/why,
-  diff, effective-dating, per-version approval record); point-in-time "what
-  policy was in effect at T". New `policy_versions` table.
+- **1.2 Versioned policy history ✅** — every create/delete recorded as an
+  immutable `PolicyVersion` (snapshot + who/when/why); `GET /policies/history`,
+  `GET /policies/at?t=` reconstructs the rule set in effect at a timestamp; UI
+  History drawer with point-in-time + change log. Shipped 2.4.0.
 - **1.3 Compliance evidence packs + auditor role** — one-click framework-mapped
   bundle (SOC2 / ISO 27001 / HIPAA / GDPR) from audit + policies + attestations;
   a time-boxed **read-only auditor** login. Depends on 1.1 + 1.2.

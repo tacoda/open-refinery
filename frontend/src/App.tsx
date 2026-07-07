@@ -1126,12 +1126,20 @@ function Policies() {
   const [action, setAction] = useState('transition'), [resource, setResource] = useState('*')
   const [strict, setStrict] = useState(false), [content, setContent] = useState('')
   const [layer, setLayer] = useState('charter'), [namespace, setNamespace] = useState('')
-  const add = () => post('/policies', { kind, effect, role, action, resource, strict, content, layer, namespace })
-    .then(load).catch(fail)
+  const [note, setNote] = useState('')
+  const add = () => post('/policies', { kind, effect, role, action, resource, strict, content, layer, namespace, note })
+    .then(() => { setNote(''); load() }).catch(fail)
   const del = (id: string) => api(`/policies/${id}`, { method: 'DELETE' }).then(load).catch(fail)
 
   const [text, setText] = useState(''), [scan, setScan] = useState<any>(null)
   const runScan = () => post('/content/scan', { text }).then(setScan).catch(fail)
+
+  // versioned history + point-in-time reconstruction
+  const [hist, setHist] = useState<any[] | null>(null)
+  const [at, setAt] = useState(''), [effective, setEffective] = useState<any[] | null>(null)
+  const openHist = () => api('/policies/history').then((h) => setHist(h)).catch(fail)
+  const showAt = () => at && api(`/policies/at?t=${encodeURIComponent(new Date(at).toISOString())}`)
+    .then(setEffective).catch(fail)
 
   return (
     <section className="page">
@@ -1192,7 +1200,11 @@ function Policies() {
                 <Input className="field" style={{ width: '20rem' }} placeholder={`what this ${kind} says`} value={content} onChange={(e) => setContent(e.target.value)} />
               </Field>
             )}
+            <Field label="Reason (optional)">
+              <Input className="field" placeholder="why — recorded in history" value={note} onChange={(e) => setNote(e.target.value)} />
+            </Field>
             <Button onClick={add}>Add {kind}</Button>
+            <Button variant="outline" onClick={openHist}>History</Button>
           </div>
           {kind === 'rule' && (
             <div className="policy-preview">
@@ -1235,6 +1247,37 @@ function Policies() {
           )}
         </CardContent>
       </Card>
+
+      <Drawer open={hist !== null} title="Policy history" onClose={() => { setHist(null); setEffective(null) }}>
+        <div className="space-y-3">
+          <div className="field-form">
+            <Field label="Rules in effect at">
+              <Input className="field" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} />
+            </Field>
+            <Button variant="secondary" size="sm" onClick={showAt} disabled={!at}>Show</Button>
+          </div>
+          {effective && (
+            <div className="policy-preview">
+              <div className="field-label">{effective.length} rule(s) in effect</div>
+              {effective.map((p: any) => (
+                <div key={p.policy_id} className="policy-sentence"><Badge variant={p.effect === 'deny' ? 'destructive' : 'secondary'}>{p.effect}</Badge> {ruleSentence(p)}</div>
+              ))}
+              {!effective.length && <span className="muted">no rules in effect then</span>}
+            </div>
+          )}
+          <div className="field-label">Change log</div>
+          {(hist ?? []).map((v: any) => (
+            <div key={v.id} className="kv-row" style={{ alignItems: 'flex-start' }}>
+              <span className="policy-sentence">
+                <Badge variant={v.change === 'deleted' ? 'destructive' : v.change === 'created' ? 'default' : 'secondary'}>{v.change}</Badge>{' '}
+                {ruleSentence(v)}{v.note && <span className="muted"> — “{v.note}”</span>}
+              </span>
+              <span className="mono">{v.created_at?.slice(0, 19)}</span>
+            </div>
+          ))}
+          {hist !== null && !hist.length && <span className="muted">No changes recorded yet.</span>}
+        </div>
+      </Drawer>
     </section>
   )
 }

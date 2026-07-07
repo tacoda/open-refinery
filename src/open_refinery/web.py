@@ -100,6 +100,8 @@ from .policies import (
     enforce as enforce_policy,
     enforcement_mode,
     list_policies,
+    list_policy_versions,
+    policies_in_effect_at,
     scan_content,
 )
 from .processes import create_process, list_processes
@@ -347,6 +349,7 @@ class NewPolicy(BaseModel):
     content: str = ""
     layer: str = "charter"       # factory | harness | charter
     namespace: str = ""          # per-namespace scope (blank = global)
+    note: str = ""               # why (recorded in the version history)
 
 
 class WorkflowBody(BaseModel):
@@ -1321,16 +1324,26 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         return create_policy(session, body.effect, user.id, role=body.role,
                            action=body.action, resource=body.resource,
                            strict=body.strict, kind=body.kind, content=body.content,
-                           layer=body.layer, namespace=body.namespace)
+                           layer=body.layer, namespace=body.namespace, note=body.note)
 
     @app.get("/policies")
     def get_policies(session: Session = Depends(get_session), _: User = Depends(current_user)):
         return list_policies(session)
 
+    @app.get("/policies/history")
+    def policy_history(policy_id: str | None = None, session: Session = Depends(get_session),
+                       _: User = Depends(require("platform", "admin"))):
+        return list_policy_versions(session, policy_id=policy_id)
+
+    @app.get("/policies/at")
+    def policy_at(t: str, session: Session = Depends(get_session),
+                  _: User = Depends(require("platform", "admin"))):
+        return policies_in_effect_at(session, t)  # rule set in effect at ISO time t
+
     @app.delete("/policies/{policy_id}")
     def remove_policy(policy_id: str, session: Session = Depends(get_session),
-                      _: User = Depends(require("platform", "admin"))):
-        delete_policy(session, policy_id)
+                      user: User = Depends(require("platform", "admin")), note: str = ""):
+        delete_policy(session, policy_id, changed_by=user.id, note=note)
         return {"status": "deleted"}
 
     @app.post("/content/scan")

@@ -45,10 +45,22 @@ def _match(pattern: str, value: str) -> bool:
 POLICY_KINDS = ("rule", "skill", "command", "agent")  # what a governed harness artifact can be
 
 
+_SNAP = ("kind", "effect", "role", "action", "resource", "strict", "layer", "content", "namespace")
+
+
+def _record_version(session: Session, policy: Policy, change: str, changed_by: str, note: str) -> None:
+    from .models import PolicyVersion
+    n = len(list(session.exec(select(PolicyVersion).where(PolicyVersion.policy_id == policy.id))))
+    session.add(PolicyVersion(policy_id=policy.id, version=n + 1, change=change,
+                              changed_by=changed_by, note=note,
+                              **{k: getattr(policy, k) for k in _SNAP}))
+    session.commit()
+
+
 def create_policy(session: Session, effect: str, owner_id: str, *, role: str = "*",
                   action: str = "*", resource: str = "*", strict: bool | None = None,
                   kind: str = "rule", content: str = "", namespace: str = "",
-                  pack: str = "", layer: str = "charter") -> Policy:
+                  pack: str = "", layer: str = "charter", note: str = "") -> Policy:
     if effect not in EFFECTS:
         raise ValueError(f"unknown effect: {effect!r} (expected {EFFECTS})")
     if kind not in POLICY_KINDS:
@@ -65,6 +77,7 @@ def create_policy(session: Session, effect: str, owner_id: str, *, role: str = "
     session.add(policy)
     session.commit()
     session.refresh(policy)
+    _record_version(session, policy, "created", owner_id, note)  # versioned history
     return policy
 
 
@@ -73,11 +86,39 @@ def list_policies(session: Session) -> list[Policy]:
     return list(session.exec(select(Policy).order_by(Policy.created_at.desc())))
 
 
-def delete_policy(session: Session, policy_id: str) -> None:
+def delete_policy(session: Session, policy_id: str, changed_by: str | None = None,
+                  note: str = "") -> None:
     policy = session.get(Policy, policy_id)
     if policy is not None:
+        _record_version(session, policy, "deleted", changed_by, note)  # tombstone version
         session.delete(policy)
         session.commit()
+
+
+def list_policy_versions(session: Session, *, policy_id: str | None = None):
+    """The policy change-log, newest first (optionally for one policy)."""
+    from .models import PolicyVersion
+    stmt = select(PolicyVersion)
+    if policy_id is not None:
+        stmt = stmt.where(PolicyVersion.policy_id == policy_id)
+    return list(session.exec(stmt.order_by(PolicyVersion.created_at.desc())))
+
+
+def policies_in_effect_at(session: Session, when: str) -> list[dict]:
+    """Reconstruct the rule set in effect at an ISO timestamp: each policy whose
+    'created' version is at/before `when` and not 'deleted' by then."""
+    from .models import PolicyVersion
+    versions = list(session.exec(select(PolicyVersion)
+                                 .where(PolicyVersion.created_at <= when)
+                                 .order_by(PolicyVersion.created_at)))
+    live: dict[str, dict] = {}
+    for v in versions:
+        if v.change == "deleted":
+            live.pop(v.policy_id, None)
+        else:
+            live[v.policy_id] = {"policy_id": v.policy_id, "version": v.version,
+                                 **{k: getattr(v, k) for k in _SNAP}}
+    return list(live.values())
 
 
 def _ns_match(policy_ns: str, request_ns: str) -> bool:
