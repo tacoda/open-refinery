@@ -126,6 +126,8 @@ from .rollback import (
     stage_history,
 )
 from .logs import append_log, recent_logs
+from .auditors import auditor_view, list_auditors, mint_auditor, resolve_auditor, revoke_auditor
+from .evidence import FRAMEWORKS, evidence_pack
 from .teams import UnknownTeam, create_team, delete_team, get_team, list_teams, set_user_team
 from .ledger import record_usage, team_usage, traffic_graph, usage_by_actor, usage_by_team
 from .concurrency import ConcurrencyExceeded, in_flight, slot
@@ -215,7 +217,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "2.4.0"
+__version__ = "2.5.0"
 
 __all__ = [
     "Factory",
@@ -235,6 +237,13 @@ __all__ = [
     "verify_chain",
     "export_chain",
     "events_csv",
+    "evidence_pack",
+    "FRAMEWORKS",
+    "mint_auditor",
+    "resolve_auditor",
+    "list_auditors",
+    "auditor_view",
+    "revoke_auditor",
     "User",
     "DEFAULT_ROLES",
     "role_rank",

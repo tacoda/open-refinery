@@ -12,6 +12,7 @@ import json
 import os
 import re
 import secrets
+from types import SimpleNamespace
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -81,6 +82,8 @@ from .harnesses import (
     register_harness,
     rotate_harness,
 )
+from .auditors import auditor_view, list_auditors, mint_auditor, resolve_auditor, revoke_auditor
+from .evidence import FRAMEWORKS, evidence_pack
 from .live import HUB
 from .logs import append_log, recent_logs
 from .webhooks import create_webhook, delete_webhook, list_webhooks
@@ -219,6 +222,11 @@ class NewTeam(BaseModel):
 
 class AssignTeam(BaseModel):
     team_id: str | None = None  # null → unassign
+
+
+class NewAuditor(BaseModel):
+    label: str
+    ttl_days: int = 14
 
 
 class NewHarness(BaseModel):
@@ -444,6 +452,7 @@ _DEV = {"developer"}
 _DEV_PLAT = {"developer", "platform"}
 _PLAT = {"platform"}
 _PLAT_ADMIN = {"platform", "admin"}
+_OVERSIGHT = {"platform", "admin", "auditor"}  # read-only oversight incl. auditors
 _AUTHZ_RULES: list[tuple[set[str], re.Pattern, set[str]]] = [
     # developer operates the dev chain (writes only; reads stay open for oversight)
     ({"POST", "PUT", "DELETE"}, re.compile(r"^/integrations(/|$)"), _DEV),
@@ -461,11 +470,17 @@ _AUTHZ_RULES: list[tuple[set[str], re.Pattern, set[str]]] = [
     # teams + cost: platform or admin
     ({"POST", "PUT", "DELETE"}, re.compile(r"^/teams(/|$)"), _PLAT_ADMIN),
     ({"PUT"}, re.compile(r"^/users/[^/]+/team$"), _PLAT_ADMIN),
-    # oversight reads + org config: platform or admin
-    ({"GET"}, re.compile(r"^/(usage|traffic|experiments|events|governance)(/|$)"), _PLAT_ADMIN),
-    ({"GET", "POST"}, re.compile(r"^/audits(/|$)"), _PLAT_ADMIN),
-    ({"GET", "POST"}, re.compile(r"^/audit(/|$)"), _PLAT_ADMIN),
+    # oversight reads — platform, admin, and read-only auditors
+    ({"GET"}, re.compile(r"^/(usage|traffic|experiments|events|governance|evidence)(/|$)"), _OVERSIGHT),
+    ({"GET"}, re.compile(r"^/audits(/|$)"), _OVERSIGHT),
+    ({"GET"}, re.compile(r"^/audit/(verify|export)"), _OVERSIGHT),
+    ({"GET"}, re.compile(r"^/policies/(history|at)"), _OVERSIGHT),
+    # running an audit / purge / config are platform-admin (not auditors)
+    ({"POST"}, re.compile(r"^/audits(/|$)"), _PLAT_ADMIN),
+    ({"POST"}, re.compile(r"^/audit/purge"), _PLAT_ADMIN),
     ({"GET", "PUT", "DELETE"}, re.compile(r"^/settings(/|$)"), _PLAT_ADMIN),
+    # minting/revoking auditor grants: admin only
+    ({"POST", "DELETE"}, re.compile(r"^/auditor-grants(/|$)"), {"admin"}),
 ]
 
 
@@ -523,6 +538,8 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
             with Session(engine) as s:
                 user = (user_by_token(s, token) or session_user(s, token)) if token else None
                 role = user.role if user else None
+                if role is None and token and resolve_auditor(s, token):
+                    role = "auditor"  # read-only external principal
             if role is not None and role not in rule[2]:  # authenticated but out of scope
                 return JSONResponse({"detail": f"{role} is not authorized for this action"},
                                     status_code=403)
@@ -551,6 +568,12 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     ) -> User:
         token = (authorization or "").removeprefix("Bearer ").strip()
         user = (user_by_token(session, token) or session_user(session, token)) if token else None
+        if user is None and token:  # a time-boxed auditor grant → read-only principal
+            grant = resolve_auditor(session, token)
+            if grant is not None:
+                return SimpleNamespace(id=grant.id, email=grant.label, role="auditor",
+                                       team_id=None, kind="auditor", owner_id=None,
+                                       created_at=grant.created_at)
         if user is None:
             raise HTTPException(status_code=401, detail="invalid or missing token")
         return user
@@ -561,6 +584,8 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
                 raise HTTPException(status_code=403, detail="forbidden for this role")
             return user
         return dep
+
+    oversight = require("platform", "admin", "auditor")  # read-only oversight + auditors
 
     def _public_user(user: User) -> dict:
         # safe projection — pw_hash / pw_salt / token_hash must never cross the wire
@@ -661,8 +686,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
 
     # --- governance landscape (admin read view) ---
     @app.get("/governance")
-    def get_governance(session: Session = Depends(get_session),
-                       _: User = Depends(require("admin"))):
+    def get_governance(session: Session = Depends(get_session), _: User = Depends(oversight)):
         return landscape(session)
 
     # --- evals & experiments (test if a change's effect is real) ---
@@ -1134,18 +1158,16 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         return {"purged": purge_events(session, days)}  # retention: drop events older than `days`
 
     @app.get("/audit/verify")
-    def audit_verify(session: Session = Depends(get_session),
-                     _: User = Depends(require("platform", "admin"))):
+    def audit_verify(session: Session = Depends(get_session), _: User = Depends(oversight)):
         return verify_chain(session)  # recompute the tamper-evident hash chain
 
     @app.get("/audit/export")
-    def audit_export(session: Session = Depends(get_session),
-                     _: User = Depends(require("platform", "admin"))):
+    def audit_export(session: Session = Depends(get_session), _: User = Depends(oversight)):
         return export_chain(session)  # portable, signed export for external auditors
 
     @app.get("/audit/export.csv")
     def audit_export_csv(session: Session = Depends(get_session),
-                         _: User = Depends(require("platform", "admin")),
+                         _: User = Depends(oversight),
                          actor: str | None = None, recipe: str | None = None,
                          subject: str | None = None, since: str | None = None,
                          until: str | None = None, limit: int = 10000):
@@ -1153,6 +1175,33 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
                               since=since, until=until, limit=limit)
         return PlainTextResponse(csv_text, media_type="text/csv",
                                  headers={"Content-Disposition": "attachment; filename=audit.csv"})
+
+    # --- compliance evidence packs + time-boxed auditor access ---
+    @app.get("/evidence/frameworks")
+    def evidence_frameworks(_: User = Depends(oversight)):
+        return list(FRAMEWORKS)
+
+    @app.get("/evidence")
+    def evidence(framework: str = "soc2", session: Session = Depends(get_session),
+                 _: User = Depends(oversight)):
+        return evidence_pack(session, framework)
+
+    @app.get("/auditor-grants")
+    def get_auditor_grants(session: Session = Depends(get_session),
+                           _: User = Depends(require("admin"))):
+        return [auditor_view(g) for g in list_auditors(session)]
+
+    @app.post("/auditor-grants", status_code=201)
+    def add_auditor_grant(body: NewAuditor, session: Session = Depends(get_session),
+                          user: User = Depends(require("admin"))):
+        grant, token = mint_auditor(session, body.label, user.id, ttl_days=body.ttl_days)
+        return {"grant": auditor_view(grant), "token": token}  # shown once
+
+    @app.delete("/auditor-grants/{grant_id}")
+    def remove_auditor_grant(grant_id: str, session: Session = Depends(get_session),
+                             _: User = Depends(require("admin"))):
+        revoke_auditor(session, grant_id)
+        return {"status": "revoked"}
 
     @app.get("/metrics")
     def metrics(session: Session = Depends(get_session), user: User = Depends(current_user)):
@@ -1332,12 +1381,11 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
 
     @app.get("/policies/history")
     def policy_history(policy_id: str | None = None, session: Session = Depends(get_session),
-                       _: User = Depends(require("platform", "admin"))):
+                       _: User = Depends(oversight)):
         return list_policy_versions(session, policy_id=policy_id)
 
     @app.get("/policies/at")
-    def policy_at(t: str, session: Session = Depends(get_session),
-                  _: User = Depends(require("platform", "admin"))):
+    def policy_at(t: str, session: Session = Depends(get_session), _: User = Depends(oversight)):
         return policies_in_effect_at(session, t)  # rule set in effect at ISO time t
 
     @app.delete("/policies/{policy_id}")

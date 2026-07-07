@@ -3,6 +3,25 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.5.0] — 2026-07-07
+
+### Added
+- **Compliance evidence packs (governance-maturity Phase 1.3).** `GET
+  /evidence?framework=<soc2|iso27001|hipaa|gdpr>` produces a framework-mapped
+  bundle drawn from the tamper-evident audit chain, the role authorization
+  matrix, versioned policy history + approval workflows, and attestations — each
+  control marked met / partial / attention with a coverage %. Downloadable;
+  ties to the chain's integrity result. UI: an Evidence tab (Insights).
+- **Time-boxed auditor access.** Admins mint a read-only **auditor grant**
+  (`POST/GET/DELETE /auditor-grants`, expiring token). Used as a bearer token it
+  resolves to an `auditor` principal that can read evidence + the audit trail
+  and **mutate nothing** (blocked by the authorization matrix); it expires on its
+  own. Auditors sign in with the code on the login screen. This completes
+  governance-maturity **Phase 1** (provable governance).
+
+### Notes
+- `auditor_grants` is a new table (create_all) — no schema migration.
+
 ## [2.4.0] — 2026-07-07
 
 ### Added

@@ -47,3 +47,18 @@ def test_everyone_sees_metrics_and_overview_data(ctx):
     _, client, toks = ctx
     for role in ("developer", "platform", "admin"):
         assert client.get("/metrics", headers=h(toks[role])).status_code == 200
+
+
+def test_auditor_grant_is_read_only(ctx):
+    conn, client, toks = ctx
+    # admin mints a time-boxed auditor token
+    r = client.post("/auditor-grants", headers=h(toks["admin"]), json={"label": "EY", "ttl_days": 7})
+    assert r.status_code == 201
+    atok = r.json()["token"]
+    ah = {"Authorization": f"Bearer {atok}"}
+    # auditor can read evidence + verify the audit chain
+    assert client.get("/evidence?framework=soc2", headers=ah).status_code == 200
+    assert client.get("/audit/verify", headers=ah).status_code == 200
+    # but cannot mutate anything, nor mint further grants
+    assert client.post("/repositories", headers=ah, json={"name": "r", "git_url": "g"}).status_code == 403
+    assert client.post("/auditor-grants", headers=ah, json={"label": "x"}).status_code == 403

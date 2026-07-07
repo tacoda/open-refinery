@@ -321,6 +321,18 @@ class AuditChainState(SQLModel, table=True):
     head: str = ""
 
 
+class AuditorGrant(SQLModel, table=True):
+    """A time-boxed, read-only auditor credential — browses evidence + the audit
+    trail, changes nothing, and expires. Not a role; a scoped external principal."""
+    __tablename__ = "auditor_grants"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    token_hash: str = Field(unique=True, index=True)
+    label: str
+    expires_at: str
+    created_by: str | None = None
+    created_at: str = Field(default_factory=now_iso)
+
+
 class ApprovalRequest(SQLModel, table=True):
     __tablename__ = "approval_requests"
     id: str = Field(default_factory=new_id, primary_key=True)

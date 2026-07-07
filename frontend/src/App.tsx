@@ -17,14 +17,14 @@ import {
   LayoutDashboard, ListChecks, CheckSquare, GitBranch, Workflow, Shield, GitPullRequest,
   Package, Boxes, Plug, Target, Users, BarChart3, Coins, Network, Activity, ScanSearch,
   FlaskConical, ScrollText, Mail, Settings as SettingsIcon, ShieldCheck, PanelLeftClose,
-  PanelLeft, LogOut, Eye, Bot, Lock,
+  PanelLeft, LogOut, Eye, Bot, Lock, ClipboardCheck,
 } from 'lucide-react'
 
 // One icon per view — used by the sidebar and (later) overview cards.
 const VIEW_ICON: Record<string, any> = {
   overview: LayoutDashboard, work: ListChecks, approvals: CheckSquare, repos: GitBranch,
   processes: Workflow, policies: Shield, proposals: GitPullRequest, packs: Package,
-  governance: ShieldCheck, myrules: Eye, harnesses: Bot, systems: Boxes, integrations: Plug, targets: Target, teams: Users,
+  governance: ShieldCheck, myrules: Eye, harnesses: Bot, evidence: ClipboardCheck, systems: Boxes, integrations: Plug, targets: Target, teams: Users,
   metrics: BarChart3, usage: Coins, traffic: Network, audits: Activity, coverage: ScanSearch,
   experiments: FlaskConical, events: ScrollText, invitations: Mail, settings: SettingsIcon,
 }
@@ -33,7 +33,7 @@ const GROUP_ICON: Record<string, any> = {
   Insights: BarChart3, Admin: SettingsIcon,
 }
 
-type View = 'overview' | 'work' | 'approvals' | 'repos' | 'processes' | 'systems' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics' | 'teams' | 'usage' | 'traffic' | 'myrules' | 'harnesses'
+type View = 'overview' | 'work' | 'approvals' | 'repos' | 'processes' | 'systems' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics' | 'teams' | 'usage' | 'traffic' | 'myrules' | 'harnesses' | 'evidence'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
@@ -48,9 +48,10 @@ const fail = (e: any) => toast.error(e.message ?? String(e))
 //               user administration. Does not operate the factory.
 type NavTab = { value: View; label: string; roles: string[] }
 const ALL = ['developer', 'platform', 'admin']
+const OVERSIGHT = ['platform', 'admin', 'auditor']  // read-only oversight incl. external auditors
 const NAV: { group: string; tabs: NavTab[] }[] = [
   { group: 'Home', tabs: [
-    { value: 'overview', label: 'Overview', roles: ALL } ] },
+    { value: 'overview', label: 'Overview', roles: [...ALL, 'auditor'] } ] },
   // ordered by entity dependency: services → repos → processes → agents → work → approvals
   { group: 'Work', tabs: [
     { value: 'integrations', label: 'Services', roles: ['developer'] },
@@ -64,19 +65,20 @@ const NAV: { group: string; tabs: NavTab[] }[] = [
     { value: 'policies', label: 'Policies', roles: ['platform'] },
     { value: 'proposals', label: 'Proposals', roles: ['platform'] },
     { value: 'packs', label: 'Packs', roles: ['developer', 'platform'] },
-    { value: 'governance', label: 'Governance', roles: ['platform', 'admin'] } ] },
+    { value: 'governance', label: 'Governance', roles: OVERSIGHT } ] },
   { group: 'Platform', tabs: [
     { value: 'systems', label: 'Systems', roles: ['platform'] },
     { value: 'targets', label: 'Targets', roles: ['platform'] },
     { value: 'teams', label: 'Teams', roles: ['platform', 'admin'] } ] },
   { group: 'Insights', tabs: [
-    { value: 'metrics', label: 'Metrics', roles: ALL },
-    { value: 'coverage', label: 'Coverage', roles: ALL },
+    { value: 'metrics', label: 'Metrics', roles: [...ALL, 'auditor'] },
+    { value: 'coverage', label: 'Coverage', roles: [...ALL, 'auditor'] },
+    { value: 'evidence', label: 'Evidence', roles: OVERSIGHT },
     { value: 'usage', label: 'Usage', roles: ['platform', 'admin'] },
     { value: 'traffic', label: 'Traffic', roles: ['platform', 'admin'] },
     { value: 'audits', label: 'Audits', roles: ['platform', 'admin'] },
     { value: 'experiments', label: 'Experiments', roles: ['platform', 'admin'] },
-    { value: 'events', label: 'Audit log', roles: ['platform', 'admin'] } ] },
+    { value: 'events', label: 'Audit log', roles: OVERSIGHT } ] },
   { group: 'Admin', tabs: [
     { value: 'invitations', label: 'Invitations', roles: ALL },  // invite your level or lower
     { value: 'settings', label: 'Settings', roles: ['platform', 'admin'] } ] },
@@ -317,6 +319,7 @@ export default function App() {
               <TabsContent value="teams"><Teams /></TabsContent>
               {/* Insights */}
               <TabsContent value="metrics"><Metrics /></TabsContent>
+              {can('evidence') && <TabsContent value="evidence"><Evidence me={me} /></TabsContent>}
               <TabsContent value="coverage"><Coverage /></TabsContent>
               <TabsContent value="usage"><Usage /></TabsContent>
               <TabsContent value="traffic"><Traffic /></TabsContent>
@@ -427,6 +430,7 @@ function SetupWizard({ onToken }: { onToken: (t: string) => void }) {
 function Login({ onToken }: { onToken: (t: string) => void }) {
   const [email, setEmail] = useState(''), [pw, setPw] = useState('')
   const [github, setGithub] = useState(false)
+  const [auditor, setAuditor] = useState(false), [code, setCode] = useState('')
   useEffect(() => {
     api('/auth/providers').then((p) => setGithub(!!p.github)).catch(() => {})
   }, [])
@@ -436,19 +440,37 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
       setToken(r.token); onToken(r.token)
     } catch { toast.error('invalid email or password') }
   }
+  async function goAuditor() {
+    // an auditor access code IS the bearer token; verify it resolves via /me
+    setToken(code)
+    try { await api('/me'); onToken(code) }
+    catch { setToken(''); toast.error('invalid or expired auditor code') }
+  }
   return (
     <div className="login-screen">
       <div className="login-card">
         <LoginBrand tagline="A dark factory with the lights on." />
-        <Input placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <Input placeholder="password" type="password" value={pw}
-               onChange={(e) => setPw(e.target.value)}
-               onKeyDown={(e) => e.key === 'Enter' && go()} />
-        <Button onClick={go}>Sign in</Button>
-        {github && (
-          <Button variant="outline" onClick={() => { window.location.href = oauthLoginUrl('github') }}>
-            Sign in with GitHub
-          </Button>
+        {auditor ? (
+          <>
+            <Input placeholder="auditor access code" value={code} onChange={(e) => setCode(e.target.value)}
+                   onKeyDown={(e) => e.key === 'Enter' && goAuditor()} />
+            <Button onClick={goAuditor} disabled={!code}>Enter as auditor</Button>
+            <Button variant="link" size="sm" onClick={() => setAuditor(false)}>Back to sign in</Button>
+          </>
+        ) : (
+          <>
+            <Input placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Input placeholder="password" type="password" value={pw}
+                   onChange={(e) => setPw(e.target.value)}
+                   onKeyDown={(e) => e.key === 'Enter' && go()} />
+            <Button onClick={go}>Sign in</Button>
+            {github && (
+              <Button variant="outline" onClick={() => { window.location.href = oauthLoginUrl('github') }}>
+                Sign in with GitHub
+              </Button>
+            )}
+            <Button variant="link" size="sm" onClick={() => setAuditor(true)}>I have an auditor access code</Button>
+          </>
         )}
       </div>
     </div>
@@ -2707,6 +2729,100 @@ const METRIC_LABEL: Record<string, string> = {
   items: 'items', count: 'count',
 }
 const humanKey = (k: string) => METRIC_LABEL[k] ?? k.replace(/_/g, ' ')
+
+// Compliance evidence packs + time-boxed auditor grants.
+function Evidence({ me }: any) {
+  const isAdmin = me?.role === 'admin'
+  const [frameworks, setFrameworks] = useState<string[]>([])
+  const [fw, setFw] = useState('soc2')
+  const [pack, setPack] = useState<any>(null)
+  useEffect(() => { api('/evidence/frameworks').then(setFrameworks).catch(() => {}) }, [])
+  const gen = () => api(`/evidence?framework=${fw}`).then(setPack).catch(fail)
+  useEffect(() => { gen() }, [fw])
+
+  // auditor grants (admin only)
+  const [grants, setGrants] = useState<any[]>([])
+  const loadGrants = () => api('/auditor-grants').then(setGrants).catch(() => {})
+  useEffect(() => { if (isAdmin) loadGrants() }, [])
+  const [label, setLabel] = useState(''), [ttl, setTtl] = useState('14'), [issued, setIssued] = useState('')
+  const mint = () => post('/auditor-grants', { label, ttl_days: Number(ttl) || 14 })
+    .then((r) => { setIssued(r.token); setLabel(''); loadGrants(); toast.success('Auditor access minted') }).catch(fail)
+  const revoke = (id: string) => api(`/auditor-grants/${id}`, { method: 'DELETE' }).then(loadGrants).catch(fail)
+
+  const badge = (s: string) => s === 'met' ? 'default' : s === 'partial' ? 'secondary' : 'destructive'
+  return (
+    <section className="page">
+      <h2 className="page-title">Compliance evidence</h2>
+      <p className="muted">A framework-mapped bundle drawn from the audit trail, policies, versioned history, and attestations — proof that controls are enforced. Backed by the tamper-evident chain.</p>
+      <div className="field-form">
+        <Field label="Framework">
+          <Select value={fw} onValueChange={(v) => setFw(v ?? 'soc2')}>
+            <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+            <SelectContent>{frameworks.map((f) => <SelectItem key={f} value={f}>{f.toUpperCase()}</SelectItem>)}</SelectContent>
+          </Select>
+        </Field>
+        <Button variant="outline" onClick={() => download(`/evidence?framework=${fw}`, `evidence-${fw}.json`).catch(fail)}>Download pack</Button>
+      </div>
+      {pack && (
+        <Card>
+          <CardHeader><CardTitle>{pack.framework.toUpperCase()} · {pack.summary.met}/{pack.summary.controls} controls met ({pack.summary.coverage_pct}%)</CardTitle></CardHeader>
+          <CardContent>
+            <div className="toolbar" style={{ marginBottom: '.5rem' }}>
+              <Badge variant={pack.integrity.ok ? 'default' : 'destructive'}>
+                {pack.integrity.ok ? '✓ audit trail intact' : '✗ audit trail broken'}
+              </Badge>
+              <span className="muted">generated {pack.generated_at?.slice(0, 19)}</span>
+            </div>
+            <Table>
+              <TableHeader><TableRow><TableHead>Control</TableHead><TableHead>Requirement</TableHead><TableHead>Status</TableHead><TableHead>Evidence</TableHead></TableRow></TableHeader>
+              <TableBody>{pack.controls.map((c: any) => (
+                <TableRow key={c.id}>
+                  <TableCell><span className="mono">{c.control}</span> {c.title}</TableCell>
+                  <TableCell className="muted">{c.requirement}</TableCell>
+                  <TableCell><Badge variant={badge(c.status)}>{c.status}</Badge></TableCell>
+                  <TableCell className="mono">{Object.entries(c.evidence).map(([k, v]) => `${k}=${v}`).join(' · ')}</TableCell>
+                </TableRow>
+              ))}</TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+      {isAdmin && (
+        <Card>
+          <CardHeader><CardTitle>Auditor access</CardTitle></CardHeader>
+          <CardContent>
+            <p className="muted">Mint a time-boxed, read-only access code for an external auditor — they browse evidence + the audit trail and change nothing; it expires on its own.</p>
+            <div className="field-form">
+              <Field label="Auditor / firm"><Input className="field" placeholder="e.g. Ernst & Young" value={label} onChange={(e) => setLabel(e.target.value)} /></Field>
+              <Field label="Expires (days)"><Input className="field" type="number" value={ttl} onChange={(e) => setTtl(e.target.value)} /></Field>
+              <Button onClick={mint} disabled={!label}>Mint access code</Button>
+            </div>
+            {issued && (
+              <div className="policy-preview">
+                <div>Access code — copy now, shown once:</div>
+                <pre className="mono" style={{ whiteSpace: 'pre-wrap' }}>{issued}</pre>
+                <p className="muted">The auditor signs in with this code (read-only).</p>
+              </div>
+            )}
+            <Table>
+              <TableHeader><TableRow><TableHead>Auditor</TableHead><TableHead>Expires</TableHead><TableHead /></TableRow></TableHeader>
+              <TableBody>
+                <EmptyRow show={!grants.length} cols={3}>No auditor access granted.</EmptyRow>
+                {grants.map((g) => (
+                  <TableRow key={g.id}>
+                    <TableCell>{g.label}</TableCell>
+                    <TableCell className="mono">{g.expires_at?.slice(0, 10)} {g.expired && <Badge variant="destructive">expired</Badge>}</TableCell>
+                    <TableCell><Button variant="outline" size="sm" onClick={() => revoke(g.id)}>Revoke</Button></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+    </section>
+  )
+}
 
 function Metrics() {
   const [m, setM] = useState<any>(null)

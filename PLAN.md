@@ -440,9 +440,13 @@ altered." This phase answers it. Highest pull; foundational for later phases.
   immutable `PolicyVersion` (snapshot + who/when/why); `GET /policies/history`,
   `GET /policies/at?t=` reconstructs the rule set in effect at a timestamp; UI
   History drawer with point-in-time + change log. Shipped 2.4.0.
-- **1.3 Compliance evidence packs + auditor role** — one-click framework-mapped
-  bundle (SOC2 / ISO 27001 / HIPAA / GDPR) from audit + policies + attestations;
-  a time-boxed **read-only auditor** login. Depends on 1.1 + 1.2.
+- **1.3 Compliance evidence packs + auditor role ✅** — `GET /evidence?framework=`
+  maps SOC2/ISO27001/HIPAA/GDPR controls to platform evidence (chain integrity,
+  RBAC/enforcement, policy versioning + workflows, attestations) with a met/
+  partial/attention status + coverage %; downloadable. Time-boxed read-only
+  **auditor** grants (`/auditor-grants`, mint/revoke) — a scoped principal that
+  reads evidence + audit and mutates nothing; auditor sign-in on the login. UI:
+  Evidence tab. Shipped 2.5.0. **Phase 1 complete.**
 
 ### Phase 2 — Proactive oversight → 2.4.0
 *Why:* "lights-on" = catch and route problems before the post-mortem.
