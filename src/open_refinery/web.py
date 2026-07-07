@@ -84,6 +84,7 @@ from .harnesses import (
 )
 from .auditors import auditor_view, list_auditors, mint_auditor, resolve_auditor, revoke_auditor
 from .evidence import FRAMEWORKS, evidence_pack
+from .notifications import CHANNELS, create_rule, delete_rule, list_rules
 from .live import HUB
 from .logs import append_log, recent_logs
 from .webhooks import create_webhook, delete_webhook, list_webhooks
@@ -227,6 +228,13 @@ class AssignTeam(BaseModel):
 class NewAuditor(BaseModel):
     label: str
     ttl_days: int = 14
+
+
+class NewNotificationRule(BaseModel):
+    label: str
+    channel: str = "slack"       # slack | email | webhook
+    target: str = ""             # slack/webhook URL or email address
+    recipe: str = ""             # match this event recipe; "" = any
 
 
 class NewHarness(BaseModel):
@@ -1370,10 +1378,14 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     @app.post("/policies", status_code=201)
     def add_policy(body: NewPolicy, session: Session = Depends(get_session),
                    user: User = Depends(require("platform", "admin"))):
-        return create_policy(session, body.effect, user.id, role=body.role,
-                           action=body.action, resource=body.resource,
-                           strict=body.strict, kind=body.kind, content=body.content,
-                           layer=body.layer, namespace=body.namespace, note=body.note)
+        p = create_policy(session, body.effect, user.id, role=body.role,
+                          action=body.action, resource=body.resource,
+                          strict=body.strict, kind=body.kind, content=body.content,
+                          layer=body.layer, namespace=body.namespace, note=body.note)
+        SqliteSink(session).write(Record.of(  # audit + notify the policy change
+            recipe="policy-change", actor=user.id, owner=user.id,
+            inputs={"change": "created", "kind": p.kind}, output=p.effect, subject=p.id))
+        return p
 
     @app.get("/policies")
     def get_policies(session: Session = Depends(get_session), _: User = Depends(current_user)):
@@ -1392,6 +1404,27 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def remove_policy(policy_id: str, session: Session = Depends(get_session),
                       user: User = Depends(require("platform", "admin")), note: str = ""):
         delete_policy(session, policy_id, changed_by=user.id, note=note)
+        SqliteSink(session).write(Record.of(
+            recipe="policy-change", actor=user.id, owner=user.id,
+            inputs={"change": "deleted"}, output="", subject=policy_id))
+        return {"status": "deleted"}
+
+    # --- governance notification rules (audit stream → slack/email/webhook) ---
+    @app.get("/notification-rules")
+    def get_notification_rules(session: Session = Depends(get_session),
+                               _: User = Depends(require("platform", "admin"))):
+        return list_rules(session)
+
+    @app.post("/notification-rules", status_code=201)
+    def add_notification_rule(body: NewNotificationRule, session: Session = Depends(get_session),
+                              user: User = Depends(require("platform", "admin"))):
+        return create_rule(session, body.label, body.channel, body.target,
+                           recipe=body.recipe, created_by=user.id)
+
+    @app.delete("/notification-rules/{rule_id}")
+    def remove_notification_rule(rule_id: str, session: Session = Depends(get_session),
+                                 _: User = Depends(require("platform", "admin"))):
+        delete_rule(session, rule_id)
         return {"status": "deleted"}
 
     @app.post("/content/scan")

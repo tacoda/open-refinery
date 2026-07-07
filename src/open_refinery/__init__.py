@@ -128,6 +128,7 @@ from .rollback import (
 from .logs import append_log, recent_logs
 from .auditors import auditor_view, list_auditors, mint_auditor, resolve_auditor, revoke_auditor
 from .evidence import FRAMEWORKS, evidence_pack
+from .notifications import CHANNELS, create_rule, delete_rule, dispatch, list_rules
 from .teams import UnknownTeam, create_team, delete_team, get_team, list_teams, set_user_team
 from .ledger import record_usage, team_usage, traffic_graph, usage_by_actor, usage_by_team
 from .concurrency import ConcurrencyExceeded, in_flight, slot
@@ -217,7 +218,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "2.5.0"
+__version__ = "2.6.0"
 
 __all__ = [
     "Factory",
@@ -244,6 +245,10 @@ __all__ = [
     "list_auditors",
     "auditor_view",
     "revoke_auditor",
+    "create_rule",
+    "list_rules",
+    "delete_rule",
+    "CHANNELS",
     "User",
     "DEFAULT_ROLES",
     "role_rank",

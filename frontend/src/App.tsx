@@ -1345,8 +1345,56 @@ function Settings() {
           </Table>
         </CardContent>
       </Card>
+      <Notifications />
       <Webhooks />
     </section>
+  )
+}
+
+const ALERT_RECIPES = ['', 'denied', 'policy-change', 'invoke-failed', 'rollback', 'approval', 'rollback-applied']
+
+function Notifications() {
+  const { rows, load } = useList('/notification-rules')
+  const [label, setLabel] = useState(''), [recipe, setRecipe] = useState('denied')
+  const [channel, setChannel] = useState('slack'), [target, setTarget] = useState('')
+  const add = () => post('/notification-rules', { label, recipe: recipe === 'any' ? '' : recipe, channel, target })
+    .then(() => { setLabel(''); setTarget(''); load(); toast.success('Rule added') }).catch(fail)
+  const del = (id: string) => api(`/notification-rules/${id}`, { method: 'DELETE' }).then(load).catch(fail)
+  return (
+    <Card>
+      <CardHeader><CardTitle>Notifications — alert on governance events</CardTitle></CardHeader>
+      <CardContent>
+        <p className="muted">Turn the audit stream into signals: pick an event (blank = any) and where to send it — a Slack incoming webhook, an email, or a plain webhook.</p>
+        <div className="field-form">
+          <Field label="Label"><Input className="field" placeholder="e.g. denials → #security" value={label} onChange={(e) => setLabel(e.target.value)} /></Field>
+          <Field label="On event">
+            <Select value={recipe} onValueChange={(v) => setRecipe(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+              <SelectContent>{ALERT_RECIPES.map((r) => <SelectItem key={r || 'any'} value={r || 'any'}>{r || 'any event'}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+          <Field label="Channel">
+            <Select value={channel} onValueChange={(v) => setChannel(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+              <SelectContent>{['slack', 'email', 'webhook'].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+          <Field label={channel === 'email' ? 'Email' : 'URL'}><Input className="field" style={{ width: '20rem' }} placeholder={channel === 'email' ? 'sec@acme.com' : 'https://hooks.slack.com/…'} value={target} onChange={(e) => setTarget(e.target.value)} /></Field>
+          <Button onClick={add} disabled={!label || !target}>Add rule</Button>
+        </div>
+        <Table>
+          <TableHeader><TableRow><TableHead>Rule</TableHead><TableHead>On</TableHead><TableHead>Channel</TableHead><TableHead /></TableRow></TableHeader>
+          <TableBody><EmptyRow show={!rows.length} cols={4}>No notification rules yet.</EmptyRow>{rows.map((r: any) => (
+            <TableRow key={r.id}>
+              <TableCell>{r.label}</TableCell>
+              <TableCell><Badge variant="secondary">{r.recipe || 'any'}</Badge></TableCell>
+              <TableCell className="mono">{r.channel}</TableCell>
+              <TableCell><Button variant="outline" size="sm" onClick={() => del(r.id)}>Delete</Button></TableCell>
+            </TableRow>
+          ))}</TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   )
 }
 

@@ -450,9 +450,11 @@ altered." This phase answers it. Highest pull; foundational for later phases.
 
 ### Phase 2 — Proactive oversight → 2.4.0
 *Why:* "lights-on" = catch and route problems before the post-mortem.
-- **2.1 Governance notifications** — alert rules ("notify security on any strict
-  denial", "on policy change") out to Slack / email / webhook. Channel infra the
-  rest of the phase uses. (Adds the deferred Slack connector as a notify sink.)
+- **2.1 Governance notifications ✅** — `NotificationRule`s match an audit recipe
+  (blank = any) → Slack (incoming webhook) / email / plain webhook; dispatched
+  best-effort on every audit write. Policy changes now emit `policy-change` audit
+  events (chained + notifiable). `/notification-rules` CRUD; Notifications card in
+  Settings. Shipped 2.6.0.
 - **2.2 Approval SLAs + escalation + segregation-of-duties** — gated moves that
   age out auto-escalate + raise a breach alert; enforce author ≠ approver /
   distinct signers, with an SoD report.

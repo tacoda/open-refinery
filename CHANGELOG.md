@@ -3,6 +3,21 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.6.0] — 2026-07-07
+
+### Added
+- **Governance notifications (governance-maturity Phase 2.1).** Rules match an
+  audit event recipe (blank = any) and send a message to a channel — **Slack**
+  (incoming webhook), **email** (the pluggable email port), or a plain **webhook**.
+  Dispatched best-effort on every audit write (a broken channel never blocks the
+  governed action). `GET/POST/DELETE /notification-rules`; a Notifications card in
+  Settings (e.g. "denials → #security"). Adds Slack as a notify sink.
+- **Policy changes are now audited** — create/delete emit a `policy-change` audit
+  event, so they're hash-chained, appear in evidence, and can trigger alerts.
+
+### Notes
+- `notification_rules` is a new table (create_all) — no schema migration.
+
 ## [2.5.0] — 2026-07-07
 
 ### Added

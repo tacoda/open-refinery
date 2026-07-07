@@ -321,6 +321,21 @@ class AuditChainState(SQLModel, table=True):
     head: str = ""
 
 
+class NotificationRule(SQLModel, table=True):
+    """A governance alert rule: when an audit event matches `recipe` (blank = any),
+    send a message to a channel (slack / email / webhook). Turns the audit stream
+    into proactive signals."""
+    __tablename__ = "notification_rules"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    label: str
+    recipe: str = ""                 # match this event recipe; "" = any
+    channel: str = "slack"           # slack | email | webhook
+    target: str = ""                 # slack/webhook URL, or email address
+    enabled: bool = True
+    created_by: str | None = None
+    created_at: str = Field(default_factory=now_iso)
+
+
 class AuditorGrant(SQLModel, table=True):
     """A time-boxed, read-only auditor credential — browses evidence + the audit
     trail, changes nothing, and expires. Not a role; a scoped external principal."""
