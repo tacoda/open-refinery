@@ -121,13 +121,18 @@ def create_user(session: Session, email: str, password: str, role: str) -> tuple
 
 def authenticate(session: Session, email: str, password: str) -> User | None:
     user = session.exec(select(User).where(User.email == email)).first()
-    if user is None or not _verify_pw(password, user.pw_salt, user.pw_hash):
+    if user is None:
+        return None
+    if not user.active:
+        return None
+    if not _verify_pw(password, user.pw_salt, user.pw_hash):
         return None
     return user
 
 
 def user_by_token(session: Session, token: str) -> User | None:
-    return session.exec(select(User).where(User.token_hash == _hash_token(token))).first()
+    user = session.exec(select(User).where(User.token_hash == _hash_token(token))).first()
+    return user if user and user.active else None
 
 
 def user_by_email(session: Session, email: str) -> User | None:
@@ -165,4 +170,19 @@ def create_session(session: Session, user_id: str) -> str:
 
 def session_user(session: Session, token: str) -> User | None:
     row = session.get(UserSession, _hash_token(token))
-    return session.get(User, row.user_id) if row else None
+    if row is None:
+        return None
+    user = session.get(User, row.user_id)
+    return user if user and user.active else None
+
+
+def set_active(session: Session, user_id: str, active: bool) -> User | None:
+    """Activate/deactivate a user (SCIM deprovisioning). Returns the user."""
+    user = session.get(User, user_id)
+    if user is None:
+        return None
+    user.active = active
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user

@@ -333,6 +333,11 @@ class MfaCode(BaseModel):
     code: str
 
 
+class ScimGroupMap(BaseModel):
+    map: dict[str, str] = {}          # IdP group name → role
+    default_role: str = "developer"   # role when no group matches
+
+
 class SsoConfig(BaseModel):  # OIDC SSO; only provided fields are updated (secret write-only)
     issuer: str | None = None
     client_id: str | None = None
@@ -589,8 +594,9 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
 
 def _include_routers(app: FastAPI) -> None:
-    from .routers import core, governance, harness, ops, org, policy, routing, systems, workitem
-    for mod in (core, ops, systems, governance, org, harness, workitem, routing, policy):
+    from .routers import (core, governance, harness, ops, org, policy, routing, scim,
+                          systems, workitem)
+    for mod in (core, ops, systems, governance, org, harness, workitem, routing, policy, scim):
         app.include_router(mod.router)
 
 

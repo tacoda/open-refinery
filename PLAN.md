@@ -479,8 +479,11 @@ altered." This phase answers it. Highest pull; foundational for later phases.
     accounts; SSO logins inherit MFA from the IdP. `totp.py` + `mfa.py`;
     `/auth/mfa/*`; login returns `mfa_required` until a code is given; secret
     encrypted at rest. Shipped 2.10.0. **3.1 complete.**
-- **3.2 SCIM provisioning + group→role mapping** — auto provision/deprovision;
-  map IdP groups to developer/platform/admin.
+- **3.2 SCIM provisioning + group→role mapping ✅** — SCIM 2.0 Users at
+  `/scim/v2/Users` (provisioning-token auth); IdP groups map to
+  developer/platform/admin (most-privileged wins, else default). Deprovisioning
+  soft-deactivates (`users.active`), blocking all auth. `scim.py` + `routers/scim.py`;
+  admin config + Settings card. Shipped 2.11.0.
 - **3.3 Access recertification campaigns** — scheduled "re-attest access/roles"
   campaigns tracked to completion, overdue flagged. Depends on 3.1/3.2.
 

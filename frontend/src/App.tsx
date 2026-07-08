@@ -1362,6 +1362,43 @@ function SsoSettings() {
   )
 }
 
+function ScimSettings() {
+  const [ok, setOk] = useState(true), [enabled, setEnabled] = useState(false)
+  const [mapText, setMapText] = useState('{}'), [def, setDef] = useState('developer')
+  const [token, setToken] = useState('')
+  const load = () => api('/scim/config').then((c) => {
+    setEnabled(!!c.enabled); setMapText(JSON.stringify(c.group_map || {}, null, 2)); setDef(c.default_role || 'developer')
+  }).catch(() => setOk(false))  // 403 for non-admins → hide
+  useEffect(() => { load() }, [])
+  if (!ok) return null
+  const rotate = () => post('/scim/token', {}).then((r) => { setToken(r.token); load(); toast.success('token generated') }).catch(fail)
+  const saveMap = () => {
+    let map: any
+    try { map = JSON.parse(mapText) } catch { return toast.error('group map must be valid JSON') }
+    post('/scim/group-map', { map, default_role: def }).then(() => toast.success('mapping saved')).catch(fail)
+  }
+  return (
+    <Card>
+      <CardHeader><CardTitle>SCIM provisioning{enabled && <Badge variant="secondary" style={{ marginLeft: '.5rem' }}>enabled</Badge>}</CardTitle></CardHeader>
+      <CardContent>
+        <p className="muted">Let your IdP provision/deprovision users automatically. Point its SCIM base at <span className="mono">/scim/v2</span> and use the token below. Deprovisioning deactivates (never deletes) the account.</p>
+        <div className="field-form">
+          <Button variant="outline" onClick={rotate}>{enabled ? 'Regenerate token' : 'Generate token'}</Button>
+          {token && <p className="mono" style={{ wordBreak: 'break-all' }}>{token} <span className="muted">(copy now — shown once)</span></p>}
+          <Field label="Group → role map (JSON)"><textarea className="field" rows={4} value={mapText} onChange={(e) => setMapText(e.target.value)} placeholder='{"platform-team": "platform"}' /></Field>
+          <Field label="Default role (no group match)">
+            <Select value={def} onValueChange={(v) => setDef(v ?? 'developer')}>
+              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+              <SelectContent>{['developer', 'platform', 'admin'].map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+          <Button onClick={saveMap}>Save mapping</Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function Settings() {
   const [keys, setKeys] = useState<string[]>([])
   const load = () => api('/settings').then((r) => setKeys(r.keys)).catch(fail)
@@ -1397,6 +1434,7 @@ function Settings() {
         </CardContent>
       </Card>
       <SsoSettings />
+      <ScimSettings />
       <Notifications />
       <Webhooks />
     </section>

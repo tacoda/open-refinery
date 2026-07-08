@@ -95,6 +95,9 @@ MIGRATIONS: list[str] = [
     # at rest; mfa_enabled flips true only after the enrollment code is confirmed.
     "ALTER TABLE users ADD COLUMN totp_secret TEXT NOT NULL DEFAULT '';"
     "ALTER TABLE users ADD COLUMN mfa_enabled INTEGER NOT NULL DEFAULT 0;",
+    # v19 (2.11.0): SCIM deprovisioning soft-deactivates users (active=0) rather
+    # than deleting them; inactive users can't authenticate.
+    "ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1;",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -136,6 +139,7 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE approval_requests DROP COLUMN escalated_at;",                           # v17
     "ALTER TABLE users DROP COLUMN totp_secret;"
     "ALTER TABLE users DROP COLUMN mfa_enabled;",                                        # v18
+    "ALTER TABLE users DROP COLUMN active;",                                             # v19
 ]
 
 

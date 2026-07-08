@@ -3,6 +3,25 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.11.0] — 2026-07-08
+
+### Added
+- **SCIM 2.0 provisioning + group→role mapping (governance-maturity Phase 3.2).**
+  The IdP provisions, updates, and deprovisions accounts automatically.
+  - `new scim.py` + `routers/scim.py` — SCIM Users subset at `/scim/v2/Users`
+    (create / list+filter / get / PUT+PATCH / DELETE), authenticated with a
+    dedicated **provisioning token** (hash in settings, never a user token).
+  - **Group → role mapping**: an IdP group maps to developer/platform/admin; the
+    **most-privileged** mapped group wins, else a configurable default.
+  - **Deprovisioning soft-deactivates** (`active=false`) instead of deleting —
+    audit history is preserved and owner/actor references stay valid. Inactive
+    users can no longer authenticate (password, token, or session).
+  - Admin config: `GET /scim/config`, `POST /scim/token` (rotate, shown once),
+    `POST /scim/group-map`; a **SCIM provisioning** card in Settings.
+
+### Migrations
+- v19: `users.active`. Additive; reversible.
+
 ## [2.10.0] — 2026-07-08
 
 ### Added

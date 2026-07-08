@@ -44,6 +44,9 @@ class User(SQLModel, table=True):
     # totp_secret is encrypted at rest; mfa_enabled flips true only after confirm.
     totp_secret: str = ""
     mfa_enabled: bool = False
+    # SCIM deprovisioning soft-deactivates rather than deletes (keeps audit history
+    # and avoids dangling owner/actor references). Inactive users can't authenticate.
+    active: bool = True
     created_at: str = Field(default_factory=now_iso)
 
 
