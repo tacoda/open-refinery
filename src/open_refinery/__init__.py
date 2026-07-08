@@ -130,6 +130,7 @@ from .auditors import auditor_view, list_auditors, mint_auditor, resolve_auditor
 from .evidence import FRAMEWORKS, evidence_pack
 from .notifications import CHANNELS, create_rule, delete_rule, dispatch, list_rules
 from .escalations import current_overdue, escalate_overdue, overdue_approvals
+from .anomalies import emit as emit_anomalies, scan as scan_anomalies
 from .teams import UnknownTeam, create_team, delete_team, get_team, list_teams, set_user_team
 from .ledger import record_usage, team_usage, traffic_graph, usage_by_actor, usage_by_team
 from .concurrency import ConcurrencyExceeded, in_flight, slot
@@ -219,7 +220,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "2.7.1"
+__version__ = "2.8.0"
 
 __all__ = [
     "Factory",
@@ -253,6 +254,8 @@ __all__ = [
     "escalate_overdue",
     "overdue_approvals",
     "current_overdue",
+    "scan_anomalies",
+    "emit_anomalies",
     "User",
     "DEFAULT_ROLES",
     "role_rank",

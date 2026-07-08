@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from fastapi import APIRouter
 
+from ..anomalies import scan as scan_anomalies
 from ..deps import *  # noqa: F401,F403
 from ..web import *  # noqa: F401,F403
 
@@ -69,6 +70,10 @@ def get_events(q: EventFilter = Depends(), session: Session = Depends(get_sessio
                user: User = Depends(current_user)):
     return query_events(session, owner=owner_scope(user), subject=q.subject,
                         actor=q.actor, limit=q.limit)
+
+@router.get("/anomalies", dependencies=[Depends(oversight)])
+def get_anomalies(session: Session = Depends(get_session)):
+    return scan_anomalies(session)  # behavioral signals over the audit trail
 
 @router.post("/audit/purge")
 def purge_audit(days: int, session: Session = Depends(get_session),

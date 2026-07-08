@@ -1356,7 +1356,7 @@ function Settings() {
   )
 }
 
-const ALERT_RECIPES = ['', 'denied', 'policy-change', 'approval-overdue', 'invoke-failed', 'rollback', 'approval', 'rollback-applied']
+const ALERT_RECIPES = ['', 'denied', 'policy-change', 'approval-overdue', 'anomaly', 'invoke-failed', 'rollback', 'approval', 'rollback-applied']
 
 function Notifications() {
   const { rows, load } = useList('/notification-rules')
@@ -2471,10 +2471,12 @@ export function Overview({ goto, can = () => true }: { goto: (v: any) => void; c
   const [items, setItems] = useState<any[]>([])
   const [pending, setPending] = useState(0)
   const [events, setEvents] = useState<any[]>([])
+  const [anomalies, setAnomalies] = useState<any[]>([])
   useEffect(() => {
     api('/work-items').then(setItems).catch(() => {})
     api('/approvals?status=pending').then((r) => setPending(r.length)).catch(() => {})
     api('/events').then(setEvents).catch(() => {})  // 403 for some roles → stays empty
+    api('/anomalies').then(setAnomalies).catch(() => {})  // oversight-only → empty otherwise
   }, [])
   const count = (recipe: string) => events.filter((e) => e.recipe === recipe).length
   const denials = count('denied')
@@ -2490,6 +2492,7 @@ export function Overview({ goto, can = () => true }: { goto: (v: any) => void; c
     { label: 'Policy denials', n: denials, go: 'events', attn: denials > 0, Icon: Shield },
     { label: 'Failed invokes', n: failures, go: 'events', attn: failures > 0, Icon: Activity },
     { label: 'Rollbacks to apply', n: pendingApply, go: 'work', attn: pendingApply > 0, Icon: GitBranch },
+    { label: 'Behavioral anomalies', n: anomalies.length, go: 'events', attn: anomalies.length > 0, Icon: Activity },
   ]
   return (
     <section className="page">
@@ -2506,6 +2509,22 @@ export function Overview({ goto, can = () => true }: { goto: (v: any) => void; c
           </button>
         ))}
       </div>
+      {anomalies.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Behavioral anomalies</CardTitle></CardHeader>
+          <CardContent>
+            <div className="work-list">
+              {anomalies.map((a, i) => (
+                <div key={i} className="work-head">
+                  <Badge variant={a.severity === 'high' ? 'destructive' : 'secondary'}>{a.severity}</Badge>
+                  <Badge variant="outline">{a.kind}</Badge>
+                  <span className="muted">{a.detail}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader><CardTitle>Work by stage</CardTitle></CardHeader>
         <CardContent>

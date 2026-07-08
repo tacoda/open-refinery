@@ -461,9 +461,11 @@ altered." This phase answers it. Highest pull; foundational for later phases.
   with a dedup stamp) via the serve-path scheduler sweep; `GET /approvals/overdue`
   lists them. SoD: requester ≠ approver, plus the existing one-signature-per-chain
   rule. Shipped 2.7.0.
-- **2.3 Anomaly / behavioral alerting** — flag denial spikes, off-hours agent
-  activity, harness-over-norm, privilege drift, mass changes. Overview "Attention"
-  feed. Uses 2.1 to notify.
+- **2.3 Anomaly / behavioral alerting ✅** — `anomalies.scan` flags denial spikes,
+  mass changes by one actor, off-hours agent activity, and harness-over-norm from
+  the audit trail. `GET /anomalies` feeds an Overview panel; the scheduler emits a
+  deduped `anomaly` audit event for high-severity findings (routable via 2.1).
+  Detection-only (never blocks). Shipped 2.8.0. **Phase 2 complete.**
 
 ### Phase 3 — Enterprise identity & access → 2.5.0
 *Why:* non-negotiable for large orgs; closes the deferred MFA item.

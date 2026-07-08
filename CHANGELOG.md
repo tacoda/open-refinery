@@ -3,6 +3,22 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.8.0] — 2026-07-08
+
+### Added
+- **Behavioral anomaly detection (governance-maturity Phase 2.3 — completes
+  Phase 2).** `anomalies.scan` runs cheap, dependency-free heuristics over the
+  audit trail and returns structured findings:
+  - **denial-spike** — a burst of policy denials in the last hour;
+  - **mass-change** — one actor making many mutations in a 15-minute window;
+  - **off-hours-agent** — a harness identity active during off-hours (UTC night);
+  - **harness-over-norm** — an agent running far above the agent-median volume.
+  - `GET /anomalies` (oversight) feeds a "Behavioral anomalies" card + panel on
+    the Overview. The scheduler sweep emits an `anomaly` audit event for each new
+    high-severity finding (deduped off the append-only audit via the event
+    `subject`), so notification rules (2.1) can route it. `anomaly` is a
+    selectable notification trigger. Detection is a signal, never a block.
+
 ## [2.7.1] — 2026-07-07
 
 ### Changed

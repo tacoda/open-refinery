@@ -56,6 +56,7 @@ def run_due_ingests(session: Session, engine: Engine, now: str | None = None) ->
 def start_scheduler(engine: Engine, *, interval_seconds: int = 300) -> threading.Thread:
     """Run `run_due_ingests` and the overdue-approval escalation sweep on a loop
     in a daemon thread (the serve path)."""
+    from .anomalies import emit as emit_anomalies
     from .escalations import escalate_overdue
     from .store import SqliteSink
 
@@ -65,6 +66,7 @@ def start_scheduler(engine: Engine, *, interval_seconds: int = 300) -> threading
                 with Session(engine) as session:
                     run_due_ingests(session, engine)
                     escalate_overdue(session, SqliteSink(session))
+                    emit_anomalies(session, SqliteSink(session))
             except Exception:  # a bad tick must not kill the scheduler
                 pass
             time.sleep(interval_seconds)
