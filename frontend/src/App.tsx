@@ -430,9 +430,12 @@ function SetupWizard({ onToken }: { onToken: (t: string) => void }) {
 function Login({ onToken }: { onToken: (t: string) => void }) {
   const [email, setEmail] = useState(''), [pw, setPw] = useState('')
   const [github, setGithub] = useState(false)
+  const [sso, setSso] = useState(false), [ssoName, setSsoName] = useState('')
   const [auditor, setAuditor] = useState(false), [code, setCode] = useState('')
   useEffect(() => {
-    api('/auth/providers').then((p) => setGithub(!!p.github)).catch(() => {})
+    api('/auth/providers').then((p) => {
+      setGithub(!!p.github); setSso(!!p.sso); setSsoName(p.sso_name || 'SSO')
+    }).catch(() => {})
   }, [])
   async function go() {
     try {
@@ -464,6 +467,11 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
                    onChange={(e) => setPw(e.target.value)}
                    onKeyDown={(e) => e.key === 'Enter' && go()} />
             <Button onClick={go}>Sign in</Button>
+            {sso && (
+              <Button variant="outline" onClick={() => { window.location.href = oauthLoginUrl('sso') }}>
+                Sign in with {ssoName}
+              </Button>
+            )}
             {github && (
               <Button variant="outline" onClick={() => { window.location.href = oauthLoginUrl('github') }}>
                 Sign in with GitHub
@@ -1316,6 +1324,35 @@ const SETTING_HINTS = [
   'policy.strict_default',    // true | false
 ]
 
+function SsoSettings() {
+  const [ok, setOk] = useState(true), [enabled, setEnabled] = useState(false)
+  const [issuer, setIssuer] = useState(''), [cid, setCid] = useState('')
+  const [secret, setSecret] = useState(''), [name, setName] = useState('')
+  const load = () => api('/auth/sso/config').then((c) => {
+    setEnabled(!!c.enabled); setIssuer(c.issuer || ''); setName(c.name || '')
+  }).catch(() => setOk(false))  // 403 for non-admins → hide the card
+  useEffect(() => { load() }, [])
+  if (!ok) return null
+  const save = () => post('/auth/sso/config',
+    { issuer, client_id: cid, client_secret: secret, name })
+    .then(() => { setSecret(''); setCid(''); load(); toast.success('SSO saved') }).catch(fail)
+  return (
+    <Card>
+      <CardHeader><CardTitle>Single sign-on (OIDC){enabled && <Badge variant="secondary" style={{ marginLeft: '.5rem' }}>enabled</Badge>}</CardTitle></CardHeader>
+      <CardContent>
+        <p className="muted">Log in via your IdP (Okta, Entra, Google, Auth0…). The IdP is the auth &amp; MFA authority; its verified email must match an existing user. Secret stored encrypted, never shown.</p>
+        <div className="field-form">
+          <Field label="Issuer URL"><Input className="field" placeholder="https://acme.okta.com" value={issuer} onChange={(e) => setIssuer(e.target.value)} /></Field>
+          <Field label="Display name"><Input className="field" placeholder="Acme SSO" value={name} onChange={(e) => setName(e.target.value)} /></Field>
+          <Field label="Client ID"><Input className="field" placeholder={enabled ? 'unchanged' : 'client id'} value={cid} onChange={(e) => setCid(e.target.value)} /></Field>
+          <Field label="Client secret"><Input className="field" type="password" placeholder={enabled ? 'unchanged' : 'client secret'} value={secret} onChange={(e) => setSecret(e.target.value)} /></Field>
+          <Button onClick={save} disabled={!issuer}>Save SSO</Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function Settings() {
   const [keys, setKeys] = useState<string[]>([])
   const load = () => api('/settings').then((r) => setKeys(r.keys)).catch(fail)
@@ -1350,6 +1387,7 @@ function Settings() {
           </Table>
         </CardContent>
       </Card>
+      <SsoSettings />
       <Notifications />
       <Webhooks />
     </section>

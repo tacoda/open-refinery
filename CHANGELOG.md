@@ -3,6 +3,23 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.9.0] — 2026-07-08
+
+### Added
+- **OIDC single sign-on (governance-maturity Phase 3.1, part 1).** Log in via the
+  org's IdP (Okta, Entra, Google, Auth0…) — standards-only, **stdlib-only** (no
+  SAML/crypto deps): OIDC discovery → authorization-code flow → the UserInfo
+  endpoint for the verified email, matched to an **existing** user (the IdP is the
+  auth + MFA authority; provisioning/group-mapping is Phase 3.2).
+  - `new src/open_refinery/oidc.py` (discover / authorize_url / exchange_code /
+    userinfo_email). Config in **encrypted settings** (`oidc.*`), secret write-only.
+  - Routes: `GET/POST /auth/sso/config` (admin), `GET /auth/sso/login`,
+    `GET /auth/sso/callback` (CSRF via a state cookie); `/auth/providers` now
+    reports `sso` + `sso_name`.
+  - UI: "Sign in with <IdP>" on the login screen; an admin **Single sign-on
+    (OIDC)** card in Settings (self-hides for non-admins).
+- MFA (TOTP for local accounts) follows in the next release to complete 3.1.
+
 ## [2.8.0] — 2026-07-08
 
 ### Added

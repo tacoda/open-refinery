@@ -469,8 +469,14 @@ altered." This phase answers it. Highest pull; foundational for later phases.
 
 ### Phase 3 — Enterprise identity & access → 2.5.0
 *Why:* non-negotiable for large orgs; closes the deferred MFA item.
-- **3.1 SSO (SAML / OIDC) + MFA** — log in via the org IdP; enforce MFA. Keeps the
-  fixed three-role model, fed from the IdP.
+- **3.1 SSO (OIDC) + MFA** — log in via the org IdP; enforce MFA. Keeps the fixed
+  three-role model, fed from the IdP.
+  - **OIDC SSO ✅** — stdlib-only OIDC (discover → code → UserInfo email → match an
+    existing user). `oidc.py`; `/auth/sso/config|login|callback`; login-screen +
+    admin Settings card. (SAML dropped — would break the dependency-free core.)
+    Shipped 2.9.0.
+  - **MFA (TOTP local) ▹** — TOTP for local password accounts; SSO logins inherit
+    MFA from the IdP. Next release.
 - **3.2 SCIM provisioning + group→role mapping** — auto provision/deprovision;
   map IdP groups to developer/platform/admin.
 - **3.3 Access recertification campaigns** — scheduled "re-attest access/roles"

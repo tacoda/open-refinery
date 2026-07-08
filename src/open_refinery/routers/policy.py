@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from .. import oidc
 from ..deps import *  # noqa: F401,F403
 from ..web import *  # noqa: F401,F403
 
@@ -83,7 +84,58 @@ def login(body: Credentials, session: Session = Depends(get_session)):
 
 @router.get("/auth/providers")
 def providers(session: Session = Depends(get_session)):
-    return {kind: oauth.is_enabled(provider_creds(session, kind)) for kind in oauth.PROVIDERS}
+    out = {kind: oauth.is_enabled(provider_creds(session, kind)) for kind in oauth.PROVIDERS}
+    cfg = oidc.config(session)
+    return {**out, "sso": bool(cfg), "sso_name": cfg["name"] if cfg else ""}
+
+# --- OIDC single sign-on ---
+def _sso_redirect(request: Request) -> str:
+    return f"{base_url(request)}/auth/sso/callback"
+
+@router.get("/auth/sso/config")
+def get_sso_config(session: Session = Depends(get_session), _: User = Depends(require("admin"))):
+    cfg = oidc.config(session)
+    return {"enabled": bool(cfg), "issuer": cfg["issuer"] if cfg else "",
+            "name": cfg["name"] if cfg else ""}  # client_secret never returned
+
+@router.post("/auth/sso/config")
+def set_sso_config(body: SsoConfig, session: Session = Depends(get_session),
+                   user: User = Depends(require("admin"))):
+    for key in ("issuer", "client_id", "client_secret", "name"):
+        value = getattr(body, key)
+        if value is not None:  # only overwrite provided fields (keep the secret if omitted)
+            set_setting(session, f"oidc.{key}", value, user.id)
+    return {"enabled": bool(oidc.config(session))}
+
+@router.get("/auth/sso/login")
+def sso_login(request: Request, session: Session = Depends(get_session)):
+    cfg = oidc.config(session)
+    if not cfg:
+        raise HTTPException(status_code=404, detail="sso not configured")
+    endpoints = oidc.discover(cfg["issuer"])
+    state = secrets.token_urlsafe(16)
+    resp = RedirectResponse(oidc.authorize_url(endpoints, cfg["client_id"], _sso_redirect(request), state))
+    resp.set_cookie("or_sso_state", state, httponly=True, max_age=600, samesite="lax")
+    return resp
+
+@router.get("/auth/sso/callback")
+def sso_callback(request: Request, code: str = "", state: str = "",
+                 session: Session = Depends(get_session)):
+    cfg = oidc.config(session)
+    if not cfg:
+        raise HTTPException(status_code=404, detail="sso not configured")
+    if not state or state != request.cookies.get("or_sso_state"):
+        raise HTTPException(status_code=400, detail="sso state mismatch")
+    endpoints = oidc.discover(cfg["issuer"])
+    access = oidc.exchange_code(endpoints, code, _sso_redirect(request), cfg)
+    email = oidc.userinfo_email(endpoints, access)
+    user = user_by_email(session, email) if email else None
+    if user is None:  # authenticated at the IdP but no matching account here
+        return RedirectResponse(home_url(request) + "#sso_error=no-account")
+    token = create_session(session, user.id)
+    resp = RedirectResponse(f"{home_url(request)}#token={token}")
+    resp.delete_cookie("or_sso_state")
+    return resp
 
 @router.get("/auth/github/login")
 def github_login(request: Request, session: Session = Depends(get_session)):

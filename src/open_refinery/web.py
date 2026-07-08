@@ -328,6 +328,13 @@ class Credentials(BaseModel):
     password: str
 
 
+class SsoConfig(BaseModel):  # OIDC SSO; only provided fields are updated (secret write-only)
+    issuer: str | None = None
+    client_id: str | None = None
+    client_secret: str | None = None
+    name: str | None = None
+
+
 class NewIntegration(BaseModel):
     kind: str
     credential: dict[str, str]  # {token} for github/gitlab/linear; {site,email,token} for jira
