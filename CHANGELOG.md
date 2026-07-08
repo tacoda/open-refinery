@@ -3,6 +3,23 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.12.0] — 2026-07-08
+
+### Added
+- **Access recertification campaigns (governance-maturity Phase 3.3 — completes
+  Phase 3).** Periodic "re-attest who has access" reviews tracked to completion.
+  - `new recert.py` + `routers/recert.py` + `RecertCampaign`/`RecertItem` tables
+    (new tables — no migration). Opening a campaign snapshots every **active**
+    user into a pending review item (email/role snapshotted).
+  - A reviewer **certifies** (keep) or **revokes** (immediately deactivates the
+    user via `users.active`) each item; the campaign auto-**closes** when nothing
+    is pending. Every decision is audited (`recert-decision`).
+  - **Overdue** open campaigns are flagged by the scheduler sweep — a deduped
+    `recert-overdue` audit event (routable via 2.1).
+  - Routes: `POST /recert/campaigns`, `GET /recert/campaigns[/{id}]`,
+    `POST /recert/items/{id}/decide` (platform/admin author; oversight reads).
+    UI: an **Access recertification** view (open campaigns, review, certify/revoke).
+
 ## [2.11.0] — 2026-07-08
 
 ### Added

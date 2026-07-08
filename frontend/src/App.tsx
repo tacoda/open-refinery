@@ -33,7 +33,7 @@ const GROUP_ICON: Record<string, any> = {
   Insights: BarChart3, Admin: SettingsIcon,
 }
 
-type View = 'overview' | 'work' | 'approvals' | 'repos' | 'processes' | 'systems' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics' | 'teams' | 'usage' | 'traffic' | 'myrules' | 'harnesses' | 'evidence'
+type View = 'overview' | 'work' | 'approvals' | 'repos' | 'processes' | 'systems' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics' | 'teams' | 'usage' | 'traffic' | 'myrules' | 'harnesses' | 'evidence' | 'recert'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
@@ -81,6 +81,7 @@ const NAV: { group: string; tabs: NavTab[] }[] = [
     { value: 'events', label: 'Audit log', roles: OVERSIGHT } ] },
   { group: 'Admin', tabs: [
     { value: 'invitations', label: 'Invitations', roles: ALL },  // invite your level or lower
+    { value: 'recert', label: 'Recertification', roles: ['platform', 'admin'] },
     { value: 'settings', label: 'Settings', roles: ['platform', 'admin'] } ] },
 ]
 
@@ -328,6 +329,7 @@ export default function App() {
               <TabsContent value="events"><Events isAdmin={isAdmin} /></TabsContent>
               {/* Admin */}
               {can('invitations') && <TabsContent value="invitations"><Invitations me={me} roles={roles} /></TabsContent>}
+              {can('recert') && <TabsContent value="recert"><Recert /></TabsContent>}
               {can('settings') && <TabsContent value="settings"><Settings /></TabsContent>}
               </Tabs>
             </main>
@@ -1359,6 +1361,62 @@ function SsoSettings() {
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function Recert() {
+  const { rows, load } = useList('/recert/campaigns')
+  const [name, setName] = useState(''), [days, setDays] = useState('30')
+  const [open, setOpen] = useState<any>(null)  // {campaign, items, progress}
+  const create = () => post('/recert/campaigns', { name, days: Number(days) || 30 })
+    .then(() => { setName(''); load() }).catch(fail)
+  const view = (id: string) => api(`/recert/campaigns/${id}`).then(setOpen).catch(fail)
+  const decide = (itemId: string, decision: string) =>
+    post(`/recert/items/${itemId}/decide`, { decision }).then(() => { view(open.campaign.id); load() }).catch(fail)
+  return (
+    <section className="page">
+      <h2 className="page-title">Access recertification</h2>
+      <p className="muted">Periodically re-attest who has access. Certify to keep, revoke to deactivate. Campaigns close when every user is decided; overdue ones are flagged.</p>
+      <div className="field-form">
+        <Field label="Campaign name"><Input className="field" placeholder="e.g. Q3 access review" value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label="Due in (days)"><Input className="field" type="number" min="1" value={days} onChange={(e) => setDays(e.target.value)} /></Field>
+        <Button onClick={create} disabled={!name}>Open campaign</Button>
+      </div>
+      <div className="work-list">
+        {!rows.length && <Card><CardContent><p className="muted">No campaigns yet.</p></CardContent></Card>}
+        {rows.map((c) => (
+          <Card key={c.id}>
+            <CardContent>
+              <div className="work-head">
+                <span className="work-title">{c.name}</span>
+                <Badge variant={c.status === 'open' ? 'secondary' : 'outline'}>{c.status}</Badge>
+                <Badge variant="outline">{c.progress.pending} pending / {c.progress.total}</Badge>
+                <Badge variant="outline">{c.progress.revoked} revoked</Badge>
+                <Button variant="outline" size="sm" onClick={() => view(c.id)}>Review</Button>
+              </div>
+              {open?.campaign?.id === c.id && (
+                <Table>
+                  <TableHeader><TableRow><TableHead>User</TableHead><TableHead>Role</TableHead><TableHead>Decision</TableHead><TableHead /></TableRow></TableHeader>
+                  <TableBody>{open.items.map((it: any) => (
+                    <TableRow key={it.id}>
+                      <TableCell>{it.email}</TableCell>
+                      <TableCell>{it.role}</TableCell>
+                      <TableCell><Badge variant={it.decision === 'revoked' ? 'destructive' : it.decision === 'certified' ? 'secondary' : 'outline'}>{it.decision}</Badge></TableCell>
+                      <TableCell>{it.decision === 'pending' && (
+                        <div className="toolbar">
+                          <Button size="sm" onClick={() => decide(it.id, 'certified')}>Certify</Button>
+                          <Button variant="outline" size="sm" onClick={() => decide(it.id, 'revoked')}>Revoke</Button>
+                        </div>
+                      )}</TableCell>
+                    </TableRow>
+                  ))}</TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </section>
   )
 }
 

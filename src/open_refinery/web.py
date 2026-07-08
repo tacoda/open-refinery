@@ -338,6 +338,16 @@ class ScimGroupMap(BaseModel):
     default_role: str = "developer"   # role when no group matches
 
 
+class NewCampaign(BaseModel):
+    name: str
+    days: int = 30                    # days until the recertification is due
+
+
+class RecertDecision(BaseModel):
+    decision: str                     # certified | revoked
+    note: str = ""
+
+
 class SsoConfig(BaseModel):  # OIDC SSO; only provided fields are updated (secret write-only)
     issuer: str | None = None
     client_id: str | None = None
@@ -594,9 +604,10 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
 
 def _include_routers(app: FastAPI) -> None:
-    from .routers import (core, governance, harness, ops, org, policy, routing, scim,
-                          systems, workitem)
-    for mod in (core, ops, systems, governance, org, harness, workitem, routing, policy, scim):
+    from .routers import (core, governance, harness, ops, org, policy, recert, routing,
+                          scim, systems, workitem)
+    for mod in (core, ops, systems, governance, org, harness, workitem, routing, policy,
+                scim, recert):
         app.include_router(mod.router)
 
 

@@ -131,6 +131,14 @@ from .evidence import FRAMEWORKS, evidence_pack
 from .notifications import CHANNELS, create_rule, delete_rule, dispatch, list_rules
 from .escalations import current_overdue, escalate_overdue, overdue_approvals
 from .anomalies import emit as emit_anomalies, scan as scan_anomalies
+from .recert import (
+    Verdict,
+    decide_item,
+    emit_overdue as emit_recert_overdue,
+    open_campaign,
+    overdue_campaigns,
+    progress as recert_progress,
+)
 from .teams import UnknownTeam, create_team, delete_team, get_team, list_teams, set_user_team
 from .ledger import record_usage, team_usage, traffic_graph, usage_by_actor, usage_by_team
 from .concurrency import ConcurrencyExceeded, in_flight, slot
@@ -220,7 +228,7 @@ from .users import (
     valid_role,
 )
 
-__version__ = "2.11.0"
+__version__ = "2.12.0"
 
 __all__ = [
     "Factory",
@@ -256,6 +264,12 @@ __all__ = [
     "current_overdue",
     "scan_anomalies",
     "emit_anomalies",
+    "open_campaign",
+    "decide_item",
+    "Verdict",
+    "recert_progress",
+    "overdue_campaigns",
+    "emit_recert_overdue",
     "User",
     "DEFAULT_ROLES",
     "role_rank",

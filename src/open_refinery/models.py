@@ -505,3 +505,30 @@ class Attestation(SQLModel, table=True):
     passed: bool
     actor_id: str = Field(foreign_key="users.id")
     created_at: str = Field(default_factory=now_iso)
+
+
+class RecertCampaign(SQLModel, table=True):
+    """An access-recertification campaign: reviewers re-attest every active user's
+    access/role by the due date. New table — no migration (create_all handles it)."""
+    __tablename__ = "recert_campaigns"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    name: str
+    created_by: str = Field(foreign_key="users.id", index=True)
+    created_at: str = Field(default_factory=now_iso)
+    due_at: str = ""
+    status: str = Field(default="open", index=True)  # open | closed
+
+
+class RecertItem(SQLModel, table=True):
+    """One user under review in a campaign. email/role are snapshotted so the
+    record shows what was certified even if the account later changes."""
+    __tablename__ = "recert_items"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    campaign_id: str = Field(foreign_key="recert_campaigns.id", index=True)
+    user_id: str = Field(foreign_key="users.id", index=True)
+    email: str
+    role: str
+    decision: str = Field(default="pending", index=True)  # pending | certified | revoked
+    decided_by: str = ""
+    decided_at: str = ""
+    note: str = ""

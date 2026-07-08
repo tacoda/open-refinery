@@ -484,8 +484,11 @@ altered." This phase answers it. Highest pull; foundational for later phases.
   developer/platform/admin (most-privileged wins, else default). Deprovisioning
   soft-deactivates (`users.active`), blocking all auth. `scim.py` + `routers/scim.py`;
   admin config + Settings card. Shipped 2.11.0.
-- **3.3 Access recertification campaigns** — scheduled "re-attest access/roles"
-  campaigns tracked to completion, overdue flagged. Depends on 3.1/3.2.
+- **3.3 Access recertification campaigns ✅** — a campaign snapshots active users
+  into review items; reviewers certify (keep) or revoke (deactivate); auto-closes
+  when none pending; overdue campaigns flagged via a deduped `recert-overdue`
+  sweep. `recert.py` + `routers/recert.py` + new tables; Recertification view.
+  Shipped 2.12.0. **Phase 3 complete.**
 
 ### Phase 4 — Data governance & resilience → 2.6.0
 *Why:* regulated data can't cross the wrong boundary; emergencies must stay

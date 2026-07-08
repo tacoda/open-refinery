@@ -58,6 +58,7 @@ def start_scheduler(engine: Engine, *, interval_seconds: int = 300) -> threading
     in a daemon thread (the serve path)."""
     from .anomalies import emit as emit_anomalies
     from .escalations import escalate_overdue
+    from .recert import emit_overdue as emit_recert_overdue
     from .store import SqliteSink
 
     def _loop():
@@ -67,6 +68,7 @@ def start_scheduler(engine: Engine, *, interval_seconds: int = 300) -> threading
                     run_due_ingests(session, engine)
                     escalate_overdue(session, SqliteSink(session))
                     emit_anomalies(session, SqliteSink(session))
+                    emit_recert_overdue(session, SqliteSink(session))
             except Exception:  # a bad tick must not kill the scheduler
                 pass
             time.sleep(interval_seconds)
