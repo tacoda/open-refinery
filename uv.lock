@@ -448,7 +448,7 @@ wheels = [
 
 [[package]]
 name = "open-refinery"
-version = "2.11.0"
+version = "2.12.1"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },

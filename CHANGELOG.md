@@ -3,6 +3,15 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.12.1] — 2026-07-08
+
+### Fixed
+- `POST /recert/campaigns` returned an empty body — the campaign object was
+  expired by the subsequent items-commit, so it serialized to `{}` (the campaign
+  was created correctly; only the response was empty). Refresh before returning;
+  added a route-level regression test. (The dashboard was unaffected — it reloads
+  the list rather than reading the create response.)
+
 ## [2.12.0] — 2026-07-08
 
 ### Added

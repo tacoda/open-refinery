@@ -72,6 +72,18 @@ def test_bad_decision_rejected(monkeypatch):
         decide_item(conn, item.id, Verdict("maybe", admin.id), SqliteSink(conn))
 
 
+def test_open_campaign_http_response_carries_fields(monkeypatch):
+    # regression: the items-commit expired the campaign → the create response was {}
+    from fastapi.testclient import TestClient
+    conn, admin = _conn(monkeypatch)
+    token = __import__("open_refinery").rotate_token(conn, admin.id)
+    from open_refinery.web import create_app
+    client = TestClient(create_app(conn))
+    r = client.post("/recert/campaigns", headers={"Authorization": f"Bearer {token}"},
+                    json={"name": "http", "days": 30})
+    assert r.status_code == 201 and r.json()["id"] and r.json()["status"] == "open"
+
+
 def test_overdue_emits_once(monkeypatch):
     conn, admin = _conn(monkeypatch)
     c = open_campaign(conn, "late", admin.id, days=1)

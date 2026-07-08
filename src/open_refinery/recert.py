@@ -42,6 +42,7 @@ def open_campaign(session: Session, name: str, reviewer_id: str, days: int = 30)
             session.add(RecertItem(campaign_id=campaign.id, user_id=user.id,
                                    email=user.email, role=user.role))
     session.commit()
+    session.refresh(campaign)  # the items-commit expired it; reload before returning
     return campaign
 
 
