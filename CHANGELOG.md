@@ -3,6 +3,26 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.7.0] — 2026-07-07
+
+### Added
+- **Approval SLAs + escalation + segregation of duties (governance-maturity
+  Phase 2.2).**
+  - A process carries an **approval SLA** (`approval_sla_hours`, 0 = none). Each
+    approval request derives a `due_at` deadline at request time.
+  - An overdue pending request is **escalated once**: an `approval-overdue` audit
+    event (hash-chained, and routable by a notification rule) plus a dedup stamp.
+    The escalation sweep runs on the serve-path scheduler alongside ingest.
+    `GET /approvals/overdue` lists the current overdue queue.
+  - **Segregation of duties** — the requester may not approve their own request
+    (in addition to the existing "one signature per chain" rule).
+- UI: process form takes an "Approval SLA (hours)" field (badge on the card);
+  `approval-overdue` is a selectable notification trigger.
+
+### Migrations
+- v17: `processes.approval_sla_hours`, `approval_requests.due_at` (indexed),
+  `approval_requests.escalated_at`. Additive; reverse in `DOWNGRADES`.
+
 ## [2.6.0] — 2026-07-07
 
 ### Added

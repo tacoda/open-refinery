@@ -84,6 +84,13 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE events ADD COLUMN prev_hash TEXT NOT NULL DEFAULT '';"
     "ALTER TABLE events ADD COLUMN entry_hash TEXT NOT NULL DEFAULT '';"
     "CREATE INDEX IF NOT EXISTS ix_events_entry_hash ON events (entry_hash);",
+    # v17 (2.7.0): approval SLAs + escalation. Processes carry an SLA (hours);
+    # approval requests carry the derived deadline (indexed → overdue sweep) and
+    # an escalation-emitted stamp (dedup).
+    "ALTER TABLE processes ADD COLUMN approval_sla_hours INTEGER NOT NULL DEFAULT 0;"
+    "ALTER TABLE approval_requests ADD COLUMN due_at TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE approval_requests ADD COLUMN escalated_at TEXT NOT NULL DEFAULT '';"
+    "CREATE INDEX IF NOT EXISTS ix_approval_requests_due_at ON approval_requests (due_at);",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -119,6 +126,10 @@ DOWNGRADES: list[str] = [
     "DROP INDEX IF EXISTS ix_events_entry_hash;"
     "ALTER TABLE events DROP COLUMN prev_hash;"
     "ALTER TABLE events DROP COLUMN entry_hash;",                                        # v16
+    "DROP INDEX IF EXISTS ix_approval_requests_due_at;"
+    "ALTER TABLE processes DROP COLUMN approval_sla_hours;"
+    "ALTER TABLE approval_requests DROP COLUMN due_at;"
+    "ALTER TABLE approval_requests DROP COLUMN escalated_at;",                           # v17
 ]
 
 

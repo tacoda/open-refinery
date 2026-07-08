@@ -767,11 +767,13 @@ function Processes() {
   const [oversight, setOversight] = useState('dark'), [gates, setGates] = useState('')
   const [minApprover, setMinApprover] = useState('platform')
   const [chain, setChain] = useState('')
+  const [sla, setSla] = useState('')
   const add = () => post('/processes', {
     name, archetype: arch, oversight, min_approver_role: minApprover,
     stages: stages.split(',').map((s) => s.trim()).filter(Boolean),
     gates: gates.split(',').map((s) => s.trim()).filter(Boolean),
     approval_chain: chain.split(',').map((s) => s.trim()).filter(Boolean),
+    approval_sla_hours: Number(sla) || 0,
   }).then(() => { setName(''); load() }).catch(fail)
   return (
     <section className="page">
@@ -803,6 +805,8 @@ function Processes() {
         </Field>
         <Field label="Approval chain (roles)"><Input className="field" placeholder="blank = single approver" value={chain}
                onChange={(e) => setChain(e.target.value)} /></Field>
+        <Field label="Approval SLA (hours)"><Input className="field" type="number" min="0" placeholder="0 = no SLA" value={sla}
+               onChange={(e) => setSla(e.target.value)} /></Field>
         <Button onClick={add} disabled={!name}>Add process</Button>
       </div>
       <div className="work-list">
@@ -814,6 +818,7 @@ function Processes() {
                 <span className="work-title">{p.name}</span>
                 <Badge variant="secondary">{p.archetype}</Badge>
                 <Badge variant="outline">{p.oversight}</Badge>
+                {p.approval_sla_hours > 0 && <Badge variant="outline">SLA {p.approval_sla_hours}h</Badge>}
               </div>
               <div style={{ marginTop: '.6rem' }}>
                 <Pipeline stages={p.stages} gates={p.gates} transitions={p.transitions} />
@@ -1351,7 +1356,7 @@ function Settings() {
   )
 }
 
-const ALERT_RECIPES = ['', 'denied', 'policy-change', 'invoke-failed', 'rollback', 'approval', 'rollback-applied']
+const ALERT_RECIPES = ['', 'denied', 'policy-change', 'approval-overdue', 'invoke-failed', 'rollback', 'approval', 'rollback-applied']
 
 function Notifications() {
   const { rows, load } = useList('/notification-rules')

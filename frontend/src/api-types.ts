@@ -1213,6 +1213,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/approvals/overdue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Overdue Approvals */
+        get: operations["get_overdue_approvals_approvals_overdue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/approvals/{request_id}/approve": {
         parameters: {
             query?: never;
@@ -2285,6 +2302,11 @@ export interface components {
             min_approver_role: string;
             /** Approval Chain */
             approval_chain?: string[] | null;
+            /**
+             * Approval Sla Hours
+             * @default 0
+             */
+            approval_sla_hours: number;
         };
         /** NewQuota */
         NewQuota: {
@@ -5306,6 +5328,37 @@ export interface operations {
             query?: {
                 status?: string | null;
             };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_overdue_approvals_approvals_overdue_get: {
+        parameters: {
+            query?: never;
             header?: {
                 authorization?: string | null;
             };

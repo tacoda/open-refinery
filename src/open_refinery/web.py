@@ -20,12 +20,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlmodel import Session
 
 from . import oauth
 from .approvals import approve as approve_request
 from .approvals import list_approvals, reject as reject_request, request_approval
+from .escalations import current_overdue
 from .attestations import AttestationFailed, AttestationMissing, attest
 from .executor import ExecutionError, execute
 from .invitations import (
@@ -208,6 +209,7 @@ class NewProcess(BaseModel):
     checks: dict[str, list[str]] | None = None
     min_approver_role: str = DEFAULT_MIN_APPROVER_ROLE
     approval_chain: list[str] | None = None
+    approval_sla_hours: int = Field(0, ge=0)  # hours; validated non-negative at the boundary
 
 
 class NewWorkItem(BaseModel):
@@ -962,6 +964,7 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
             transitions=body.transitions, initial=body.initial,
             oversight=body.oversight, gates=body.gates, checks=body.checks,
             min_approver_role=body.min_approver_role, approval_chain=body.approval_chain,
+            approval_sla_hours=body.approval_sla_hours,
         )
 
     @app.get("/processes")
@@ -1143,6 +1146,11 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
     def get_approvals(session: Session = Depends(get_session), _: User = Depends(current_user),
                       status: str | None = "pending"):
         return list_approvals(session, status=status)
+
+    @app.get("/approvals/overdue")
+    def get_overdue_approvals(session: Session = Depends(get_session),
+                              _: User = Depends(current_user)):
+        return current_overdue(session)
 
     @app.post("/approvals/{request_id}/approve")
     def approve_move(request_id: str, session: Session = Depends(get_session),

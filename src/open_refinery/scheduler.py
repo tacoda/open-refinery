@@ -54,12 +54,17 @@ def run_due_ingests(session: Session, engine: Engine, now: str | None = None) ->
 
 
 def start_scheduler(engine: Engine, *, interval_seconds: int = 300) -> threading.Thread:
-    """Run `run_due_ingests` on a loop in a daemon thread (the serve path)."""
+    """Run `run_due_ingests` and the overdue-approval escalation sweep on a loop
+    in a daemon thread (the serve path)."""
+    from .escalations import escalate_overdue
+    from .store import SqliteSink
+
     def _loop():
         while True:
             try:
                 with Session(engine) as session:
                     run_due_ingests(session, engine)
+                    escalate_overdue(session, SqliteSink(session))
             except Exception:  # a bad tick must not kill the scheduler
                 pass
             time.sleep(interval_seconds)

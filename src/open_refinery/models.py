@@ -110,6 +110,7 @@ class Process(SQLModel, table=True):
     gates: list = Field(default_factory=list, sa_column=Column(JSON))
     checks: dict = Field(default_factory=dict, sa_column=Column(JSON))  # {step: [check, ...]}
     pack: str = Field(default="", index=True)  # source pack key when seeded by a pack
+    approval_sla_hours: int = 0  # hours an approval may sit pending before it's overdue; 0 = no SLA
     created_at: str = Field(default_factory=now_iso)
 
     def can_transition(self, frm: str, to: str) -> bool:
@@ -357,6 +358,8 @@ class ApprovalRequest(SQLModel, table=True):
     required_roles: list = Field(default_factory=list, sa_column=Column(JSON))  # ordered chain
     approvals: list = Field(default_factory=list, sa_column=Column(JSON))       # [{role,user_id,at}]
     status: str = Field(default="pending", index=True)  # pending | applied | rejected
+    due_at: str = Field(default="", index=True)  # SLA deadline (iso); "" = no SLA
+    escalated_at: str = ""  # set when an overdue-escalation was emitted (dedup)
     created_at: str = Field(default_factory=now_iso)
 
 

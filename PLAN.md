@@ -455,9 +455,12 @@ altered." This phase answers it. Highest pull; foundational for later phases.
   best-effort on every audit write. Policy changes now emit `policy-change` audit
   events (chained + notifiable). `/notification-rules` CRUD; Notifications card in
   Settings. Shipped 2.6.0.
-- **2.2 Approval SLAs + escalation + segregation-of-duties** — gated moves that
-  age out auto-escalate + raise a breach alert; enforce author ≠ approver /
-  distinct signers, with an SoD report.
+- **2.2 Approval SLAs + escalation + segregation-of-duties ✅** — a process carries
+  an `approval_sla_hours`; each request derives a `due_at`. Overdue pending
+  requests escalate once (an `approval-overdue` audit event, chained + notifiable,
+  with a dedup stamp) via the serve-path scheduler sweep; `GET /approvals/overdue`
+  lists them. SoD: requester ≠ approver, plus the existing one-signature-per-chain
+  rule. Shipped 2.7.0.
 - **2.3 Anomaly / behavioral alerting** — flag denial spikes, off-hours agent
   activity, harness-over-norm, privilege drift, mass changes. Overview "Attention"
   feed. Uses 2.1 to notify.

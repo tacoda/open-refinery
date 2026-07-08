@@ -10,6 +10,8 @@ counterpart to the synchronous `work_items.transition`.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from sqlmodel import Session, select
 
 from .audit import AuditSink
@@ -24,6 +26,14 @@ from .work_items import InvalidTransition, UnknownWorkItem, apply_transition, ge
 
 def _chain(process) -> list[str]:
     return list(process.approval_chain) or [process.min_approver_role]
+
+
+def _sla_deadline(process) -> str:
+    """The `due_at` a request under this process gets, or "" when it sets no SLA."""
+    if process.approval_sla_hours <= 0:
+        return ""
+    return (datetime.fromisoformat(now_iso())
+            + timedelta(hours=process.approval_sla_hours)).isoformat()
 
 
 def request_approval(session: Session, item_id: str, to: str, requester_id: str,
@@ -41,7 +51,8 @@ def request_approval(session: Session, item_id: str, to: str, requester_id: str,
         raise ValueError(f"moving into {to!r} needs no approval")
 
     req = ApprovalRequest(work_item_id=item_id, to_step=to, requested_by=requester_id,
-                          required_roles=_chain(process), approvals=[], status="pending")
+                          required_roles=_chain(process), approvals=[], status="pending",
+                          due_at=_sla_deadline(process))
     session.add(req)
     session.commit()
     session.refresh(req)
@@ -65,6 +76,25 @@ def list_approvals(session: Session, *, status: str | None = None,
     return list(session.exec(stmt.order_by(ApprovalRequest.created_at.desc())))
 
 
+def _authorize_slot(session: Session, req: ApprovalRequest, approver_id: str) -> str:
+    """Validate that `approver_id` may sign the next open slot; return its required
+    role. Enforces segregation of duties (requester ≠ approver, one signature per
+    chain) and the slot's minimum role."""
+    approver = session.get(User, approver_id)
+    if approver is None:
+        raise ValueError(f"unknown approver: {approver_id!r}")
+    # Segregation of duties: neither the requester nor a prior signer of this
+    # chain may sign — every slot is a distinct person, none of them the requester.
+    already_involved = {req.requested_by, *(a["user_id"] for a in req.approvals)}
+    if approver_id in already_involved:
+        raise PolicyDenied("segregation of duties: the requester and each signer must be distinct people")
+    slot = len(req.approvals)
+    required_role = req.required_roles[slot]
+    if not at_least(session, approver.role, required_role):
+        raise PolicyDenied(f"slot {slot} needs {required_role}+ (got {approver.role!r})")
+    return required_role
+
+
 def approve(session: Session, request_id: str, approver_id: str, audit: AuditSink) -> ApprovalRequest:
     """Sign the next slot in the chain; apply the move when the chain completes."""
     req = session.get(ApprovalRequest, request_id)
@@ -72,16 +102,7 @@ def approve(session: Session, request_id: str, approver_id: str, audit: AuditSin
         raise ValueError(f"unknown approval request: {request_id!r}")
     if req.status != "pending":
         raise ValueError(f"approval request is {req.status}, not pending")
-    approver = session.get(User, approver_id)
-    if approver is None:
-        raise ValueError(f"unknown approver: {approver_id!r}")
-
-    slot = len(req.approvals)
-    required_role = req.required_roles[slot]
-    if not at_least(session, approver.role, required_role):
-        raise PolicyDenied(f"slot {slot} needs {required_role}+ (got {approver.role!r})")
-    if any(a["user_id"] == approver_id for a in req.approvals):
-        raise PolicyDenied("an approver may sign a chain only once (separation of duties)")
+    required_role = _authorize_slot(session, req, approver_id)
 
     approvals = req.approvals + [{"role": required_role, "user_id": approver_id, "at": now_iso()}]
     audit.write(Record.of(recipe="approval", actor=approver_id, owner=approver_id,
