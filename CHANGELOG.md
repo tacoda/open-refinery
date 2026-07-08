@@ -3,6 +3,21 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.7.1] — 2026-07-07
+
+### Changed
+- **`web.py` decomposed into `routers/` + `deps.py` (internal refactor, no API
+  change).** The 820-line `create_app` brain method (cyclomatic complexity 80)
+  was split: shared FastAPI dependencies moved to `deps.py` (engine now comes
+  from `request.app.state.engine`, so they're module-level), and the ~140 route
+  handlers moved into nine cohesive `routers/*.py` modules (`core`, `ops`,
+  `systems`, `governance`, `org`, `harness`, `workitem`, `routing`, `policy`),
+  each an `APIRouter` included by a slim `create_app`. Route paths, auth, and
+  behavior are unchanged (all 297 tests pass).
+- CodeScene Code Health: `web.py` 5.1 → **10.0**; every new module scores 10.0
+  except `routers/routing.py` at 9.68 (two OAuth callbacks legitimately take two
+  URL path params + request + session). No health regression anywhere.
+
 ## [2.7.0] — 2026-07-07
 
 ### Added
