@@ -68,6 +68,8 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
             "ALTER TABLE processes DROP COLUMN approval_sla_hours",
             "ALTER TABLE approval_requests DROP COLUMN due_at",
             "ALTER TABLE approval_requests DROP COLUMN escalated_at",
+            "ALTER TABLE users DROP COLUMN totp_secret",
+            "ALTER TABLE users DROP COLUMN mfa_enabled",
             "ALTER TABLE targets DROP COLUMN region",
             "ALTER TABLE targets DROP COLUMN compliance",
             "ALTER TABLE targets DROP COLUMN unit_cost",

@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from .. import oidc
+from .. import mfa, oidc
 from ..deps import *  # noqa: F401,F403
 from ..web import *  # noqa: F401,F403
 
@@ -80,7 +80,32 @@ def login(body: Credentials, session: Session = Depends(get_session)):
     user = authenticate(session, body.email, body.password)
     if user is None:
         raise HTTPException(status_code=401, detail="invalid email or password")
-    return {"token": create_session(session, user.id), "user": user}
+    if not mfa.check(user, body.code):  # MFA enabled → a valid TOTP code is required
+        raise HTTPException(status_code=401, detail="mfa_required")
+    return {"token": create_session(session, user.id), "user": public_user(user)}
+
+# --- MFA (TOTP) for local accounts; SSO logins inherit MFA from the IdP ---
+@router.get("/auth/mfa/status")
+def mfa_status(user: User = Depends(current_user)):
+    return {"enabled": getattr(user, "mfa_enabled", False)}  # auditor principal has none
+
+@router.post("/auth/mfa/enroll")
+def mfa_enroll(session: Session = Depends(get_session), user: User = Depends(current_user)):
+    return mfa.begin_enroll(session, user)  # returns the secret + otpauth URI once
+
+@router.post("/auth/mfa/confirm")
+def mfa_confirm(body: MfaCode, session: Session = Depends(get_session),
+                user: User = Depends(current_user)):
+    if not mfa.confirm_enroll(session, user, body.code):
+        raise HTTPException(status_code=400, detail="invalid code")
+    return {"enabled": True}
+
+@router.post("/auth/mfa/disable")
+def mfa_disable(body: MfaCode, session: Session = Depends(get_session),
+                user: User = Depends(current_user)):
+    if not mfa.disable(session, user, body.code):
+        raise HTTPException(status_code=400, detail="invalid code")
+    return {"enabled": False}
 
 @router.get("/auth/providers")
 def providers(session: Session = Depends(get_session)):

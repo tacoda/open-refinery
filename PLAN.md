@@ -475,8 +475,10 @@ altered." This phase answers it. Highest pull; foundational for later phases.
     existing user). `oidc.py`; `/auth/sso/config|login|callback`; login-screen +
     admin Settings card. (SAML dropped — would break the dependency-free core.)
     Shipped 2.9.0.
-  - **MFA (TOTP local) ▹** — TOTP for local password accounts; SSO logins inherit
-    MFA from the IdP. Next release.
+  - **MFA (TOTP local) ✅** — RFC 6238 TOTP (stdlib `hmac`) for local password
+    accounts; SSO logins inherit MFA from the IdP. `totp.py` + `mfa.py`;
+    `/auth/mfa/*`; login returns `mfa_required` until a code is given; secret
+    encrypted at rest. Shipped 2.10.0. **3.1 complete.**
 - **3.2 SCIM provisioning + group→role mapping** — auto provision/deprovision;
   map IdP groups to developer/platform/admin.
 - **3.3 Access recertification campaigns** — scheduled "re-attest access/roles"

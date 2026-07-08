@@ -42,11 +42,13 @@ def test_me_requires_valid_token(ctx):
 
 def test_me_and_users_never_leak_secret_fields(ctx):
     _, client, admin, token = ctx
-    LEAKY = {"pw_hash", "pw_salt", "token_hash", "secret"}
+    LEAKY = {"pw_hash", "pw_salt", "token_hash", "secret", "totp_secret"}
     me = client.get("/me", headers=auth(token)).json()
     assert LEAKY.isdisjoint(me) and me["email"] == "admin@x.dev"
     users = client.get("/users", headers=auth(token)).json()
     assert users and all(LEAKY.isdisjoint(u) for u in users)
+    login = client.post("/auth/login", json={"email": "admin@x.dev", "password": "pw"}).json()
+    assert LEAKY.isdisjoint(login["user"]) and login["user"]["email"] == "admin@x.dev"
 
 
 def test_onboarding_flag_lifecycle(ctx, monkeypatch):

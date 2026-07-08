@@ -3,6 +3,26 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.10.0] — 2026-07-08
+
+### Added
+- **TOTP MFA for local accounts (governance-maturity Phase 3.1, part 2 — completes
+  3.1).** Time-based one-time passwords (RFC 6238), **stdlib-only** (`hmac`), for
+  local password logins; SSO logins inherit MFA from the IdP.
+  - `new totp.py` (generate/verify ±1-step skew, constant-time compare, otpauth
+    URI) + `mfa.py` (enroll → confirm → disable → login check). The TOTP secret is
+    **encrypted at rest** and returned in the clear only once, at enrollment.
+  - Routes: `GET /auth/mfa/status`, `POST /auth/mfa/enroll|confirm|disable`;
+    `POST /auth/login` now returns `401 mfa_required` until a valid code is given.
+  - UI: login prompts for the authenticator code on challenge; a "Two-factor
+    authentication" card on the Overview (enroll / confirm / disable).
+- **Hardening:** `POST /auth/login` now returns the user through the same
+  safe projection as `/me` (`id/email/role/team_id/created_at`) — no hashes or
+  the TOTP secret cross the wire.
+
+### Migrations
+- v18: `users.totp_secret` (encrypted), `users.mfa_enabled`. Additive; reversible.
+
 ## [2.9.0] — 2026-07-08
 
 ### Added

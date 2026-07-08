@@ -40,6 +40,10 @@ class User(SQLModel, table=True):
     kind: str = "human"                 # human | agent
     harness_kind: str | None = None     # e.g. claude-code (when kind == agent)
     owner_id: str | None = None
+    # TOTP MFA for local password logins (SSO logins inherit MFA from the IdP).
+    # totp_secret is encrypted at rest; mfa_enabled flips true only after confirm.
+    totp_secret: str = ""
+    mfa_enabled: bool = False
     created_at: str = Field(default_factory=now_iso)
 
 

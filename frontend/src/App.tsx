@@ -432,6 +432,7 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
   const [github, setGithub] = useState(false)
   const [sso, setSso] = useState(false), [ssoName, setSsoName] = useState('')
   const [auditor, setAuditor] = useState(false), [code, setCode] = useState('')
+  const [mfa, setMfa] = useState(false), [mfaCode, setMfaCode] = useState('')
   useEffect(() => {
     api('/auth/providers').then((p) => {
       setGithub(!!p.github); setSso(!!p.sso); setSsoName(p.sso_name || 'SSO')
@@ -439,9 +440,12 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
   }, [])
   async function go() {
     try {
-      const r = await post('/auth/login', { email, password: pw })
+      const r = await post('/auth/login', { email, password: pw, code: mfa ? mfaCode : undefined })
       setToken(r.token); onToken(r.token)
-    } catch { toast.error('invalid email or password') }
+    } catch (e: any) {
+      if (String(e?.message || e).includes('mfa_required')) { setMfa(true); toast.info('Enter your authenticator code') }
+      else toast.error('invalid email or password')
+    }
   }
   async function goAuditor() {
     // an auditor access code IS the bearer token; verify it resolves via /me
@@ -466,6 +470,11 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
             <Input placeholder="password" type="password" value={pw}
                    onChange={(e) => setPw(e.target.value)}
                    onKeyDown={(e) => e.key === 'Enter' && go()} />
+            {mfa && (
+              <Input placeholder="authenticator code" value={mfaCode} inputMode="numeric"
+                     onChange={(e) => setMfaCode(e.target.value)}
+                     onKeyDown={(e) => e.key === 'Enter' && go()} />
+            )}
             <Button onClick={go}>Sign in</Button>
             {sso && (
               <Button variant="outline" onClick={() => { window.location.href = oauthLoginUrl('sso') }}>
@@ -2505,6 +2514,48 @@ function Targets() {
 }
 
 // Visibility-first home: highlight the few actionable things, drill in for detail.
+function MfaCard() {
+  const [ok, setOk] = useState(true), [enabled, setEnabled] = useState(false)
+  const [secret, setSecret] = useState(''), [uri, setUri] = useState(''), [code, setCode] = useState('')
+  const load = () => api('/auth/mfa/status').then((s) => setEnabled(!!s.enabled)).catch(() => setOk(false))
+  useEffect(() => { load() }, [])
+  if (!ok) return null
+  const enroll = () => post('/auth/mfa/enroll', {}).then((r) => { setSecret(r.secret); setUri(r.otpauth_uri) }).catch(fail)
+  const confirm = () => post('/auth/mfa/confirm', { code }).then(() => {
+    setSecret(''); setUri(''); setCode(''); load(); toast.success('MFA enabled')
+  }).catch(() => toast.error('invalid code'))
+  const disable = () => post('/auth/mfa/disable', { code }).then(() => {
+    setCode(''); load(); toast.success('MFA disabled')
+  }).catch(() => toast.error('invalid code'))
+  return (
+    <Card>
+      <CardHeader><CardTitle>Two-factor authentication (TOTP){enabled && <Badge variant="secondary" style={{ marginLeft: '.5rem' }}>enabled</Badge>}</CardTitle></CardHeader>
+      <CardContent>
+        {enabled ? (
+          <div className="field-form">
+            <p className="muted">MFA is on for your account. Enter a current code to turn it off.</p>
+            <Field label="Authenticator code"><Input className="field" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} /></Field>
+            <Button variant="outline" onClick={disable} disabled={!code}>Disable MFA</Button>
+          </div>
+        ) : secret ? (
+          <div className="field-form">
+            <p className="muted">Add this secret to your authenticator app, then confirm with a code.</p>
+            <p className="mono" style={{ wordBreak: 'break-all' }}>{secret}</p>
+            <p className="mono muted" style={{ wordBreak: 'break-all', fontSize: '.75rem' }}>{uri}</p>
+            <Field label="Authenticator code"><Input className="field" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} /></Field>
+            <Button onClick={confirm} disabled={!code}>Confirm &amp; enable</Button>
+          </div>
+        ) : (
+          <div className="field-form">
+            <p className="muted">Protect your account with a time-based one-time password.</p>
+            <Button onClick={enroll}>Set up MFA</Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function Overview({ goto, can = () => true }: { goto: (v: any) => void; can?: (v: any) => boolean }) {
   const [items, setItems] = useState<any[]>([])
   const [pending, setPending] = useState(0)
@@ -2575,6 +2626,7 @@ export function Overview({ goto, can = () => true }: { goto: (v: any) => void; c
           ) : <span className="muted">No work items yet — start one under Work.</span>}
         </CardContent>
       </Card>
+      <MfaCard />
     </section>
   )
 }

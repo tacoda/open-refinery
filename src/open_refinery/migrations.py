@@ -91,6 +91,10 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE approval_requests ADD COLUMN due_at TEXT NOT NULL DEFAULT '';"
     "ALTER TABLE approval_requests ADD COLUMN escalated_at TEXT NOT NULL DEFAULT '';"
     "CREATE INDEX IF NOT EXISTS ix_approval_requests_due_at ON approval_requests (due_at);",
+    # v18 (2.10.0): TOTP MFA for local password accounts. totp_secret is encrypted
+    # at rest; mfa_enabled flips true only after the enrollment code is confirmed.
+    "ALTER TABLE users ADD COLUMN totp_secret TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE users ADD COLUMN mfa_enabled INTEGER NOT NULL DEFAULT 0;",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -130,6 +134,8 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE processes DROP COLUMN approval_sla_hours;"
     "ALTER TABLE approval_requests DROP COLUMN due_at;"
     "ALTER TABLE approval_requests DROP COLUMN escalated_at;",                           # v17
+    "ALTER TABLE users DROP COLUMN totp_secret;"
+    "ALTER TABLE users DROP COLUMN mfa_enabled;",                                        # v18
 ]
 
 

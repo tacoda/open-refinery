@@ -326,6 +326,11 @@ class Setup(BaseModel):
 class Credentials(BaseModel):
     email: str
     password: str
+    code: str | None = None  # TOTP code, required when the account has MFA enabled
+
+
+class MfaCode(BaseModel):
+    code: str
 
 
 class SsoConfig(BaseModel):  # OIDC SSO; only provided fields are updated (secret write-only)
