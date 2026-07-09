@@ -2,7 +2,7 @@
   <img src="frontend/public/favicon.svg" width="72" height="72" alt="Open Refinery" />
 </p>
 <h1 align="center">Open Refinery</h1>
-<p align="center"><em>A dark factory with the lights on.</em></p>
+<p align="center"><em>A factory with the lights on.</em></p>
 
 ---
 
