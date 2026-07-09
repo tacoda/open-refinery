@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Open Refinery — govern AI-driven software work</title>
-<meta name="description" content="Open Refinery is the self-hosted platform layer that governs AI-driven software work: authorized, owned, provenanced, quota'd, filtered, and audited — every step." />
+<meta name="description" content="Open Refinery is the self-hosted platform layer that governs AI-driven software work: authorized, owned, provenanced, quota'd, filtered, and audited — every step. Enterprise identity (SSO, MFA, SCIM), tamper-evident audit, and SOC 2 / ISO 27001 / HIPAA / GDPR evidence." />
 <meta property="og:title" content="Open Refinery" />
 <meta property="og:description" content="An open factory to shine light into the dark. Govern AI-driven software work — every step authorized, owned, provenanced, and audited." />
 <style>
@@ -80,18 +80,21 @@
         <circle cx="16" cy="16" r="3" stroke="currentColor" stroke-width="1.6" opacity=".85"/>
         <circle cx="25" cy="16" r="3.4" fill="#7c3aed"/><circle cx="25" cy="16" r="1.2" fill="#fff"/>
       </svg>Open Refinery</div>
-    <div style="margin:1.2rem 0 .2rem"><span class="tag">Open source · self-hosted · v2.1</span></div>
+    <div style="margin:1.2rem 0 .2rem"><span class="tag">Open source · self-hosted · v2.12</span></div>
     <h1>An open factory to<br><span class="accent">shine light into the dark.</span></h1>
     <p class="lede">The self-hosted platform layer that governs AI-driven software work —
       so every change is <strong>authorized, owned, provenanced, and audited</strong>.
-      Lights-out automation you can actually trust, because you can see it.</p>
+      Lights-out automation you can actually trust, because you can see it —
+      now with the <strong>identity, audit, and compliance controls</strong> regulated and large orgs require.</p>
     <div class="cta">
       <a class="btn btn-primary" href="https://pypi.org/project/open-refinery/">pip install open-refinery</a>
       <a class="btn btn-ghost" href="https://github.com/tacoda/open-refinery">View on GitHub</a>
     </div>
     <div class="pills">
+      <span class="pill">SSO · MFA · SCIM</span>
+      <span class="pill">Tamper-evident audit</span>
+      <span class="pill">SOC 2 · ISO 27001 · HIPAA · GDPR evidence</span>
       <span class="pill">Only SECRET_KEY in the env</span>
-      <span class="pill">SQLite built-in</span>
       <span class="pill">React dashboard bundled</span>
       <span class="pill">MIT licensed</span>
     </div>
@@ -136,9 +139,10 @@
           sequencing stays plain software.</p>
       </div>
       <ul class="check">
-        <li>Identity, <strong>admin-configurable roles</strong>, and authorization on every action</li>
+        <li>Enterprise identity — <strong>SSO (OIDC), MFA, and SCIM</strong> — feeding three scoped roles: developer / platform / admin</li>
+        <li>Role-scoped authorization on <strong>every action</strong> (backend 403 + UI gating), oversight-only admin</li>
         <li>A <strong>human-oversight dial</strong> per process (manual → fully dark)</li>
-        <li>Immutable provenance and a <strong>complete, attributed audit trail</strong></li>
+        <li>A <strong>tamper-evident, hash-chained audit trail</strong> with signed export and compliance evidence packs</li>
         <li>Quotas, content filtering, and structured output at the call site</li>
         <li><strong>Proactive enforcement</strong> — <code class="inline">strict</code> whitelist mode + a pre-action authorize gate</li>
         <li><strong>First-class rollbacks</strong> — revert a whole deployment, not just the code</li>
@@ -193,6 +197,41 @@
         <p>GitHub, GitLab, Jira, Linear — import repos and sync work items, connect by token or OAuth, credentials encrypted at rest.</p></div>
       <div class="card feature"><h3>Visibility-first dashboard + API docs</h3>
         <p>A React dashboard ships in the wheel — an overview that surfaces what needs attention, a work board, and a right-hand detail/action drawer. Self-hosted API docs with live "Try it out" at <code class="inline">/api-docs</code>.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="enterprise">
+  <div class="wrap">
+    <h2><span class="bar"></span>Enterprise &amp; compliance</h2>
+    <p class="sub">Built for regulated industries and large organizations — identity, oversight,
+      and evidence that hold up to an audit. Every control is self-hosted and dependency-light;
+      SSO is OIDC and MFA is standard TOTP, no heavyweight stack to run.</p>
+    <div class="grid">
+      <div class="card feature"><h3>Single sign-on (OIDC)</h3>
+        <p>Log in through your IdP — Okta, Entra, Google, Auth0. Discovery + authorization-code flow maps the IdP's verified email to an existing account; the IdP stays the auth &amp; MFA authority.</p></div>
+      <div class="card feature"><h3>MFA (TOTP)</h3>
+        <p>Time-based one-time passwords for local accounts — enroll, confirm, enforce at login. Standard authenticator apps; SSO logins inherit MFA from the IdP.</p></div>
+      <div class="card feature"><h3>SCIM provisioning</h3>
+        <p>Your IdP provisions, updates, and deprovisions accounts automatically. IdP groups map to developer / platform / admin (most-privileged wins); deprovisioning <strong>deactivates</strong>, preserving audit history.</p></div>
+      <div class="card feature"><h3>Access recertification</h3>
+        <p>Periodic "re-attest who has access" campaigns — snapshot every active user, certify to keep or revoke to deactivate, tracked to completion with overdue campaigns flagged.</p></div>
+      <div class="card feature"><h3>Scoped role model</h3>
+        <p>Three fixed roles — developer owns dev ops, platform authors governance, <strong>admin is oversight-only</strong>. Enforced at the API (403) and gated in the UI; you invite at your level or lower.</p></div>
+      <div class="card feature"><h3>Tamper-evident audit</h3>
+        <p>Every event is <strong>hash-chained</strong> to the last — any edit breaks the recompute. Verify the chain on demand and produce an <strong>HMAC-signed export</strong> for external auditors.</p></div>
+      <div class="card feature"><h3>Compliance evidence packs</h3>
+        <p>Map controls to <strong>SOC 2, ISO 27001, HIPAA, and GDPR</strong> — met / partial / needs-attention with a coverage score, generated from the live audit trail. CSV export for any audit slice.</p></div>
+      <div class="card feature"><h3>Time-boxed auditor access</h3>
+        <p>Mint an expiring, <strong>read-only</strong> access code for an external auditor — a first-class principal that can see evidence and the trail but change nothing, and lapses automatically.</p></div>
+      <div class="card feature"><h3>Approval SLAs &amp; segregation of duties</h3>
+        <p>Gated moves get a deadline; overdue approvals auto-escalate. <strong>Segregation of duties</strong> is enforced — the requester and every signer must be distinct people.</p></div>
+      <div class="card feature"><h3>Behavioral anomaly detection</h3>
+        <p>Flag denial spikes, mass changes by one actor, off-hours agent activity, and a harness running far above its norm — surfaced on the overview and alertable.</p></div>
+      <div class="card feature"><h3>Governance notifications</h3>
+        <p>Alert rules match any audit event — a strict denial, a policy change, an overdue approval, an anomaly — and fan out to <strong>Slack, email, or a webhook</strong>.</p></div>
+      <div class="card feature"><h3>Versioned policy history</h3>
+        <p>Every policy change is an immutable, attributed version — reconstruct exactly <strong>which policies were in effect at any point in time</strong> for a point-in-time audit.</p></div>
     </div>
   </div>
 </section>
