@@ -37,7 +37,9 @@ def context_for(session: Session, run: Run, *, credential: dict | None = None) -
         raise RunnerError(f"unknown repository: {run.repo_id!r}")
 
     driver = forgelib.for_repo(repo.git_url, repo.forge)
+    pipeline = ps.get_pipeline(session, run.pipeline_id)
     return Context(
+        pipeline_model=(pipeline.model if pipeline else ""),
         checkout=repo.git_url,          # a local repo's URL is its path
         repo_slug=forgelib.slug(repo.git_url),
         base=repo.base_branch or "main",
@@ -49,15 +51,36 @@ def context_for(session: Session, run: Run, *, credential: dict | None = None) -
 
 
 def stub_phase(run: Run, stage, ctx: Context) -> Result:
-    """Stand in for a turn until the harness lands.
+    """Stand in for a turn — the offline default.
 
     Deliberately produces what the stage *says* it produces and nothing more, so
     a graph's `requires` / `produces` wiring is exercised for real. It writes no
     files, which is why a run through the stub reaches `commit_and_push` and is
-    correctly told there is no diff.
+    correctly told there is no diff. That refusal is the gate proving it is
+    load-bearing.
     """
     return Result(OK, produced=tuple(stage.produces),
                   reason=f"[stub] {stage.phase} would run here")
+
+
+def harness_phase(session: Session, audit: AuditSink, *, oversight: str = "supervised"):
+    """A phase runner that actually calls a model.
+
+    Built as a closure so `step` keeps its `(run, stage, ctx)` signature — the
+    same one the stub has, which is what lets a run be driven offline and then
+    for real without the runner knowing the difference.
+    """
+    from sqlmodel import Session as _Session
+
+    engine = session.get_bind()
+
+    def run_it(run: Run, stage, ctx: Context) -> Result:
+        from .agent import run_phase
+        return run_phase(session, run, stage, ctx, audit=audit,
+                         session_factory=lambda: _Session(engine),
+                         oversight=oversight)
+
+    return run_it
 
 
 def _grade(stage, text: str) -> tuple[str, dict]:

@@ -337,6 +337,32 @@ def _runs(args: argparse.Namespace) -> int:
     return 0
 
 
+def _phases(args: argparse.Namespace) -> int:
+    import sys
+
+    from .client import ApiError
+
+    api = _client(args)
+    try:
+        for p in api.get("/phases"):
+            mark = "*" if p["builtin"] else " "
+            can = []
+            if p["may_edit"]:
+                can.append("edit")
+            if p["may_run"]:
+                can.append("run")
+            can.append("read")
+            print(f"{mark}{p['name']:<10} {p['model'] or '(pipeline default)':<18} "
+                  f"turns={p['max_turns']:<4} may {'+'.join(can)}")
+            if p["about"]:
+                print(f"{'':<11} {p['about']}")
+        print("\n* shipped default")
+        return 0
+    except ApiError as exc:
+        print(f"error: {exc.detail}", file=sys.stderr)
+        return 1
+
+
 def _create_admin(args: argparse.Namespace) -> int:
     import getpass
     import sys
@@ -574,6 +600,11 @@ def main(argv: list[str] | None = None) -> int:
     r_adv.add_argument("--all", action="store_true", help="until it stops")
     run_sub.add_parser("approve", help="clear a held stage").add_argument("id")
     runs.set_defaults(func=_runs)
+
+    ph = sub.add_parser("phases", help="what each phase may do (via the API)")
+    ph.add_argument("--url", default=None)
+    ph.add_argument("--token", default=None)
+    ph.set_defaults(func=_phases)
 
     admin = sub.add_parser("create-admin", help="create the initial admin user")
     admin.add_argument("--email", required=True)

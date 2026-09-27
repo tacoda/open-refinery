@@ -334,6 +334,16 @@ class RepoSettings(BaseModel):
     ingest_interval_hours: int | None = None
 
 
+class PhaseBody(BaseModel):
+    """A team's override of one phase. Omitted fields keep the built-in."""
+    prompt: str | None = None
+    model: str | None = None
+    thinking: str | None = None
+    max_turns: int | None = None
+    tools: list[str] | None = None
+    subagents: bool | None = None
+
+
 class PipelineBody(BaseModel):
     """A stage graph. `stages` is the only required part."""
     name: str = "pipeline"

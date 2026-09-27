@@ -186,6 +186,25 @@ class Pipeline(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
+class PhaseConfig(SQLModel, table=True):
+    """A team's override of one phase — see `pipeline/phases.py`.
+
+    Only what is set here overrides the built-in, so changing a turn cap does
+    not silently clear the prompt. The tool grant is rung 1 of the ladder: a
+    phase is not told not to edit, it is never handed an editor.
+    """
+    __tablename__ = "phase_configs"
+    name: str = Field(primary_key=True)
+    prompt: str = ""
+    model: str = ""
+    thinking: str = ""
+    max_turns: int = 0                 # 0 = keep the built-in
+    tools: list = Field(default_factory=list, sa_column=Column(JSON))
+    subagents: bool | None = None
+    updated_by: str | None = None
+    updated_at: str = Field(default_factory=now_iso)
+
+
 class Run(SQLModel, table=True):
     """One journey of one work item through one pipeline.
 

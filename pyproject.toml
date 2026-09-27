@@ -1,6 +1,6 @@
 [project]
 name = "open-refinery"
-version = "2.19.0"
+version = "2.20.0"
 description = "A factory for producing artifacts under governance — provenance, ownership, authorization, and an append-only audit trail on every output."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,6 +20,12 @@ dependencies = [
     "websockets>=12",       # WebSocket transport for uvicorn (live UI channel)
     "cryptography>=43",
     "sqlmodel>=0.0.24",
+    # The harness (pillar 2): the turn loop, filesystem tools, tool grants,
+    # sub-agents, skills, interrupts and checkpointing. Pinned with a ceiling
+    # because it is pre-1.0 and moves fast, and `pipeline/agent.py` is the only
+    # module that imports it — so an upstream API change has a one-file blast
+    # radius rather than reaching the factory.
+    "deepagents>=0.7,<0.8",
 ]
 
 [project.optional-dependencies]

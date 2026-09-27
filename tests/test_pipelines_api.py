@@ -232,3 +232,64 @@ def test_another_developer_can_approve_and_it_is_audited(ctx):
 
     events = client.get("/events", headers=hdr("admin")).json()
     assert any(e["recipe"] == "run-approved" for e in events)
+
+
+# --- connecting a key is the only thing that has to change ------------------
+
+def test_a_run_uses_the_stub_until_a_model_is_connected(ctx):
+    """A fresh install walks the whole graph offline. That is what makes the
+    factory inspectable before anybody has paid for anything."""
+    from open_refinery.pipeline.runner import stub_phase
+    from open_refinery.routers.pipelines import _phase_runner
+    from open_refinery.pipeline import store as ps
+
+    session, client, hdr, item = ctx
+    client.post("/pipelines", headers=hdr("platform"), json=default_pipeline())
+    run_id = client.post("/runs", headers=hdr("developer"),
+                         json={"work_item_id": item.id}).json()["id"]
+
+    run = ps.get_run(session, run_id)
+    assert _phase_runner(session, run) is stub_phase
+
+
+def test_connecting_a_model_key_switches_the_run_to_the_harness(ctx, monkeypatch):
+    """The one change between a dry run and a real one."""
+    from open_refinery import credentials as creds
+    from open_refinery.pipeline.runner import stub_phase
+    from open_refinery.routers.pipelines import _phase_runner
+    from open_refinery.pipeline import store as ps
+
+    session, client, hdr, item = ctx
+    client.post("/pipelines", headers=hdr("platform"), json=default_pipeline())
+    run_id = client.post("/runs", headers=hdr("developer"),
+                         json={"work_item_id": item.id}).json()["id"]
+
+    monkeypatch.setattr(creds, "verify_credential",
+                        lambda key, cred: {"account": "anthropic"})
+    client.post("/credentials", headers=hdr("developer"),
+                json={"provider": "anthropic", "credential": {"api_key": "sk-test"}})
+
+    run = ps.get_run(session, run_id)
+    assert _phase_runner(session, run) is not stub_phase
+
+
+def test_the_key_belongs_to_the_person_who_started_the_run(ctx, monkeypatch):
+    """Somebody else's key does not make your run real — cost attributes to the
+    person accountable for the work."""
+    from open_refinery import credentials as creds
+    from open_refinery.pipeline.runner import stub_phase
+    from open_refinery.routers.pipelines import _phase_runner
+    from open_refinery.pipeline import store as ps
+
+    session, client, hdr, item = ctx
+    client.post("/pipelines", headers=hdr("platform"), json=default_pipeline())
+    run_id = client.post("/runs", headers=hdr("developer"),
+                         json={"work_item_id": item.id}).json()["id"]
+
+    monkeypatch.setattr(creds, "verify_credential",
+                        lambda key, cred: {"account": "anthropic"})
+    client.post("/credentials", headers=hdr("lead"),      # a different person
+                json={"provider": "anthropic", "credential": {"api_key": "sk-test"}})
+
+    run = ps.get_run(session, run_id)
+    assert _phase_runner(session, run) is stub_phase

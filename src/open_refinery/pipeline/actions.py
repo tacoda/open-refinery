@@ -34,6 +34,7 @@ class Context:
     prepare_cmd: str = ""
     cleanup_cmd: str = ""
     author: str = ""             # "Name <email>", so the commit names a person
+    pipeline_model: str = ""     # the workflow default a phase falls back to
 
     def driver(self) -> forgelib.Forge:
         return self.forge or forgelib.FORGES["local"]

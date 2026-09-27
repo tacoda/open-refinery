@@ -3,6 +3,57 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.20.0] — 2026-09-27
+
+*Phase 5 on the [road to 3.0](docs/PLAN-3.0.md): the harness. A phase now runs a
+real turn, and every tool it reaches for is governed.*
+
+### Added
+- **`deepagents` as a core dependency**, pinned `>=0.7,<0.8` with a ceiling
+  because it is pre-1.0 and carries pillar 2. **`pipeline/agent.py` is the only
+  module that imports it** — a test enforces that, so an upstream API change has
+  a one-file blast radius rather than reaching the factory.
+- **`pipeline/phases.py`** — what one turn is allowed to be: model, thinking,
+  turn cap, **tool grant**, and the prompt it is actually asked. The grant is
+  **rung 1** of the ladder: a phase is not told not to edit, it is *never handed
+  an editor*, which is why `prove` and `review` need no predicate to be stopped
+  from repairing what they find. Seven ship; a team overrides a row, and only
+  what it sets is overridden.
+- **`pipeline/middleware.py`** — governance per tool call, and **no framework in
+  it**: `Governed` decides, `agent.py` adapts it to the harness's hook. The
+  content filter runs over arguments *including nested ones*, quota is checked
+  before it is consumed, and every call is audited against its run — so a run's
+  whole tool history is one query.
+  - A refusal is **handed back to the model as a tool result**, not raised. An
+    exception ends the turn; a refusal the model can read is one it can work
+    around, which is the difference between a governed agent and a broken one.
+- **`pipeline/agent.py`** — the turn. The filesystem is rooted at the run's
+  worktree so it cannot write outside; the repository's own rules reach it as
+  `memory` (what `ingest` was reading all along); and the model is resolved
+  through the **actor's own credential**, so cost attributes to the person
+  accountable for the work.
+- **Oversight becomes interrupts.** `manual` asks about every call, `assisted`
+  about every write, `supervised` about execution. At `autonomous` and `dark`
+  nothing is asked — **`ask` never becomes `allow`**, it degrades to the ladder
+  refusing. An unknown level falls back to `supervised`, so a typo cannot
+  silently mean "nobody is asked".
+- `GET /phases` (open — a constraint nobody can read is one nobody can rely on)
+  and `PUT /phases/{name}` (`approve:harness`, because the harness is the
+  lead's). `open-refinery phases` prints what each may do.
+
+### Changed
+- **A run uses the harness when the person who started it has a model key, and
+  the stub when they do not.** A fresh install walks the whole graph offline,
+  and connecting a key is the only thing that has to change to make it real.
+  Somebody *else's* key does not make your run real.
+
+### Not yet verified
+A live model call. The wiring is tested up to the call itself — the grant, the
+interrupts, the governance decisions, the brief, and the failure when no key is
+connected — but no turn has been run against a real provider in this session.
+
+701 tests pass.
+
 ## [2.19.0] — 2026-09-27
 
 *Phase 4 on the [road to 3.0](docs/PLAN-3.0.md): the worktree, the forge, and

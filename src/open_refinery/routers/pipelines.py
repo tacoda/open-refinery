@@ -41,6 +41,52 @@ def get_pipelines(all_versions: bool = False, session: Session = Depends(get_ses
     return [_view(r) for r in ps.list_pipelines(session, all_versions=all_versions)]
 
 
+@router.get("/phases")
+def get_phases(session: Session = Depends(get_session), _: User = Depends(current_user)):
+    """Every phase and what it may do.
+
+    Open to anyone signed in: the tool grant is rung 1 of the ladder, and a
+    constraint nobody can read is one nobody can rely on.
+    """
+    from ..pipeline.phases import catalog
+    return catalog(session)
+
+
+@router.put("/phases/{name}")
+def set_phase(name: str, body: PhaseBody, session: Session = Depends(get_session),
+              user: User = Depends(approves("harness"))):
+    """Change what a turn is allowed to be — the harness, which is the lead's.
+
+    Only what is set here overrides the built-in, so changing a turn cap does
+    not silently clear the prompt.
+    """
+    from ..models import PhaseConfig
+    from ..pipeline.phases import ALL_TOOLS, resolve
+
+    unknown = [t for t in (body.tools or []) if t not in ALL_TOOLS]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"unknown tools: {unknown}")
+
+    row = session.get(PhaseConfig, name) or PhaseConfig(name=name)
+    for field in ("prompt", "model", "thinking", "max_turns", "tools", "subagents"):
+        value = getattr(body, field)
+        if value is not None:
+            setattr(row, field, value)
+    row.updated_by = user.id
+    session.add(row)
+    session.commit()
+
+    effective = resolve(session, name)
+    SqliteSink(session).write(Record.of(
+        recipe="phase-changed", actor=user.id, owner=user.id,
+        inputs={"tools": list(effective.tools), "model": effective.model,
+                "max_turns": effective.max_turns},
+        output=name, subject=name))
+    return {"name": name, "tools": list(effective.tools), "model": effective.model,
+            "thinking": effective.thinking, "max_turns": effective.max_turns,
+            "may_edit": effective.may_edit, "may_run": effective.may_run}
+
+
 @router.get("/pipelines/actions")
 def get_actions(_: User = Depends(current_user)):
     """What a stage can do when it is not running a phase — for the canvas
@@ -251,12 +297,54 @@ def advance_run(run_id: str, all_the_way: bool = False,
     except creds_mod.NoCredential as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    # Use the real harness when this person has a model key, and the stub when
+    # they do not — so a fresh install can walk the whole graph offline, and
+    # connecting a key is the only thing that has to change to make it real.
+    phase_runner = _phase_runner(session, run)
+
     try:
         move = drive if all_the_way else step
-        updated = move(session, run, SqliteSink(session), credential=credential)
+        updated = move(session, run, SqliteSink(session), credential=credential,
+                       phase_runner=phase_runner)
     except RunnerError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _run_view(session, updated)
+
+
+def _phase_runner(session, run):
+    """The harness if a model is connected, else the offline stub."""
+    from ..models import Process, WorkItem
+    from ..pipeline.runner import harness_phase, stub_phase
+
+    pipeline = ps.get_pipeline(session, run.pipeline_id)
+    graph = ps.graph_of(pipeline) if pipeline else None
+    wanted = _model_of(graph, session, run)
+    if not wanted:
+        return stub_phase
+    try:
+        creds_mod.for_actor(session, run.actor_id, wanted)
+    except creds_mod.NoCredential:
+        return stub_phase
+
+    # Oversight comes from the work item's process, so how closely a run is
+    # watched is the team's setting rather than the harness's.
+    item = session.get(WorkItem, run.work_item_id)
+    process = session.get(Process, item.process_id) if item else None
+    level = process.oversight if process else "supervised"
+    return harness_phase(session, SqliteSink(session), oversight=level)
+
+
+def _model_of(graph, session, run) -> str:
+    """Which provider this run's phases would need a key for."""
+    from ..pipeline.agent import _provider_of
+    from ..pipeline.phases import resolve
+
+    if graph is None:
+        return ""
+    models = {resolve(session, s.phase).model or graph.model
+              for s in graph.stages.values() if s.phase}
+    providers = {_provider_of(m) for m in models if m}
+    return next(iter(providers), "")
 
 
 def _forge_credential(session, run) -> dict:

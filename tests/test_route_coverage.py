@@ -57,6 +57,8 @@ REQUIRED = {
     "charter presets": "/repositories/charter-presets",
     "a repo's charter": "/repositories/{repo_id}/charter",
     "the action palette": "/pipelines/actions",
+    "what each phase may do": "/phases",
+    "change a phase": "/phases/{name}",
     "runs": "/runs",
     "one run": "/runs/{run_id}",
     "what happens next": "/runs/{run_id}/next",

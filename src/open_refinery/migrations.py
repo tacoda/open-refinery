@@ -149,7 +149,10 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE repositories ADD COLUMN prepare_cmd TEXT NOT NULL DEFAULT '';"
     "ALTER TABLE repositories ADD COLUMN cleanup_cmd TEXT NOT NULL DEFAULT '';"
     "ALTER TABLE repositories ADD COLUMN test_cmd TEXT NOT NULL DEFAULT '';",
-    # v27 (2.17.0): the factory's own tables — pipelines, runs, run steps. New
+    # v27 (2.20.0): a team may override a phase. New table — `create_all` makes
+    # it; this entry is the version bump.
+    "SELECT 1;",
+    # v28 (2.17.0): the factory's own tables — pipelines, runs, run steps. New
     # tables are created by `create_all`; this entry is the version bump so an
     # existing install records that it has them.
     "SELECT 1;",
@@ -220,7 +223,10 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE repositories DROP COLUMN test_cmd;",                                    # v26
     "DROP TABLE IF EXISTS run_steps;"
     "DROP TABLE IF EXISTS runs;"
-    "DROP TABLE IF EXISTS pipelines;",                                                   # v27
+    "DROP TABLE IF EXISTS phase_configs;",                                               # v27
+    "DROP TABLE IF EXISTS run_steps;"
+    "DROP TABLE IF EXISTS runs;"
+    "DROP TABLE IF EXISTS pipelines;",                                                   # v28
 ]
 
 
