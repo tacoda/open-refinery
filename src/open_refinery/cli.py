@@ -13,12 +13,107 @@ from .factory import Factory
 def _serve(args: argparse.Namespace) -> int:
     import uvicorn
 
+    from .config import get as setting
     from .web import create_app_from_env
 
     # precedence: --port flag > PORT env > default 8000
-    port = args.port if args.port is not None else int(os.environ.get("PORT", 8000))
-    host = args.host or os.environ.get("HOST", "0.0.0.0")
-    uvicorn.run(create_app_from_env(), host=host, port=port)
+    port = args.port if args.port is not None else int(setting("PORT"))
+    host = args.host or setting("HOST")
+    uvicorn.run(create_app_from_env(), host=host, port=port,
+                log_level=setting("LOG_LEVEL").lower())
+    return 0
+
+
+def _open_session(url: str):
+    """A session on the store, or None when it cannot be opened.
+
+    `doctor` and `config` must work on a broken or absent database — reporting
+    that it is broken is most of their job — so a failure here is a return
+    value rather than a traceback.
+    """
+    from .store import connect
+    try:
+        return connect(url)
+    except Exception:  # noqa: BLE001 — the caller reports the failure as a check
+        return None
+
+
+def _init(args: argparse.Namespace) -> int:
+    """First run: write .env with a generated SECRET_KEY, create and migrate the DB."""
+    import secrets as _secrets
+    import sys
+    from pathlib import Path
+
+    from .config import KEYS
+    from .store import DEFAULT_DATABASE_URL, connect
+
+    env_path = Path(args.env_file)
+    if env_path.exists() and not args.force:
+        print(f"{env_path} already exists — not overwriting (use --force)", file=sys.stderr)
+        return 1
+
+    secret = _secrets.token_urlsafe(32)
+    url = args.database_url or os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
+    helps = {k.name: k.help for k in KEYS}
+    env_path.write_text(
+        "# Written by `open-refinery init`. Keep this file out of version control.\n"
+        f"# SECRET_KEY: {helps['SECRET_KEY']}\n"
+        f"SECRET_KEY={secret}\n"
+        f"# DATABASE_URL: {helps['DATABASE_URL']}\n"
+        f"DATABASE_URL={url}\n"
+        "# PORT=8000\n"
+        "# LOG_LEVEL=info\n"
+    )
+    env_path.chmod(0o600)  # it holds the key every stored secret is encrypted with
+
+    os.environ["SECRET_KEY"] = secret  # so the store can write its encrypted rows
+    os.environ["DATABASE_URL"] = url
+    connect(url)  # creates tables and runs pending migrations
+
+    print(f"wrote {env_path} (mode 600) with a generated SECRET_KEY")
+    print(f"initialized {url}")
+    print()
+    print("next:")
+    load = f"set -a; . ./{env_path}; set +a"
+    print(f"  {load:<34} # load it into your shell")
+    print(f"  {'open-refinery serve':<34} # then open http://localhost:8000")
+    return 0
+
+
+def _doctor(args: argparse.Namespace) -> int:
+    from .doctor import FAIL, OK, WARN, doctor
+    from .store import DEFAULT_DATABASE_URL
+
+    url = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
+    report = doctor(_open_session(url), database_url=url)
+
+    mark = {OK: "ok  ", WARN: "warn", FAIL: "FAIL"}
+    for c in report.checks:
+        print(f"[{mark[c.status]}] {c.name:<14} {c.detail}")
+        if c.remedy:
+            print(f"{'':>21}→ {c.remedy}")
+    counts = report.counts
+    print()
+    print(f"{counts[OK]} ok, {counts[WARN]} warning(s), {counts[FAIL]} failure(s)")
+    return 1 if report.failed else 0
+
+
+def _config(args: argparse.Namespace) -> int:
+    from .config import effective
+    from .store import DEFAULT_DATABASE_URL
+
+    url = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
+    values = effective(_open_session(url))
+    if args.all is False:
+        values = [v for v in values if v.is_set]
+
+    width = max((len(v.key) for v in values), default=0)
+    for v in values:
+        print(f"{v.key:<{width}}  {v.value or '—':<28} [{v.source}]")
+        if args.verbose:
+            print(f"{'':<{width}}  {v.help}")
+    if not values:
+        print("nothing configured beyond the built-in defaults (use --all to see them)")
     return 0
 
 
@@ -168,6 +263,20 @@ def _demo(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="open-refinery")
     sub = parser.add_subparsers(dest="command")
+
+    init = sub.add_parser("init", help="first run: write .env and create the database")
+    init.add_argument("--env-file", default=".env", help="where to write it (default: .env)")
+    init.add_argument("--database-url", default=None, help="override DATABASE_URL")
+    init.add_argument("--force", action="store_true", help="overwrite an existing env file")
+    init.set_defaults(func=_init)
+
+    doctor = sub.add_parser("doctor", help="check what is missing or broken")
+    doctor.set_defaults(func=_doctor)
+
+    config = sub.add_parser("config", help="print every effective setting and its source")
+    config.add_argument("--all", action="store_true", help="include values still at their default")
+    config.add_argument("--verbose", "-v", action="store_true", help="explain each setting")
+    config.set_defaults(func=_config)
 
     serve = sub.add_parser("serve", help="run the HTTP API")
     serve.add_argument("--host", default=None, help="bind host (or $HOST, default 0.0.0.0)")

@@ -74,6 +74,9 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
             "ALTER TABLE targets DROP COLUMN region",
             "ALTER TABLE targets DROP COLUMN compliance",
             "ALTER TABLE targets DROP COLUMN unit_cost",
+            "ALTER TABLE events DROP COLUMN chain_algo",
+            "ALTER TABLE audit_chain_state DROP COLUMN algo",
+            "ALTER TABLE audit_chain_state DROP COLUMN signature",
             "DROP TABLE systems",
             "PRAGMA user_version = 7",   # pretend this is a 1.0-era install (schema v7)
         ):

@@ -61,10 +61,13 @@ def test_signed_export_recomputes_and_signs(monkeypatch):
         s.write(_rec(i))
     exp = export_chain(conn)
     assert exp["count"] == 3 and exp["chain_head"] and exp["signature"]
-    # signature verifies against the head with the same key
-    import hashlib, hmac, os
-    expect = hmac.new(os.environ["SECRET_KEY"].encode(), exp["chain_head"].encode(), hashlib.sha256).hexdigest()
-    assert exp["signature"] == expect
+    # The signature covers every exported event, not just the head. Signing the
+    # head alone proved nothing about the rows beside it — an attacker who
+    # rewrote history could export a head they controlled and a signature over
+    # it that verified perfectly.
+    from open_refinery.store import verify_export
+    assert verify_export(exp)["ok"] is True
+    assert verify_export({**exp, "events": exp["events"][1:]})["ok"] is False
     # exported rows are in chain order (each prev_hash == previous entry_hash)
     rows = exp["events"]
     for a, b in zip(rows, rows[1:]):

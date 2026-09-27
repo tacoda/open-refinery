@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install ui ui-dev ui-test types apidocs test serve dev seed demo clean dist publish
+.PHONY: help install ui ui-dev ui-test types apidocs test serve dev seed demo clean dist publish doctor config init
 
 # --- dev-only convenience (end users use `pip install open-refinery && open-refinery serve`) ---
 # Secrets live in .env (gitignored); `make dev` sources it. DB is a local file.
@@ -32,6 +32,17 @@ ui-test: ## Run the frontend component tests (Vitest, mocked API)
 
 test: ## Run the test suite
 	uv run pytest -q
+
+init: ## First run: generate .env (SECRET_KEY) and create the database
+	uv run open-refinery init
+
+doctor: ## Check what is missing or broken (exits non-zero on a failure)
+	@test -f .env && { set -a; . ./.env; set +a; } ; \
+		DATABASE_URL=$(DEV_DB) uv run open-refinery doctor
+
+config: ## Print every effective setting and where its value came from
+	@test -f .env && { set -a; . ./.env; set +a; } ; \
+		DATABASE_URL=$(DEV_DB) uv run open-refinery config --all
 
 serve: ## Run the HTTP server (background it yourself: make serve &)
 	uv run open-refinery serve

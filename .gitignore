@@ -15,7 +15,10 @@ build/
 # frontend deps + build output (SPA is built at release time, shipped in the wheel)
 frontend/node_modules/
 frontend/dist/
-src/open_refinery/static/
+src/open_refinery/static/*
+# ...but keep the directory itself: the wheel force-includes it, so a clean
+# clone must be able to build without `make ui` having run first.
+!src/open_refinery/static/.gitkeep
 # env
 .env
 # personal Claude Code permissions (not shared)

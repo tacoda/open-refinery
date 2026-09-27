@@ -3,6 +3,76 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.13.0] — 2026-09-27
+
+*Phase 0 on the [road to 3.0](docs/PLAN-3.0.md): a clean clone installs, tests
+and serves without a detour.*
+
+### Added
+- **`open-refinery init`** — first run in one command: generates a `SECRET_KEY`,
+  writes `.env` at mode 600, creates the database and applies migrations, then
+  prints the two lines needed to start. Refuses to clobber an existing env file
+  without `--force`, because overwriting it rotates `SECRET_KEY` and makes every
+  stored service token permanently unreadable.
+- **`open-refinery doctor`** — what is missing or broken, in the order a person
+  debugs in: secret key, database, admin user, audit chain, git, model SDKs,
+  targets, connections, dashboard. Every non-passing check carries a **remedy**,
+  not just a diagnosis. Exits non-zero on a failure, so it works in CI.
+- **`open-refinery config`** — every effective setting **tagged with the source
+  that produced it** (built-in default / environment / database), so a default is
+  never a magic number to go hunting for. `--all` includes unset keys, `-v`
+  explains each. Secrets report `(set)` and are never printed.
+- **`config.py`** — the settings catalog: the one place a setting is declared,
+  covering the six environment variables and seven database-backed keys the app
+  actually reads.
+- **`doctor.py`** — the checks, as pure functions of a session and an
+  environment, so the whole report is testable without a server.
+
+### Security
+- **The audit chain is now tamper-*resistant*, not just tamper-evident.** Two of
+  four attacks passed silently before this release; both are now regression
+  tests (`tests/test_audit_tamper.py`, written failing first).
+  - **Forged event + recomputed chain — was undetected.** `entry_hash` was an
+    unkeyed `sha256`, so anyone with database write access could rewrite who did
+    what, recompute every link and the head, and pass `verify_chain`. Links are
+    now `HMAC-SHA256` under a key derived from `SECRET_KEY`, which lives in the
+    environment and never in the store.
+  - **Deleting the oldest events — was undetected.** A deleted prefix was read as
+    a legitimate retention purge and verified clean. `purge_events` now writes a
+    **signed `AuditCheckpoint`** naming what it removed and where the surviving
+    chain restarts; `verify_chain` refuses any gap no valid checkpoint accounts
+    for, and a forged checkpoint fails its signature.
+  - **Algorithm downgrade.** Relabelling rows as the legacy unkeyed construction
+    is the one recomputation an attacker without the key *can* do. The chain head
+    is now authenticated (`AuditChainState.signature`), so a wholesale rewrite
+    produces a head they cannot sign.
+  - **The signed export covered only the head** — so an attacker who rewrote
+    history could export their forged head with a signature over it that verified
+    perfectly. It now covers **every exported event**, and `verify_export()` is
+    the auditor's side of that check.
+  - **Key separation.** `SECRET_KEY` had three jobs (Fernet encryption, chain
+    integrity, export signing). Each now gets a derived subkey by domain, so a
+    leak of one does not compromise the others.
+  - Pre-2.13 unkeyed rows still verify, so upgrades do not read as tampering.
+    Migrations **v20** (`events.chain_algo`) and **v21** (`audit_chain_state.algo`,
+    `.signature`), both with reverses in `DOWNGRADES`.
+  - **What this still cannot stop**, stated plainly: someone holding `SECRET_KEY`,
+    and someone deleting the database outright. Off-box mirroring answers the
+    second and is on the 3.0 roadmap; nothing local answers the first. A rotated
+    `SECRET_KEY` is indistinguishable from tampering — `doctor` says so.
+
+### Fixed
+- **A clean clone could not be installed.** The wheel force-includes
+  `src/open_refinery/static`, which only existed after `make ui`, so `uv sync`
+  failed with `Forced include not found`. The directory is now tracked via a
+  `.gitkeep`.
+- **`make test` failed on a clean clone.** 15 tests need `SECRET_KEY` and
+  nothing set one; the failure read as a broken checkout rather than a missing
+  export. A root `conftest.py` now sets a fixed test key.
+- **`LOG_LEVEL` was documented but never read.** `.env.example` has advertised it
+  since 0.3.0; `serve` now passes it to uvicorn. `HOST` and `PORT` resolve
+  through the same catalog, so all three agree with what `config` reports.
+
 ## [2.12.1] — 2026-07-08
 
 ### Fixed

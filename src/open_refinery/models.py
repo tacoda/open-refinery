@@ -316,17 +316,51 @@ class Event(SQLModel, table=True):
     output_digest: str
     subject: str | None = Field(default=None, index=True)
     created_at: str = Field(default_factory=now_iso, index=True)
-    # tamper-evident hash chain: entry_hash = sha256(prev_hash + canonical fields).
-    # Editing any event breaks the recompute; a signed export proves origin.
+    # Tamper-resistant hash chain. entry_hash = HMAC(k_chain, prev_hash + canonical
+    # fields), where k_chain is derived from SECRET_KEY — so recomputing the chain
+    # after an edit needs a secret the database does not contain. `chain_algo`
+    # records which construction signed this row: pre-2.13 installs hold unkeyed
+    # "sha256" rows, which still verify, but cannot be forged forward.
     prev_hash: str = ""
     entry_hash: str = Field(default="", index=True)
+    chain_algo: str = "sha256"
 
 
 class AuditChainState(SQLModel, table=True):
-    """Single-row running head of the audit hash chain."""
+    """Single-row running head of the audit hash chain — and its anchor.
+
+    `signature` is an HMAC over (head, algo) with a key derived from SECRET_KEY.
+    It is what stops a wholesale rewrite: an attacker can relabel every event
+    row as the old unkeyed construction and recompute the lot, but the head that
+    produces will not match a signature they cannot compute. Per-row hashes say
+    *which* row broke; this says the chain as a whole is the one we wrote.
+
+    Blank on installs that predate 2.13 and have written nothing since.
+    """
     __tablename__ = "audit_chain_state"
     id: str = Field(default="head", primary_key=True)
     head: str = ""
+    algo: str = ""
+    signature: str = ""
+
+
+class AuditCheckpoint(SQLModel, table=True):
+    """A signed explanation for a gap in the chain.
+
+    Retention deletes events, which leaves a hole that looks exactly like an
+    attacker removing evidence — and before this table existed, deleting the
+    oldest events verified clean. Every purge now writes one of these, signed
+    with a key derived from SECRET_KEY, and `verify_chain` refuses any gap that
+    no valid checkpoint accounts for.
+    """
+    __tablename__ = "audit_checkpoints"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    kind: str = "purge"               # purge | periodic
+    created_at: str = Field(default_factory=now_iso, index=True)
+    head: str = ""                    # chain head at the moment of the checkpoint
+    cut_to: str = ""                  # prev_hash the surviving chain now starts from
+    deleted_count: int = 0
+    signature: str = ""               # HMAC over the fields above
 
 
 class NotificationRule(SQLModel, table=True):

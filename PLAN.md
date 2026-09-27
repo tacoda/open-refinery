@@ -515,6 +515,21 @@ legible. (Not a 3.0 cut — more is planned before 3.0.)
 immutable retention · multi-environment promotion gates (dev→staging→prod) ·
 Postgres / Celery-Redis scale-out (deferred infra).
 
+## Road to 3.0
+
+**3.0 is planned in [docs/PLAN-3.0.md](docs/PLAN-3.0.md).** Two halves, shipped
+together: every service connection becomes an API key / PAT (every
+authorization-code flow deleted, OAuth *and* OIDC), and the **factory** lands —
+a work item can be *run*, a governed agent works in a git worktree, and a pull
+request comes out. Design lineage is [ghola](https://github.com/tacoda/ghola):
+its stage graph, its contracts, and its constraint ladder.
+
+That plan changes the thesis below and says so: open-refinery 3.0 ships a
+**reference harness that runs inside the platform's governance boundary**.
+External harnesses still call through the API unchanged — the platform does not
+*become* a harness, it gains one, and the governance seam is the same seam,
+applied per tool call instead of per API call.
+
 ## Roadmap
 
 | Version | Deliverable                                                          |

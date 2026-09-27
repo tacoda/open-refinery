@@ -98,6 +98,15 @@ MIGRATIONS: list[str] = [
     # v19 (2.11.0): SCIM deprovisioning soft-deactivates users (active=0) rather
     # than deleting them; inactive users can't authenticate.
     "ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1;",
+    # v20 (2.13.0): the audit chain becomes keyed. Existing rows keep their
+    # unkeyed sha256 hashes and still verify; everything written from here is
+    # HMAC'd with a key derived from SECRET_KEY, so the chain cannot be
+    # recomputed by anyone holding only the database.
+    "ALTER TABLE events ADD COLUMN chain_algo TEXT NOT NULL DEFAULT 'sha256';",
+    # v21 (2.13.0): the chain head is authenticated, so a wholesale rewrite that
+    # relabels every row as the old unkeyed construction still fails.
+    "ALTER TABLE audit_chain_state ADD COLUMN algo TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE audit_chain_state ADD COLUMN signature TEXT NOT NULL DEFAULT '';",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -140,6 +149,9 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE users DROP COLUMN totp_secret;"
     "ALTER TABLE users DROP COLUMN mfa_enabled;",                                        # v18
     "ALTER TABLE users DROP COLUMN active;",                                             # v19
+    "ALTER TABLE events DROP COLUMN chain_algo;",                                        # v20
+    "ALTER TABLE audit_chain_state DROP COLUMN algo;"
+    "ALTER TABLE audit_chain_state DROP COLUMN signature;",                              # v21
 ]
 
 
