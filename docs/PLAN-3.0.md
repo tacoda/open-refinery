@@ -850,7 +850,7 @@ and its `DOWNGRADES` reverse.
 | 1 | 2.14.0 | **Tokens only.** `credentials.py` + catalog + API + Connections UI. Every OAuth and OIDC path deleted; migration drops `connect_states`. |
 | 1.5 | 2.14.5 | **The authority model** (§2.5). `authority.py`; customizable roles with explicit powers + admin role CRUD; `require()` guards stop naming role literals; `owner_scope` splits operations from audit; the `layer` naming collision; the `"senior"` fail-open repaired. |
 | 2 | 2.15.0 | **Sign-up.** `org.signup` modes, `POST /auth/signup`, onboarding that ends on a verified credential. |
-| 3 | 2.16.0 | **The graph.** `spec.py`, `graph.py`, `contracts.py`, `document.py`, `phases.py`, the `Pipeline` + `Run` + `RunStep` models. Pure and fully tested — no agent, no git, no forge. |
+| 3 | 2.16.0 | **The graph** (incl. per-stage `approve:` — plan approval, §10.3). `spec.py`, `graph.py`, `contracts.py`, `document.py`, `phases.py`, the `Pipeline` + `Run` + `RunStep` models. Pure and fully tested — no agent, no git, no forge. |
 | 4 | 2.17.0 | **Workspace + forge.** `workspace.py`, `forge.py` (github/gitlab/local), `actions.py`. A run reaches a real PR with a stub phase. |
 | 5 | 2.18.0 | **The harness.** `deepagents`, `agent.py`, `GovernanceMiddleware`, routing through `Target`, oversight → interrupts → the approvals queue. |
 | 6 | 2.19.0 | **The ladder.** `Constraint`, rungs, withheld grants, the delivery gate, `/ladder` + UI. |
@@ -950,3 +950,64 @@ Shipping them per-phase rather than saving a CLI push for Phase 8 is deliberate:
 a command written beside its route stays honest about what the API can actually
 do, and a governance product whose only surface is a SPA is one nobody can
 script, cron or debug over ssh.
+
+---
+
+## 10. Prior art: closedloop.ai
+
+<https://www.closedloop.ai/> — "Requirements become plans, plans drive
+execution, and results surface as previews." A team workspace for coordinating
+agents across the SDLC: requirements/PRDs → plans → team review → agents execute
+→ live progress → validation before merge → previews. Their nouns are
+**Requirements**, **Plans**, **Branches**, **Previews** and **Loops**.
+
+It is close enough to this plan to be worth reading carefully, and the overlap
+is genuine: plans before execution, human alignment before the expensive turn,
+work visible while it runs, outputs validated before merge, several workflows in
+parallel with shared context so agents do not restart from scratch.
+
+### 10.1 The difference that matters
+
+**They supervise agents; open-refinery runs them.** In their model a person is
+in the loop watching work stream by. Here, a run is a **row in a queue that
+workers claim** (§3.0.2, §3.9): it advances on the server, unattended, and
+survives a restart because the `Run` row is the durable state rather than a
+session someone has open. Oversight is a dial (§3.5), not a requirement — a
+`dark` process runs lights-out and the ladder still refuses deterministically.
+
+That is the whole "dark factory, open record" thesis: *dark by operation, open
+by record*. Watching is one setting, not the architecture.
+
+Second difference: **everything here is governed and self-hosted.** RBAC, quotas,
+content filtering, per-user credentials, a keyed append-only audit chain, policy
+enforcement, and the ladder. Their product is a hosted workspace; this one is
+the platform a regulated team runs themselves and can hand an auditor.
+
+### 10.2 What is worth taking
+
+| Their idea | Verdict |
+|---|---|
+| **A human gate on the *plan*, before the run turn** | **Adopt — it is a real gap.** Our default pipeline (§3.1) goes `plan → run` with nothing in between, and so does ghola's. Gating the plan is *cheaper* than gating the diff: a wrong approach is caught before the run phase spends its turn cap, and "this is the wrong shape entirely" is a comment on a plan rather than a rejected pull request. The machinery already exists — a stage's `oversight` plus the approval queue. **Add an `approve_plan` gate to the strict pipeline and make it one key on any stage.** |
+| **Previews** — a live deployment per branch | **Roadmap, not 3.0.** Genuinely valuable and genuinely heavy: it needs build and hosting infrastructure open-refinery does not have and should not grow. The honest version is a `preview_cmd` on the repository (§9.1) whose output URL lands on the run and in the pull request body — the repo says how to deploy itself, we just run it and publish the link. |
+| **Requirements / PRDs upstream of a plan** | **Partly have it.** The `refine` phase turns a rough idea into a spec (§9.1), which is the same move. What we lack is a *durable* requirement that outlives one run — several runs against one PRD. Worth considering once work items and runs are separate concepts, which they now are. |
+| **Shared context so agents don't restart from scratch** | **Gap worth naming.** We have the run document, which accumulates *within* a run (§3.1). Nothing carries context *between* runs on the same repository. deepagents `memory=[...]` plus the repo charter (§9.1) is most of the answer; a cross-run memory is a 3.x question, not a 3.0 one. |
+| **Loops** — ongoing, repeating agent workflows | **Have it.** `rework` from a pull-request comment (§3.8) is exactly this, and the scheduler already runs recurring sweeps. |
+| **Live progress while it runs** | **Have the plumbing.** `live.py`'s HUB already publishes over WebSocket; the Runs dashboard in Phase 8 is the view onto it. |
+
+### 10.3 The one change to the plan
+
+Add **plan approval** as a first-class, per-stage option:
+
+```yaml
+plan:
+  phase: plan
+  produces: [plan]
+  approve: true        # hold here; a person reads the plan before `run` spends a turn
+  next: run
+```
+
+`approve: true` on any stage routes it through the existing approval queue —
+chains, `min_approver_role`, SLA and escalation all apply unchanged — and the
+`dark` oversight level skips it, because that is what `dark` means. It ships in
+**Phase 3** with the graph, since it is a property of a stage rather than of the
+harness, and it is on by default in the `strict` template and off in `quick-fix`.
