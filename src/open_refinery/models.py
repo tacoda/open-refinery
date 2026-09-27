@@ -171,13 +171,29 @@ class StageHistory(SQLModel, table=True):
 
 
 class Integration(SQLModel, table=True):
+    """One person's credential for one service — model, forge or tracker.
+
+    The single credential store (see `credentials.py`). `kind` is the provider
+    key from that catalog; `secret` is the encrypted credential dict; `account`
+    is whoever the credential resolved to when it was verified, which is what
+    makes a stored key legible on the Connections screen.
+
+    Credentials are personal. `shared` marks the exception an admin may publish
+    for the whole org — allowed only for providers the catalog marks shareable,
+    which is model keys (a billing relationship) and never a forge or tracker
+    token (an identity).
+    """
     __tablename__ = "integrations"
     id: str = Field(default_factory=new_id, primary_key=True)
-    kind: str
+    kind: str = Field(index=True)          # provider key: anthropic | github | jira | …
     account: str
     owner_id: str = Field(foreign_key="users.id", index=True)
     secret: str
     created_at: str = Field(default_factory=now_iso)
+    last_verified_at: str = ""             # ISO of the last successful verify
+    status: str = "ok"                     # ok | failing — last verify outcome
+    status_detail: str = ""                # why it is failing, for the UI
+    shared: bool = False                   # org-wide fallback (shareable providers only)
 
 
 class Target(SQLModel, table=True):
@@ -279,14 +295,6 @@ class Setting(SQLModel, table=True):
     value: str                            # encrypted at rest
     updated_by: str = Field(foreign_key="users.id")
     updated_at: str = Field(default_factory=now_iso)
-
-
-class ConnectState(SQLModel, table=True):
-    __tablename__ = "connect_states"
-    state: str = Field(primary_key=True)
-    user_id: str = Field(foreign_key="users.id")
-    kind: str
-    created_at: str = Field(default_factory=now_iso)
 
 
 class DeviceGrant(SQLModel, table=True):

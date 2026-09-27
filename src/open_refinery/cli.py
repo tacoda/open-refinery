@@ -117,6 +117,70 @@ def _config(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- application commands: through the API, never around it (see client.py) ---
+
+def _client(args):
+    from .client import Client
+    return Client(getattr(args, "url", None), getattr(args, "token", None))
+
+
+def _credentials(args: argparse.Namespace) -> int:
+    import sys
+
+    from .client import ApiError
+
+    api = _client(args)
+    try:
+        if args.cred_cmd == "catalog":
+            for p in api.get("/credentials/catalog", **({"family": args.family} if args.family else {})):
+                mark = " (shareable)" if p["shareable"] else ""
+                print(f"{p['key']:<15} {p['family']:<8} {p['label']}{mark}")
+                print(f"{'':<15} needs: {p['needs']}")
+                if p["mint_url"]:
+                    print(f"{'':<15} mint:  {p['mint_url']}")
+            return 0
+
+        if args.cred_cmd == "list":
+            rows = api.get("/credentials", **({"family": args.family} if args.family else {}))
+            if not rows:
+                print("nothing connected. `open-refinery credentials catalog` lists what you can add.")
+                return 0
+            for r in rows:
+                flags = " shared" if r["shared"] else ""
+                warn = f"  ← {r['status_detail']}" if r["status"] != "ok" else ""
+                print(f"{r['id'][:8]}  {r['provider']:<15} {r['account']:<24} "
+                      f"[{r['status']}]{flags}{warn}")
+            return 0
+
+        if args.cred_cmd == "add":
+            fields = dict(kv.split("=", 1) for kv in args.field)
+            row = api.post("/credentials", {"provider": args.provider,
+                                            "credential": fields,
+                                            "shared": args.shared})
+            print(f"connected {row['provider']} as {row['account']} ({row['id'][:8]})")
+            return 0
+
+        if args.cred_cmd == "verify":
+            row = api.post(f"/credentials/{args.id}/verify")
+            print(f"{row['provider']}: {row['status']} {row['status_detail']}".rstrip())
+            return 0 if row["status"] == "ok" else 1
+
+        if args.cred_cmd == "rotate":
+            fields = dict(kv.split("=", 1) for kv in args.field)
+            row = api.put(f"/credentials/{args.id}", {"credential": fields})
+            print(f"rotated {row['provider']} ({row['id'][:8]})")
+            return 0
+
+        if args.cred_cmd == "rm":
+            api.delete(f"/credentials/{args.id}")
+            print("revoked")
+            return 0
+    except ApiError as exc:
+        print(f"error: {exc.detail}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def _create_admin(args: argparse.Namespace) -> int:
     import getpass
     import sys
@@ -212,9 +276,19 @@ def _seed(args: argparse.Namespace) -> int:
     except AlreadySeeded:
         print("database already has users; seed needs a fresh DATABASE_URL", file=sys.stderr)
         return 1
-    print("seeded sample data. login tokens:")
+    from .seeds import PASSWORDS
+
+    print("seeded sample data.\n")
+    print(f"  {'role':<9} {'email':<24} {'password':<10} api token")
     for role, (user, token) in data["users"].items():
-        print(f"  {role:9} {user.email:22} {token}")
+        print(f"  {role:<9} {user.email:<24} {PASSWORDS[role]:<10} {token}")
+    print()
+    print(f"  {len(data['repositories'])} repo · {len(data['processes'])} process · "
+          f"{len(data['targets'])} target (no key — runs on the echo stub)")
+    print()
+    print("next:")
+    print(f"  {'make dev':<34} # then sign in at http://localhost:8000")
+    print(f"  {'make reseed':<34} # start over with a fresh database")
     return 0
 
 
@@ -282,6 +356,30 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--host", default=None, help="bind host (or $HOST, default 0.0.0.0)")
     serve.add_argument("--port", type=int, default=None, help="bind port (or $PORT, default 8000)")
     serve.set_defaults(func=_serve)
+
+    creds = sub.add_parser("credentials", help="connect and manage service keys (via the API)")
+    creds.add_argument("--url", default=None, help="server URL (or $OPEN_REFINERY_URL)")
+    creds.add_argument("--token", default=None, help="API token (or $OPEN_REFINERY_TOKEN)")
+    cred_sub = creds.add_subparsers(dest="cred_cmd", required=True)
+
+    cred_sub.add_parser("catalog", help="what can be connected, and what each key needs") \
+            .add_argument("--family", choices=("model", "forge", "tracker"), default=None)
+    cred_sub.add_parser("list", help="your connected services") \
+            .add_argument("--family", choices=("model", "forge", "tracker"), default=None)
+
+    c_add = cred_sub.add_parser("add", help="connect a service: add github token=ghp_…")
+    c_add.add_argument("provider")
+    c_add.add_argument("field", nargs="*", metavar="key=value",
+                       help="omit entirely for a provider that needs no key (e.g. local)")
+    c_add.add_argument("--shared", action="store_true",
+                       help="publish org-wide (platform only; model keys only)")
+
+    cred_sub.add_parser("verify", help="re-check a stored credential").add_argument("id")
+    c_rot = cred_sub.add_parser("rotate", help="replace the secret, keeping the same id")
+    c_rot.add_argument("id")
+    c_rot.add_argument("field", nargs="+", metavar="key=value")
+    cred_sub.add_parser("rm", help="revoke a credential").add_argument("id")
+    creds.set_defaults(func=_credentials)
 
     admin = sub.add_parser("create-admin", help="create the initial admin user")
     admin.add_argument("--email", required=True)

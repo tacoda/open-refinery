@@ -71,8 +71,18 @@ def add_process(body: NewProcess, session: Session = Depends(get_session),
     )
 
 @router.get("/processes")
-def get_processes(session: Session = Depends(get_session), user: User = Depends(current_user)):
-    return list_processes(session, owner_id=owner_scope(user))
+def get_processes(session: Session = Depends(get_session), _: User = Depends(current_user)):
+    """Every process, to any authenticated user.
+
+    A process is a **shared workflow definition**, not personal property: it is
+    the board everyone's work moves across, so a developer has to be able to
+    read the one their own work items sit on. Owner-scoping this meant a
+    developer could hold a work item at a stage while being unable to see the
+    stages — which is what the seeded dev account hit.
+
+    Authoring stays gated (`POST /processes` is platform+). Reading is not.
+    """
+    return list_processes(session)
 
 @router.post("/work-items", status_code=201)
 def add_work_item(body: NewWorkItem, session: Session = Depends(get_session),

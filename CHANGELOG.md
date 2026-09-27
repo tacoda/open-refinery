@@ -3,6 +3,82 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.14.0] — 2026-09-27
+
+*Phase 1 on the [road to 3.0](docs/PLAN-3.0.md): every service is reached with a
+key or a token, and no authorization-code flow remains anywhere in the product.*
+
+### Added
+- **One credential surface.** `credentials.py` is the catalog for every
+  connectable service across three families — **model** (Anthropic, OpenAI,
+  Ollama), **forge** (GitHub, GitLab, local) and **tracker** (GitHub Issues,
+  Jira, Linear). Each entry declares the fields to ask for, **where to mint the
+  key**, and **exactly what permissions it needs**, so the Connections screen can
+  answer "what do I paste here" without the reader leaving to search.
+- **Credentials are personal.** A run uses the runner's own key, so a pull
+  request is authored by the person accountable for it and cost attributes to a
+  real actor. `for_actor()` resolves the actor's own credential, then an
+  org-wide one *only* for providers marked shareable, then raises `NoCredential`
+  — never a silent fallback to someone else's key, which would attribute one
+  person's work to another in the audit trail.
+- **Model keys may be shared; forge and tracker tokens may not.** A model key is
+  a billing relationship, an access token is an identity. Publishing an org-wide
+  key is platform's call, not admin's.
+- **Verified before stored.** Nothing is saved that does not authenticate, and a
+  provider's own refusal is surfaced verbatim (`github rejected the credential:
+  HTTP Error 401`). `verify` re-checks a stored key — a credential revoked
+  upstream is otherwise invisible until something tries to use it. `rotate`
+  replaces the secret in place, keeping the id so nothing referencing it breaks,
+  and refuses a replacement that does not authenticate.
+- Routes: `GET /credentials/catalog`, `POST|GET /credentials`,
+  `POST /credentials/{id}/verify`, `PUT /credentials/{id}`,
+  `DELETE /credentials/{id}`. Connect, rotate and revoke are all audited.
+- **`open-refinery credentials`** — `catalog · list · add · verify · rotate · rm`.
+- **`client.py`** — the CLI's HTTP client. Application commands go **through the
+  API**, never around it: the backend is the governance boundary, and a command
+  writing to SQLite directly would bypass RBAC, policy, quota and the audit
+  trail. Server maintenance (`init`, `migrate`, `serve`, `doctor`, `config`,
+  `create-admin`, `seed`) stays on the database, because it runs on the box.
+
+### Removed
+- **Every authorization-code flow.** `oauth.py` and `oidc.py`, GitHub OAuth
+  login, `/auth/sso/*`, `/integrations/{kind}/oauth/*`,
+  `/targets/{id}/oauth/*`, `deps.provider_creds`, the `ConnectState` model, and
+  the `GITHUB_CLIENT_ID` / `GITLAB_CLIENT_ID` environment fallbacks — which were
+  product configuration wearing a server variable's clothes.
+- `GET /auth/providers` now reports `{"password": true, "mfa": true}`. Humans
+  sign in with email + password + optional TOTP; machines with API tokens;
+  services with keys and PATs.
+
+### Developer experience
+- **`make setup`** — one command from a clean clone to a signed-in local
+  environment: generates `.env` (mode 600) if absent, then seeds. **`make reseed`**
+  drops `devtest.db` and seeds again, because `seed` requires an empty database
+  and there was no way back.
+- **The seed prints passwords, not just API tokens.** It created users with
+  passwords and printed only tokens, so signing in to the dashboard it had just
+  seeded meant reading the source.
+- **The seed ships a model target and a route**, with no credential — the
+  executor falls back to its echo stub, so `POST /execute` works on a fresh
+  clone with no network and no API key. Adding a real key makes the same path
+  live.
+
+### Fixed
+- **A developer could not see the process their own work items sit on.**
+  `GET /processes` was owner-scoped, so a board owned by platform was invisible
+  to the developer holding work on it — they could own an item and not see the
+  stages it moves between. A process is a shared workflow definition, not
+  personal property: reading is open to any authenticated user, authoring stays
+  platform-gated.
+
+### Changed
+- `Integration` becomes the single credential store for all three families, with
+  `last_verified_at`, `status`, `status_detail` and `shared` (migration **v22**,
+  with its reverse).
+- Reading another person's connections is **admin's** (oversight, metadata only);
+  publishing an org-wide model key is **platform's** (operations). First use of
+  the authority model in §2.5 of the plan — the full refactor is Phase 1.5.
+
 ## [2.13.0] — 2026-09-27
 
 *Phase 0 on the [road to 3.0](docs/PLAN-3.0.md): a clean clone installs, tests

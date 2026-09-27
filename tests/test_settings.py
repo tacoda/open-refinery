@@ -46,15 +46,11 @@ def test_settings_api_never_returns_values_and_is_role_gated(monkeypatch):
                  json={"key": "x", "value": "y"}).status_code == 403
 
 
-def test_providers_reflect_db_settings(monkeypatch):
-    # no env creds; configure github via settings → provider becomes enabled
-    monkeypatch.delenv("GITHUB_CLIENT_ID", raising=False)
-    monkeypatch.delenv("GITHUB_CLIENT_SECRET", raising=False)
+def test_providers_reports_only_password_auth():
+    """OAuth client id/secret were product configuration wearing a server
+    variable's clothes. 2.14.0 removed the flow, so there is nothing to enable:
+    humans sign in with a password, machines with a token, services with a key."""
     conn = connect("sqlite:///:memory:", check_same_thread=False)
-    admin, admin_tok = create_user(conn, "admin@x.dev", "pw", "admin")
+    create_user(conn, "admin@x.dev", "pw", "admin")
     c = TestClient(create_app(conn))
-    assert c.get("/auth/providers").json()["github"] is False
-    ah = {"Authorization": f"Bearer {admin_tok}"}
-    c.put("/settings", headers=ah, json={"key": "github.client_id", "value": "cid"})
-    c.put("/settings", headers=ah, json={"key": "github.client_secret", "value": "sec"})
-    assert c.get("/auth/providers").json()["github"] is True
+    assert c.get("/auth/providers").json() == {"password": True, "mfa": True}

@@ -11,12 +11,11 @@ from __future__ import annotations
 import base64
 import json
 import urllib.request
-import uuid
 
 from sqlmodel import Session, select
 
 from .crypto import decrypt, encrypt
-from .models import ConnectState, Integration, User
+from .models import Integration, User
 
 # Connector catalog — the single source of truth for the UI and the wizard:
 # each kind's display label, its capabilities, and the credential fields to ask
@@ -195,25 +194,6 @@ def create_integration(session: Session, kind: str, credential: dict, owner_id: 
     session.commit()
     session.refresh(integ)
     return integ
-
-
-def create_connect_state(session: Session, user_id: str, kind: str) -> str:
-    """Mint a state token binding an OAuth connect flow to the logged-in user."""
-    row = ConnectState(state=uuid.uuid4().hex, user_id=user_id, kind=kind)
-    session.add(row)
-    session.commit()
-    return row.state
-
-
-def pop_connect_state(session: Session, state: str) -> str | None:
-    """Return the user_id for a connect state and consume it (one-time use)."""
-    row = session.get(ConnectState, state)
-    if row is None:
-        return None
-    user_id = row.user_id
-    session.delete(row)
-    session.commit()
-    return user_id
 
 
 def get_integration(session: Session, integ_id: str) -> Integration | None:

@@ -91,13 +91,6 @@ def test_jira_credential_is_multi_field(monkeypatch):
     assert seen["cred"]["site"] == "acme.atlassian.net"
 
 
-def test_connect_state_is_one_time():
-    conn, ian = setup()
-    state = integrations.create_connect_state(conn, ian.id, "github")
-    assert integrations.pop_connect_state(conn, state) == ian.id
-    assert integrations.pop_connect_state(conn, state) is None  # consumed
-
-
 def test_connector_catalog_capabilities_and_fields():
     from open_refinery import connectors, CONNECTORS, SOURCE_KINDS, TRACKER_KINDS, WORKFLOW_KINDS
     cat = {c["kind"]: c for c in connectors()}

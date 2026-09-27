@@ -23,7 +23,6 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
-from . import oauth
 from .approvals import approve as approve_request
 from .approvals import list_approvals, reject as reject_request, request_approval
 from .escalations import current_overdue
@@ -39,14 +38,12 @@ from .invitations import (
 )
 from .integrations import (
     connectors,
-    create_connect_state,
     create_integration,
     delete_integration,
     list_integrations,
     list_issues,
     list_remote_repos,
     list_workflow,
-    pop_connect_state,
 )
 from .integrations import verify as verify_integration
 from .metrics import summary
@@ -110,6 +107,7 @@ from .policies import (
     scan_content,
 )
 from .processes import create_process, list_processes
+from .provenance import Record
 from .repo_governance import create_claim, delete_claim, list_claims, report as repo_report
 from .systems import (
     create_system,
@@ -187,7 +185,6 @@ from .deps import (
     home_url as _home,
     oversight,
     owner_scope,
-    provider_creds,
     public_user as _public_user,
     require,
 )
@@ -348,11 +345,14 @@ class RecertDecision(BaseModel):
     note: str = ""
 
 
-class SsoConfig(BaseModel):  # OIDC SSO; only provided fields are updated (secret write-only)
-    issuer: str | None = None
-    client_id: str | None = None
-    client_secret: str | None = None
-    name: str | None = None
+class NewCredential(BaseModel):
+    provider: str                   # a key from credentials.PROVIDERS
+    credential: dict[str, str]      # the provider's declared fields
+    shared: bool = False            # org-wide fallback; shareable providers only
+
+
+class RotateCredential(BaseModel):
+    credential: dict[str, str]
 
 
 class NewIntegration(BaseModel):
@@ -604,10 +604,10 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
 
 def _include_routers(app: FastAPI) -> None:
-    from .routers import (core, governance, harness, ops, org, policy, recert, routing,
-                          scim, systems, workitem)
+    from .routers import (core, credentials, governance, harness, ops, org, policy,
+                          recert, routing, scim, systems, workitem)
     for mod in (core, ops, systems, governance, org, harness, workitem, routing, policy,
-                scim, recert):
+                scim, recert, credentials):
         app.include_router(mod.router)
 
 

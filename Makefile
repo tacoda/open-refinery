@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install ui ui-dev ui-test types apidocs test serve dev seed demo clean dist publish doctor config init
+.PHONY: help install ui ui-dev ui-test types apidocs test serve dev seed reseed setup demo clean dist publish doctor config init
 
 # --- dev-only convenience (end users use `pip install open-refinery && open-refinery serve`) ---
 # Secrets live in .env (gitignored); `make dev` sources it. DB is a local file.
@@ -51,7 +51,18 @@ dev: ## Dev server: sources .env for secrets, local devtest.db on :8000
 	@test -f .env || { echo "no .env — copy .env.example to .env and set SECRET_KEY"; exit 1; }
 	set -a; . ./.env; set +a; DATABASE_URL=$(DEV_DB) PORT=8000 uv run open-refinery serve
 
-seed: ## Seed the local devtest.db with sample data + login tokens
+setup: ## One-shot local dev setup: .env + a seeded database, ready to sign in
+	@test -f .env || { printf 'SECRET_KEY=%s\n' \
+		"$$(uv run python -c 'import secrets; print(secrets.token_urlsafe(32))')" > .env; \
+		chmod 600 .env; }
+	@echo "using $(CURDIR)/.env"
+	@$(MAKE) --no-print-directory reseed
+
+reseed: ## Drop devtest.db and seed it again (seed needs an empty database)
+	@rm -f $(CURDIR)/devtest.db $(CURDIR)/devtest.db-shm $(CURDIR)/devtest.db-wal
+	@$(MAKE) --no-print-directory seed
+
+seed: ## Seed the local devtest.db with sample data + login credentials
 	@test -f .env || { echo "no .env — copy .env.example to .env and set SECRET_KEY"; exit 1; }
 	set -a; . ./.env; set +a; DATABASE_URL=$(DEV_DB) uv run open-refinery seed
 

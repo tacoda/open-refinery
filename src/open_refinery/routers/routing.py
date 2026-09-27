@@ -6,11 +6,6 @@ from ..web import *  # noqa: F401,F403
 router = APIRouter()
 
 
-class OAuthReturn:  # the code+state an OAuth provider hands back on redirect
-    def __init__(self, code: str = "", state: str = ""):
-        self.code, self.state = code, state
-
-
 @router.get("/connectors")
 def get_connectors(_: User = Depends(current_user)):
     return connectors()  # catalog: kind + label + capabilities + credential fields
@@ -29,33 +24,6 @@ def remove_integration(integ_id: str, session: Session = Depends(get_session),
                        _: User = Depends(current_user)):
     delete_integration(session, integ_id)
     return {"status": "deleted"}
-
-def _connect_redirect(request: Request, kind: str) -> str:
-    return f"{base_url(request)}/integrations/{kind}/oauth/callback"
-
-@router.post("/integrations/{kind}/oauth/start")
-def connect_start(kind: str, request: Request, session: Session = Depends(get_session),
-                  user: User = Depends(current_user)):
-    creds = provider_creds(session, kind)
-    if not oauth.is_enabled(creds):
-        raise HTTPException(status_code=404, detail=f"{kind} oauth not configured")
-    state = create_connect_state(session, user.id, kind)
-    scope = oauth.PROVIDERS[kind]["connect_scope"]
-    url = oauth.authorize_url(kind, state, _connect_redirect(request, kind), scope,
-                              creds["client_id"])
-    return {"authorize_url": url}
-
-@router.get("/integrations/{kind}/oauth/callback")
-def connect_callback(kind: str, request: Request, q: OAuthReturn = Depends(),
-                     session: Session = Depends(get_session)):
-    user_id = pop_connect_state(session, q.state)
-    if user_id is None:
-        return RedirectResponse(home_url(request) + "#integration_error=state")
-    creds = provider_creds(session, kind)
-    token = oauth.exchange_code(kind, q.code, _connect_redirect(request, kind),
-                                creds["client_id"], creds["client_secret"])
-    create_integration(session, kind, {"token": token}, user_id)
-    return RedirectResponse(home_url(request) + f"#connected={kind}")
 
 @router.post("/integrations/{integ_id}/verify")
 def check_integration(integ_id: str, session: Session = Depends(get_session),
@@ -114,33 +82,6 @@ def remove_target(target_id: str, session: Session = Depends(get_session),
                   _: User = Depends(current_user)):
     delete_target(session, target_id)
     return {"status": "deleted"}
-
-# --- connect a target via OAuth (token stored in its credential) ---
-def _target_oauth_redirect(request: Request, target_id: str, provider: str) -> str:
-    return f"{base_url(request)}/targets/{target_id}/oauth/{provider}/callback"
-
-@router.post("/targets/{target_id}/oauth/{provider}/start")
-def target_oauth_start(target_id: str, provider: str, request: Request,
-                       session: Session = Depends(get_session), user: User = Depends(current_user)):
-    creds = provider_creds(session, provider)
-    if not oauth.is_enabled(creds):
-        raise HTTPException(status_code=404, detail=f"{provider} oauth not configured")
-    state = create_connect_state(session, user.id, provider)
-    scope = oauth.PROVIDERS[provider]["connect_scope"]
-    url = oauth.authorize_url(provider, state, _target_oauth_redirect(request, target_id, provider),
-                              scope, creds["client_id"])
-    return {"authorize_url": url}
-
-@router.get("/targets/{target_id}/oauth/{provider}/callback")
-def target_oauth_callback(target_id: str, provider: str, request: Request,
-                          q: OAuthReturn = Depends(), session: Session = Depends(get_session)):
-    if pop_connect_state(session, q.state) is None:   # validates + consumes (CSRF, one-time)
-        return RedirectResponse(home_url(request) + "#target_error=state")
-    creds = provider_creds(session, provider)
-    token = oauth.exchange_code(provider, q.code, _target_oauth_redirect(request, target_id, provider),
-                                creds["client_id"], creds["client_secret"])
-    set_target_credential(session, target_id, {"provider": provider, "access_token": token})
-    return RedirectResponse(home_url(request) + f"#connected={provider}")
 
 @router.post("/routes", status_code=201)
 def add_route(body: NewRoute, session: Session = Depends(get_session),

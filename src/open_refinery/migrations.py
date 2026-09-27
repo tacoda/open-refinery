@@ -107,6 +107,15 @@ MIGRATIONS: list[str] = [
     # relabels every row as the old unkeyed construction still fails.
     "ALTER TABLE audit_chain_state ADD COLUMN algo TEXT NOT NULL DEFAULT '';"
     "ALTER TABLE audit_chain_state ADD COLUMN signature TEXT NOT NULL DEFAULT '';",
+    # v22 (2.14.0): integrations become the one credential store for models,
+    # forges and trackers — with the verify outcome kept so the Connections
+    # screen can show a key that has stopped working, and `shared` for the
+    # org-wide model key an admin may publish.
+    "ALTER TABLE integrations ADD COLUMN last_verified_at TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE integrations ADD COLUMN status TEXT NOT NULL DEFAULT 'ok';"
+    "ALTER TABLE integrations ADD COLUMN status_detail TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE integrations ADD COLUMN shared INTEGER NOT NULL DEFAULT 0;"
+    "CREATE INDEX IF NOT EXISTS ix_integrations_kind ON integrations (kind);",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -152,6 +161,11 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE events DROP COLUMN chain_algo;",                                        # v20
     "ALTER TABLE audit_chain_state DROP COLUMN algo;"
     "ALTER TABLE audit_chain_state DROP COLUMN signature;",                              # v21
+    "DROP INDEX IF EXISTS ix_integrations_kind;"
+    "ALTER TABLE integrations DROP COLUMN last_verified_at;"
+    "ALTER TABLE integrations DROP COLUMN status;"
+    "ALTER TABLE integrations DROP COLUMN status_detail;"
+    "ALTER TABLE integrations DROP COLUMN shared;",                                      # v22
 ]
 
 

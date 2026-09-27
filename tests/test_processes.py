@@ -69,3 +69,27 @@ def test_validation():
     with pytest.raises(ValueError):
         create_process(conn, "bad-trans", "board", ["a", "b"], ian.id,
                        transitions=[("a", "z")])  # unknown stage in transition
+
+
+def test_any_authenticated_user_can_read_every_process():
+    """A process is the shared board work moves across, not personal property.
+    Owner-scoping the read meant a developer could own a work item and be unable
+    to see the stages it sits between.
+    """
+    from fastapi.testclient import TestClient
+
+    from open_refinery.store import connect
+    from open_refinery.users import create_session, create_user, ensure_default_roles
+    from open_refinery.web import create_app
+
+    session = connect("sqlite:///:memory:", check_same_thread=False)
+    ensure_default_roles(session)
+    ops, _ = create_user(session, "ops@x.dev", "pw", "platform")
+    dev, _ = create_user(session, "dev@x.dev", "pw", "developer")
+    create_process(session, "Kanban", "board", ["todo", "done"], ops.id)
+
+    client = TestClient(create_app(session))
+    token = create_session(session, dev.id)
+    body = client.get("/processes", headers={"Authorization": f"Bearer {token}"}).json()
+
+    assert [p["name"] for p in body] == ["Kanban"]

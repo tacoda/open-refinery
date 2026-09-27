@@ -42,15 +42,28 @@ log; RBAC; quotas; approval workflows) is not re-ported.
 ### The thesis change, stated plainly
 
 PLAN.md currently lists orchestration, tool selection and sub-agent delegation as
-**harness concerns and explicit non-goals**. Shipping a factory means the
-platform now hosts a harness.
+**harness concerns and explicit non-goals**. 3.0 changes that, and it is worth
+stating without hedging:
 
-The honest framing, which goes into PLAN.md rather than being smuggled in:
-open-refinery 3.0 ships a **reference harness that runs inside the platform's
-governance boundary**. External harnesses still call through the API exactly as
-before, unchanged. The platform does not *become* a harness — it gains one, and
-the governance seam is the same seam, now applied per tool call instead of per
-API call.
+**open-refinery is both a harness and a factory.**
+
+- The **harness** constrains one turn: the phase's model, thinking level, turn
+  cap and tool grant; the prompt it is actually asked; the governance wrapped
+  around every call it makes.
+- The **factory** runs many turns to a diff: the stage graph, the worktree, the
+  contracts, the delivery gate, and a pull request nothing merges for you.
+
+A harness with no factory is a well-behaved agent you cannot get work through. A
+factory with no harness runs unattended and cannot tell you what it was allowed
+to do. open-refinery has been neither, and has been the *platform* underneath
+both — identity, audit, quotas, routing, policy. 3.0 keeps all of that and
+builds the other two on top of it, which is why the governance is not bolted on:
+it is the layer the harness already stood on.
+
+External harnesses are unaffected. They still call through the API exactly as
+before, and the boundary they cross is the same one `GovernanceMiddleware` now
+applies per tool call. The platform did not stop being a platform; it stopped
+being *only* a platform.
 
 ### Why no files
 
@@ -238,6 +251,123 @@ test-sends for real, a first-run wizard that will not complete until email
 works, and a real SMTP adapter — `LinuxMailSender` is not a credible default for
 a product whose logins depend on it. Phase 0's `doctor` (§5) is built with a
 slot for that check.
+
+---
+
+### 2.5 The authority model — three domains, not a ladder
+
+The code today treats roles as a **total order**: `developer(1) < platform(2) <
+admin(3)`, compared with `at_least()`, with `_SEES_ALL = ("platform", "admin")`
+on every scoped listing. Admin can do everything platform can, and more.
+
+3.0 replaces that with **authority as data**: a role carries an explicit set of
+powers rather than a position in a line. The three built-in roles are the
+**standard configuration** — a sensible default, not a limit:
+
+| role | approves | may propose | users | audit | operational visibility |
+|---|---|---|---|---|---|---|
+| **developer** | `code` | `code`, `harness`, `factory` | — | own work | own work |
+| **platform** | `harness`, `factory` | `harness`, `factory` | — | — | **org-wide operations** |
+| **admin** | — | — | **manage** | **full** | users and audit only |
+
+**Roles are customizable.** `Role` already exists as a table and `create_role` /
+`delete_role` already exist in `users.py` — they are simply not exposed, with a
+note in `routers/core.py` saying arbitrary roles "proved confusing". That note
+is right about the symptom and wrong about the cause: a role that is only a
+*rank* means nothing, so a fourth one was unanswerable — what does rank 2.5 let
+you do? Attaching the columns above makes a custom role legible, so `Role` gains
+`approves`, `proposes`, `manages_users`, `reads_audit`, `sees_operations` and a
+`builtin` flag, and role management becomes an admin surface in the API, the
+dashboard and the CLI.
+
+A team that wants `reviewer` (approves `code`, proposes nothing) or `auditor-lite`
+(reads audit only) writes it down; a team that agrees with the three defaults
+configures nothing. The built-ins cannot be deleted, and **no role may grant
+itself authority it does not have**.
+
+Three things follow, and each is a deliberate loss of convenience:
+
+- **Admin cannot approve anything that ships.** The role that grants access is
+  not the role that approves what goes out. A compromised admin account can
+  create users and read the log; it cannot merge a change or weaken a rule.
+  This is the separation an auditor actually looks for, and it is the reason
+  admin is not a superset.
+- **Platform cannot approve ordinary code.** It approves *governance* — harness
+  and factory changes, and ladder moves. A platform user reviewing a teammate's
+  pull request has no special authority over it, which is correct: that review
+  is a developer's job.
+- **Developers propose governance changes but never approve them.** The
+  improve lane (§4.1) is a proposal mechanism for exactly this reason.
+
+`layer` already carries the distinction the table needs — `policies.LAYERS` is
+`("factory", "harness", "charter")`, plus `code` for ordinary work — so approval
+authority keys off the layer a change belongs to rather than off a rank.
+
+**A naming collision to fix on the way through.** "Layer" currently means two
+unrelated things: `Policy.layer` is the *artifact* layer above, while
+`ApprovalWorkflow.layer` is a **role name** (`valid_role(session, layer)`).
+Two concepts, one word, and this model puts them next to each other. The
+artifact sense keeps `layer`; the approval-workflow sense becomes `role`.
+
+**Scope.** This touches `at_least()`, `owner_scope()`, `_SEES_ALL`, and every
+`require(...)` guard in `routers/`, so it is **Phase 1.5** rather than something
+smuggled into the credentials work. A new `authority.py` reads the powers off
+the role row — `may_approve(session, role, layer)`, `may_propose`,
+`manages_users`, `reads_audit`, `sees_operations` — and the route guards stop
+naming role literals entirely, which is what makes a custom role work without
+touching code. `at_least()` survives only where a genuine ordering is meant,
+such as walking an approval chain.
+
+Also cleaned up there: **`"senior"` is referenced in three guards in
+`routers/org.py` and as the v2 migration default for `min_approver_role`, and is
+never seeded.** Because `role_rank()` returns 0 for an unknown role,
+`at_least(developer, senior)` is **True** — so a process left on that default has
+no effective minimum and a developer satisfies its approval gate. `authority.py`
+fails closed on an unknown role, and a repair migration moves those rows onto a
+real one.
+
+### 2.6 Surfaces: what drives what
+
+Three surfaces, and the split between them is load-bearing rather than
+stylistic.
+
+| Surface | For | Reaches the data via |
+|---|---|---|
+| **Web app** | the main surface. Everything a person does with the product | HTTP API |
+| **CLI** | a full peer for doing the same things, scriptable and ssh-able | HTTP API |
+| **Environment variables** | installing, starting and maintaining the *server* — nothing else | the process |
+
+**Environment variables configure the server, never the product.** `SECRET_KEY`,
+`DATABASE_URL`, `HOST`, `PORT`, `LOG_LEVEL`, `APP_BASE_URL` — that is the whole
+list, and `config.py` already enforces it as a catalog. No credential, pipeline,
+phase or policy is ever read from the environment. That is why the OAuth client
+id/secret env fallbacks go in this phase (§2.1): they were product configuration
+wearing a server variable's clothes.
+
+**The CLI is a peer surface, not a second implementation.** This is the part
+worth being strict about, because getting it wrong reintroduces the class of
+hole the audit chain just had. The CLI splits in two:
+
+| | Commands | Talks to |
+|---|---|---|
+| **Server maintenance** — run on the box, by whoever operates it | `init` · `migrate` · `serve` · `doctor` · `config` · `create-admin` · `seed` | the database directly |
+| **Doing the work** — run by a person, from anywhere | `credentials` · `runs` · `run` · `pipelines` · `ladder` · `work-items` · `turn` | **the HTTP API** |
+
+The second group goes through the API *on purpose*. The backend is the
+governance boundary: RBAC, policy enforcement, quota, content filtering and the
+audit trail all live on that side. A CLI that wrote to SQLite directly would
+bypass every one of them — a `credentials add` that skipped authorization and
+left no audit event is exactly the kind of quiet side door this product exists
+to not have.
+
+So an application command authenticates like any other client, with the pattern
+`harnesses.py` already uses: `OPEN_REFINERY_URL` and `OPEN_REFINERY_TOKEN`, or
+`--url` / `--token`. Those two are connection settings for reaching a server,
+which is the one thing the environment is still allowed to say.
+
+This also closes §9.4: the CLI stops being an accretion of maintenance scripts
+and becomes the thing that makes the factory scriptable, cron-able and
+debuggable over ssh — without becoming a second, ungoverned way into the data.
 
 ---
 
@@ -624,10 +754,61 @@ can actually see the thing the rule is about.
 A `Constraint` row: `text, layer (project|team|org), rung, predicate, scope,
 withholds[]`. `GET /ladder` returns both ladders plus `withheld` — the list the
 factory subtracts from a phase's grant before the turn starts.
-`POST /ladder/{id}/move` promotes or demotes, **audited**, and a move that
-*reduces* enforcement routes through the existing approval workflow. Otherwise
-the lane that weakens the rules would be the one thing escaping the gate
-everything else goes through.
+
+### 4.1 Promotion and demotion — the factory improves itself
+
+The ladder is not a report. A rung is a *place a rule is carried*, so moving a
+rule up the ladder is **work**: promoting "no secrets in source" from rung 0 to
+rung 2 means somebody writes the predicate and wires the hook. That work is
+exactly what the factory does.
+
+So the loop closes:
+
+```
+improve lane reads the record  →  proposes a promotion, citing the runs
+      ↓
+   a human approves                        ← the first gate
+      ↓
+the promotion becomes a work item          ← ordinary governed work
+      ↓
+the factory runs it: writes the predicate, wires the rung
+      ↓
+   a pull request                          ← the second gate; a human merges
+```
+
+**The factory implements its own governance improvements, after human
+approval.** That is the point of having a factory at all: the thing that ships
+work can ship the rules that constrain it, through the same gate as everything
+else, leaving the same audit trail.
+
+**Promotion and demotion are not symmetric**, and the asymmetry is the safety
+property:
+
+| | Promotion (more enforcement) | Demotion (less enforcement) |
+|---|---|---|
+| Proposed by | the improve lane, from evidence | a person, or the improve lane |
+| Approval | one approver | the process's **approval chain**, at `min_approver_role` or above |
+| Implemented by | **the factory**, as a normal run → PR | a person. The factory proposes, never performs |
+| If nothing is approved | the rule stays where it is — safe | the rule stays where it is — safe |
+
+A demotion is the one move that makes the system weaker, so it never runs
+unattended and the factory never carries it out itself. Everything else about
+the two paths is identical, including that **nothing is applied without a
+merge** — the ladder commits no code of its own.
+
+Every move is audited (`ladder-move`), carries the evidence it was proposed
+from, and names the runs that motivated it. A proposal that cannot be traced to
+evidence is dropped rather than repaired — a lane that always finds three things
+is one nobody believes by the third time.
+
+### 4.2 Capabilities climb too
+
+The second ladder, joined to the first at rung 1: a constraint *withholds* a
+function, a capability *grants* one. Promoting a capability from `project` to
+`org` is the same shape of work — and the same two gates — as promoting a
+constraint. `GET /ladder` returns both sides plus the net `withheld` list,
+because a phase's effective grant is the one number both ladders exist to
+produce.
 
 ---
 
@@ -667,6 +848,7 @@ and its `DOWNGRADES` reverse.
 | 0 | 2.13.0 | ✅ Install fixes · `conftest` · `init` · `doctor` · `config` · **audit chain hardened** (keyed links, signed checkpoints, authenticated head, full-export signature). A clean clone installs, tests and serves. |
 | 0.1 | 2.13.1 | `targets --check` — prove a model target authenticates without paying for a run (§9.1). |
 | 1 | 2.14.0 | **Tokens only.** `credentials.py` + catalog + API + Connections UI. Every OAuth and OIDC path deleted; migration drops `connect_states`. |
+| 1.5 | 2.14.5 | **The authority model** (§2.5). `authority.py`; customizable roles with explicit powers + admin role CRUD; `require()` guards stop naming role literals; `owner_scope` splits operations from audit; the `layer` naming collision; the `"senior"` fail-open repaired. |
 | 2 | 2.15.0 | **Sign-up.** `org.signup` modes, `POST /auth/signup`, onboarding that ends on a verified credential. |
 | 3 | 2.16.0 | **The graph.** `spec.py`, `graph.py`, `contracts.py`, `document.py`, `phases.py`, the `Pipeline` + `Run` + `RunStep` models. Pure and fully tested — no agent, no git, no forge. |
 | 4 | 2.17.0 | **Workspace + forge.** `workspace.py`, `forge.py` (github/gitlab/local), `actions.py`. A run reaches a real PR with a stub phase. |
@@ -757,11 +939,14 @@ ghola's `make` surface is **the whole operator interface**, and it is legible:
 one screen, grouped, with a `$` against anything that spends money. Every
 capability is reachable from a terminal without a browser.
 
-open-refinery's surface is a dashboard and an HTTP API, with a CLI that has
-grown by accretion. Phase 0 added `init`, `doctor` and `config`; 9.1 adds
-`targets --check` and `turn`. The remaining work is **coherence** — `run`,
-`runs`, `pipeline`, `ladder` and `credentials` as first-class commands, so the
-factory is fully drivable from a terminal and the dashboard is a view onto it
-rather than the only way in. Worth doing in Phase 8, and worth not letting slide,
-because a governance product whose surface is only a SPA is one nobody can
-script, cron, or debug over ssh.
+open-refinery's CLI grew by accretion. **§2.6 is the answer**: the CLI is a peer
+surface to the web app, split between server maintenance (direct to the database)
+and doing the work (through the API, so governance applies). Phase 0 added
+`init`, `doctor` and `config`; every later phase ships its application commands
+alongside its routes rather than after them — `credentials` in Phase 1, `runs`
+and `run` in Phase 4, `ladder` in Phase 6.
+
+Shipping them per-phase rather than saving a CLI push for Phase 8 is deliberate:
+a command written beside its route stays honest about what the API can actually
+do, and a governance product whose only surface is a SPA is one nobody can
+script, cron or debug over ssh.

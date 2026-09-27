@@ -12,7 +12,6 @@ from types import SimpleNamespace
 from fastapi import Depends, Header, HTTPException, Request
 from sqlmodel import Session
 
-from . import oauth
 from .auditors import resolve_auditor
 from .settings import get_setting
 from .users import User, session_user, user_by_token
@@ -62,16 +61,6 @@ def public_user(user: User) -> dict:
 def owner_scope(user: User) -> str | None:
     """None = see everything (platform/admin); else scope to the user's own."""
     return None if user.role in _SEES_ALL else user.id
-
-
-def provider_creds(session: Session, kind: str) -> dict | None:
-    """OAuth client creds: DB settings first, then env fallback."""
-    p = oauth.PROVIDERS.get(kind)
-    if not p:
-        return None
-    cid = get_setting(session, f"{kind}.client_id") or os.environ.get(p["id_env"])
-    csec = get_setting(session, f"{kind}.client_secret") or os.environ.get(p["secret_env"])
-    return {"client_id": cid, "client_secret": csec} if cid and csec else None
 
 
 def base_url(request: Request) -> str:
