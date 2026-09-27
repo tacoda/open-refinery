@@ -254,28 +254,47 @@ slot for that check.
 
 ---
 
-### 2.5 The authority model — three domains, not a ladder
+### 2.5 The authority model — authority as data, not a ladder
 
 The code today treats roles as a **total order**: `developer(1) < platform(2) <
 admin(3)`, compared with `at_least()`, with `_SEES_ALL = ("platform", "admin")`
 on every scoped listing. Admin can do everything platform can, and more.
 
 3.0 replaces that with **authority as data**: a role carries an explicit set of
-powers rather than a position in a line. The three built-in roles are the
+powers rather than a position in a line. The four built-in roles are the
 **standard configuration** — a sensible default, not a limit:
 
 | role | approves | may propose | users | audit | operational visibility |
 |---|---|---|---|---|---|---|
 | **developer** | `code` | `code`, `harness`, `factory` | — | own work | own work |
-| **platform** | `harness`, `factory` | `harness`, `factory` | — | — | **org-wide operations** |
+| **lead** | `harness`, `charter` | `harness`, `charter`, `factory` | — | — | own team's work |
+| **platform** | `factory` | `factory` | — | — | **org-wide operations** |
 | **admin** | — | — | **manage** | **full** | users and audit only |
+
+**The split follows the product's own thesis.** open-refinery is both a harness
+and a factory (§3.0), so each gets an owner:
+
+- **`lead` owns the harness** — how one turn is constrained: phases, prompts,
+  tool grants, models, thinking levels, and the charter those turns read. That
+  is an engineering-team judgment about how the work should be done.
+- **`platform` owns the factory** — how work *flows*: the stage graph, the
+  delivery gate, routing, quotas, targets. That is an operations judgment about
+  how work ships.
+
+A lead changing a prompt does not need platform, and platform changing a route
+does not need a lead. That is the separation, and it is the one teams actually
+feel: the two roles argue about different things.
+
+`charter` sits with `lead` by default because it is the prose the harness reads
+— rung 0 of the ladder (§4). A team that would rather admin or platform own the
+standards changes one row, because roles are data.
 
 **Roles are customizable.** `Role` already exists as a table and `create_role` /
 `delete_role` already exist in `users.py` — they are simply not exposed, with a
 note in `routers/core.py` saying arbitrary roles "proved confusing". That note
 is right about the symptom and wrong about the cause: a role that is only a
-*rank* means nothing, so a fourth one was unanswerable — what does rank 2.5 let
-you do? Attaching the columns above makes a custom role legible, so `Role` gains
+*rank* means nothing, so a new one was unanswerable — what does rank 2.5 let you
+do? Attaching the columns above makes a custom role legible, so `Role` gains
 `approves`, `proposes`, `manages_users`, `reads_audit`, `sees_operations` and a
 `builtin` flag, and role management becomes an admin surface in the API, the
 dashboard and the CLI.
@@ -292,10 +311,10 @@ Three things follow, and each is a deliberate loss of convenience:
   create users and read the log; it cannot merge a change or weaken a rule.
   This is the separation an auditor actually looks for, and it is the reason
   admin is not a superset.
-- **Platform cannot approve ordinary code.** It approves *governance* — harness
-  and factory changes, and ladder moves. A platform user reviewing a teammate's
-  pull request has no special authority over it, which is correct: that review
-  is a developer's job.
+- **Nobody above developer approves ordinary code.** Lead and platform approve
+  *governance* — the harness and the factory respectively, and the ladder moves
+  that change them. A lead reviewing a teammate's pull request has no special
+  authority over it, which is correct: that review is a developer's job.
 - **Developers propose governance changes but never approve them.** The
   improve lane (§4.1) is a proposal mechanism for exactly this reason.
 
@@ -308,6 +327,52 @@ unrelated things: `Policy.layer` is the *artifact* layer above, while
 `ApprovalWorkflow.layer` is a **role name** (`valid_role(session, layer)`).
 Two concepts, one word, and this model puts them next to each other. The
 artifact sense keeps `layer`; the approval-workflow sense becomes `role`.
+
+### 2.5.1 Areas — separation of duties by *where*, not just *what*
+
+A role saying "may approve harness changes" is half the model. The other half is
+**which part** of the code and the factory it may approve changes to. A team
+that wants the person who owns migrations to sign off on migrations, and nobody
+else, cannot say that with a role alone.
+
+So authority is a triple — **role × layer × area**:
+
+```
+Grant: role, action (approve | propose | administer), layer, area
+```
+
+`area` is a pattern, and what it matches depends on the layer:
+
+| layer | an area is | example |
+|---|---|---|
+| `code` | a path glob in the repository | `migrations/**`, `frontend/**`, `src/**/authz.py` |
+| `factory` | pipelines and stages | `ship-a-ticket`, `*:commit` |
+| `harness` | phases and tool grants | `run`, `*:tools` |
+| `charter` | standards and policy namespaces | `canon/security/**` |
+| `users`, `audit` | whole-domain, no area | `*` |
+
+`*` means the whole layer, which is what the built-in roles get by default, so
+**a team that does not want areas never sees them**.
+
+What this buys, and it is the thing regulated teams actually ask for:
+
+- a `data` role that approves `code:migrations/**` and nothing else
+- a `security` role that approves `harness:*:tools` — *who may be granted which
+  tool* — without being able to approve ordinary code
+- a `frontend` role that approves `code:frontend/**`, while `code:src/**` needs
+  someone else
+- two leads splitting the harness by area: one owns `harness:run`, another owns
+  `harness:review`, because the prompts they argue about are different ones
+
+The factory reads this at the delivery gate: **a run's diff is matched against
+the areas it touched**, and the approvers it needs are the union of the roles
+that own those areas. A change touching `migrations/**` and `frontend/**` needs
+both, which is separation of duties expressed as a consequence of the diff
+rather than a checklist somebody remembers.
+
+Two rules keep it safe. **No grant may be self-issued** — a role cannot widen its
+own area. And **an unmatched area fails closed**: a path no role owns needs the
+layer's default approver, never nobody.
 
 **Scope.** This touches `at_least()`, `owner_scope()`, `_SEES_ALL`, and every
 `require(...)` guard in `routers/`, so it is **Phase 1.5** rather than something
@@ -787,7 +852,7 @@ property:
 | | Promotion (more enforcement) | Demotion (less enforcement) |
 |---|---|---|
 | Proposed by | the improve lane, from evidence | a person, or the improve lane |
-| Approval | one approver | the process's **approval chain**, at `min_approver_role` or above |
+| Approval | the role owning that layer — `lead` for a harness rung, `platform` for a factory rung | the owning role **and** the process's approval chain |
 | Implemented by | **the factory**, as a normal run → PR | a person. The factory proposes, never performs |
 | If nothing is approved | the rule stays where it is — safe | the rule stays where it is — safe |
 
@@ -848,13 +913,13 @@ and its `DOWNGRADES` reverse.
 | 0 | 2.13.0 | ✅ Install fixes · `conftest` · `init` · `doctor` · `config` · **audit chain hardened** (keyed links, signed checkpoints, authenticated head, full-export signature). A clean clone installs, tests and serves. |
 | 0.1 | 2.13.1 | `targets --check` — prove a model target authenticates without paying for a run (§9.1). |
 | 1 | 2.14.0 | **Tokens only.** `credentials.py` + catalog + API + Connections UI. Every OAuth and OIDC path deleted; migration drops `connect_states`. |
-| 1.5 | 2.14.5 | **The authority model** (§2.5). `authority.py`; customizable roles with explicit powers + admin role CRUD; `require()` guards stop naming role literals; `owner_scope` splits operations from audit; the `layer` naming collision; the `"senior"` fail-open repaired. |
+| 1.5 | 2.14.5 | **The authority model** (§2.5). `authority.py`; the four built-in roles (`developer` · `lead` · `platform` · `admin`); customizable roles with explicit powers + admin role CRUD; **areas** — role × layer × area grants (§2.5.1); `require()` guards stop naming role literals; `owner_scope` splits operations from audit; the `layer` naming collision; the `"senior"` fail-open repaired. |
 | 2 | 2.15.0 | **Sign-up.** `org.signup` modes, `POST /auth/signup`, onboarding that ends on a verified credential. |
-| 3 | 2.16.0 | **The graph** (incl. per-stage `approve:` — plan approval, §10.3). `spec.py`, `graph.py`, `contracts.py`, `document.py`, `phases.py`, the `Pipeline` + `Run` + `RunStep` models. Pure and fully tested — no agent, no git, no forge. |
+| 3 | 2.16.0 | **The graph** (incl. per-stage `approve:` — plan approval, §10.3) + **canvas design mode** (§11.1). `spec.py`, `graph.py`, `contracts.py`, `document.py`, `phases.py`, the `Pipeline` + `Run` + `RunStep` models. Pure and fully tested — no agent, no git, no forge. |
 | 4 | 2.17.0 | **Workspace + forge.** `workspace.py`, `forge.py` (github/gitlab/local), `actions.py`. A run reaches a real PR with a stub phase. |
 | 5 | 2.18.0 | **The harness.** `deepagents`, `agent.py`, `GovernanceMiddleware`, routing through `Target`, oversight → interrupts → the approvals queue. |
 | 6 | 2.19.0 | **The ladder.** `Constraint`, rungs, withheld grants, the delivery gate, `/ladder` + UI. |
-| 7 | 2.20.0 | **Intake + builder.** Inbound webhooks, autostart, rework-from-comment, the workflow builder and template gallery. |
+| 7 | 2.20.0 | **Intake + canvas live mode.** Inbound webhooks, autostart, rework-from-comment, template gallery, **live mode** and **roles/areas on the canvas** (§11.2–11.3). |
 | 8 | **3.0.0** | Default pipeline packs, the Runs dashboard with a live trace, the `improve` lane, `docs/ADOPTING.md` + `docs/LIMITATIONS.md`, release. |
 
 Phase 4 is the first one where the product does something it cannot do today.
@@ -1011,3 +1076,93 @@ chains, `min_approver_role`, SLA and escalation all apply unchanged — and the
 `dark` oversight level skips it, because that is what `dark` means. It ships in
 **Phase 3** with the graph, since it is a property of a stage rather than of the
 harness, and it is on by default in the `strict` template and off in `quick-fix`.
+
+---
+
+## 11. The canvas
+
+**One stage graph, two modes.** You design the factory on a canvas, then watch it
+run on the same picture you drew. That is the reason to build a canvas at all —
+two separate views of one graph would be two things to learn and two layouts to
+keep in sync.
+
+### 11.1 Design mode — the workflow builder
+
+A palette on the left (phases · actions · gates), the graph in the middle, an
+inspector for the selected node.
+
+- **Drag a stage on, wire it up.** Edges are typed, and each type has a
+  meaning worth drawing differently: `next` (solid), `on_refusal` (amber, back
+  to an earlier stage), `on_error`, and the outcome edges `on_merge` /
+  `on_close` / `on_comment`. `rework` is reachable *only* through an outcome
+  edge — a layout that draws only `next` reports it unreachable, which is the
+  bug the edge types exist to prevent.
+- **The inspector is the stage's config**: phase or action, model, tool grant,
+  contract, `approve`, `oversight`, `requires` / `produces`, refusal policy.
+  "Add config (such as a preferred model)" is clicking a node.
+- **It writes `Pipeline` rows** (§3.1) — the canvas *is* the builder, not a
+  picture of one. Saving bumps the version; runs in flight keep the version they
+  started on.
+- **Templates open pre-populated.** `ship-a-ticket`, `quick-fix`, `strict`,
+  `docs-only` — start from one and edit, or start empty.
+- **Validation is inline, not on save**: an unreachable stage, a stage with no
+  way out, a missing terminal, a contract on a stage that produces nothing, a
+  phase with no prompt. Errors point at the node.
+- **Cost before you spend it.** Each node shows its model and turn cap; the
+  canvas totals an estimate for one run, from `unit_cost` and `max_turns`. A
+  target that spends money should say so before you press Run (§9.2).
+
+### 11.2 Live mode — the factory floor
+
+The same layout, the same node positions, runs flowing across it:
+
+- a **token per run** sitting on the stage it occupies, so where the work is
+  piling up is a glance rather than a query
+- **held for approval** marked on the node, click to approve or reject inline —
+  a plan gate (§10.3) is a node you can clear from here
+- refusals, revision counts, elapsed time, spend per run
+- worker saturation and quota headroom along the bottom
+
+It feeds from `live.py`'s HUB over WebSocket, which already exists and already
+publishes. The Runs list stays — a canvas is bad at "show me everything that
+failed last Tuesday", and a table is bad at "where is everything right now".
+
+### 11.3 Roles and areas, visible on the canvas
+
+This is what makes separation of duties (§2.5, §2.5.1) legible instead of a
+settings page nobody reads.
+
+- **A stage you may not change renders read-only** — greyed, not hidden. Seeing
+  the whole factory and being unable to edit part of it is the point; hiding it
+  would teach people the factory is smaller than it is.
+- **Nodes carry the area that owns them.** A `commit` stage governed by
+  `factory:*:commit` shows the role that owns it, so "who do I ask" is on the
+  node rather than in someone's memory.
+- **Live mode shows who can clear a hold.** A run held at a plan gate names the
+  role that may approve it, and says plainly when that is not you.
+- A **proposal affordance** for what you may not do directly: a developer editing
+  a factory stage does not get a disabled button, they get "propose this change"
+  — which is the improve-lane path (§4.1) reached at the moment the intent
+  exists.
+
+### 11.4 Build notes
+
+- **`@xyflow/react`** (React Flow 12) for the canvas, **`dagre`** for auto-layout
+  — needed for imported YAML and for keeping Live mode's positions stable. A new
+  frontend dependency, and the reason is that pan/zoom, edge routing, selection
+  and minimap are a lot of surface to hand-roll badly. The **core stays
+  dependency-free**; this is `frontend/` only.
+- Node positions are **persisted on the `Pipeline` row**, so a graph opens how
+  it was left rather than re-laying-out every time.
+- The canvas is one surface among three (§2.6): the same pipeline is editable as
+  YAML import/export and drivable from the CLI. Nothing is canvas-only, because
+  a factory you cannot script is one you cannot cron or debug over ssh.
+
+### 11.5 Sequencing
+
+| Mode | Phase | Why then |
+|---|---|---|
+| **Design** | 3 | Lands with the `Pipeline` model it edits |
+| **Read-only overlay** | 4 | Runs exist; show them on the graph before making it interactive |
+| **Live** | 7 | Needs intake, rework and several runs in flight to be worth the pixels |
+| **Roles and areas on the canvas** | 7 | Follows Phase 1.5's grants |
