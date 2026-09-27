@@ -50,13 +50,18 @@ def me(user: User = Depends(current_user)):
 def rotate_my_token(session: Session = Depends(get_session), user: User = Depends(current_user)):
     return {"token": rotate_token(session, user.id)}  # old API token invalidated
 
-# --- roles (admin-configurable authority ladder) ---
+# --- roles ---
 @router.get("/roles")
 def get_roles(session: Session = Depends(get_session), _: User = Depends(current_user)):
-    return list_roles(session)  # fixed ladder: developer < platform < admin
+    """Every role and the powers it carries. Open to any authenticated user:
+    "who approves a harness change" is a question everyone needs answered.
 
-# Roles are a fixed three-tier ladder (developer / platform / admin) — arbitrary
-# roles proved confusing, so creating/deleting them is intentionally not exposed.
+    Defining them lives in `routers/roles.py`. The note that used to sit here —
+    that arbitrary roles "proved confusing" — was right about the symptom and
+    wrong about the cause: a role that was only a *rank* meant nothing. Powers
+    on the row make a custom role legible, so they are exposed again.
+    """
+    return list_roles(session)
 
 # --- governance landscape (admin read view) ---
 @router.get("/governance")

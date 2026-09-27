@@ -89,13 +89,38 @@ def at_least(session: Session, role: str, minimum: str) -> bool:
     return role_rank(session, role) >= role_rank(session, minimum)
 
 
-def create_role(session: Session, name: str, rank: int) -> Role:
-    """Create (or re-rank) a role — admin only."""
+def create_role(session: Session, name: str, rank: int, *,
+                approves: list | None = None, proposes: list | None = None,
+                manages_users: bool | None = None, reads_audit: bool | None = None,
+                sees_operations: bool | None = None) -> Role:
+    """Create or update a role and its powers.
+
+    Every power is optional and **only a provided one is written**, so updating
+    a rank does not silently clear what the role may approve. A new role starts
+    with nothing: authority is granted deliberately rather than inherited from
+    wherever its rank happens to land.
+    """
+    from .authority import LAYERS
+
+    for field, value in (("approves", approves), ("proposes", proposes)):
+        for layer in value or ():
+            if layer not in LAYERS:
+                raise ValueError(f"{field}: unknown layer {layer!r} (expected {LAYERS})")
+
     role = session.get(Role, name)
     if role is None:
-        role = Role(name=name, rank=rank)
-    else:
-        role.rank = rank
+        role = Role(name=name, rank=rank, approves=[], proposes=[])
+    role.rank = rank
+    if approves is not None:
+        role.approves = list(approves)
+    if proposes is not None:
+        role.proposes = list(proposes)
+    if manages_users is not None:
+        role.manages_users = manages_users
+    if reads_audit is not None:
+        role.reads_audit = reads_audit
+    if sees_operations is not None:
+        role.sees_operations = sees_operations
     session.add(role)
     session.commit()
     session.refresh(role)

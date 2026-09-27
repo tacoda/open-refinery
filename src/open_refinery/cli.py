@@ -181,6 +181,57 @@ def _credentials(args: argparse.Namespace) -> int:
     return 0
 
 
+def _roles(args: argparse.Namespace) -> int:
+    import sys
+
+    from .client import ApiError
+
+    api = _client(args)
+    try:
+        if args.role_cmd == "list":
+            for r in api.get("/roles"):
+                powers = []
+                if r.get("approves"):
+                    powers.append("approves " + ",".join(r["approves"]))
+                if r.get("manages_users"):
+                    powers.append("manages users")
+                if r.get("reads_audit"):
+                    powers.append("reads audit")
+                if r.get("sees_operations"):
+                    powers.append("sees operations")
+                mark = "*" if r.get("builtin") else " "
+                print(f"{mark}{r['name']:<12} {'; '.join(powers) or '—'}")
+            print("\n* built-in (the standard configuration)")
+            return 0
+
+        if args.role_cmd == "layers":
+            print(" ".join(api.get("/roles/layers")["layers"]))
+            return 0
+
+        if args.role_cmd == "set":
+            body = {"rank": args.rank}
+            if args.approves is not None:
+                body["approves"] = [x for x in args.approves.split(",") if x]
+            if args.proposes is not None:
+                body["proposes"] = [x for x in args.proposes.split(",") if x]
+            for flag in ("manages_users", "reads_audit", "sees_operations"):
+                value = getattr(args, flag)
+                if value is not None:
+                    body[flag] = value
+            r = api.put(f"/roles/{args.name}", body)
+            print(f"{r['name']}: approves {r['approves'] or '—'}, proposes {r['proposes'] or '—'}")
+            return 0
+
+        if args.role_cmd == "rm":
+            api.delete(f"/roles/{args.name}")
+            print("deleted")
+            return 0
+    except ApiError as exc:
+        print(f"error: {exc.detail}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def _create_admin(args: argparse.Namespace) -> int:
     import getpass
     import sys
@@ -380,6 +431,27 @@ def main(argv: list[str] | None = None) -> int:
     c_rot.add_argument("field", nargs="+", metavar="key=value")
     cred_sub.add_parser("rm", help="revoke a credential").add_argument("id")
     creds.set_defaults(func=_credentials)
+
+    roles = sub.add_parser("roles", help="define roles and what they may do (via the API)")
+    roles.add_argument("--url", default=None, help="server URL (or $OPEN_REFINERY_URL)")
+    roles.add_argument("--token", default=None, help="API token (or $OPEN_REFINERY_TOKEN)")
+    role_sub = roles.add_subparsers(dest="role_cmd", required=True)
+
+    role_sub.add_parser("list", help="every role and its powers")
+    role_sub.add_parser("layers", help="what a role's authority can be about")
+
+    r_set = role_sub.add_parser("set", help="create or update a role")
+    r_set.add_argument("name")
+    r_set.add_argument("--rank", type=int, default=1, help="ordering for approval chains")
+    r_set.add_argument("--approves", default=None, metavar="code,harness,…")
+    r_set.add_argument("--proposes", default=None, metavar="code,harness,…")
+    for flag in ("manages-users", "reads-audit", "sees-operations"):
+        dest = flag.replace("-", "_")
+        r_set.add_argument(f"--{flag}", dest=dest, action="store_true", default=None)
+        r_set.add_argument(f"--no-{flag}", dest=dest, action="store_false", default=None)
+
+    role_sub.add_parser("rm", help="delete a custom role").add_argument("name")
+    roles.set_defaults(func=_roles)
 
     admin = sub.add_parser("create-admin", help="create the initial admin user")
     admin.add_argument("--email", required=True)

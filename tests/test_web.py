@@ -96,10 +96,12 @@ def test_roles_list_the_standard_configuration(ctx):
     names = [r["name"] for r in client.get("/roles", headers=auth(dev_token)).json()]
     assert names == ["auditor", "developer", "lead", "platform", "admin"]
 
-    # creating/deleting arbitrary roles is intentionally not exposed
-    assert client.post("/roles", headers=auth(admin_token),
-                       json={"name": "senior", "rank": 15}).status_code in (404, 405)
-    assert client.delete("/roles/admin", headers=auth(admin_token)).status_code in (404, 405)
+    # Roles ARE customizable now (see test_roles_api.py) — the built-ins are a
+    # standard configuration, not a limit. What stays closed is touching one of
+    # them, or the role you hold.
+    assert client.put("/roles/admin", headers=auth(admin_token),
+                      json={"rank": 15}).status_code == 403
+    assert client.delete("/roles/lead", headers=auth(admin_token)).status_code == 403
 
 
 def test_ownership_scoping_on_repos(ctx):

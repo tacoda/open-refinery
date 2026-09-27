@@ -3,6 +3,57 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.14.5] — 2026-09-27
+
+*Phase 1.5 on the [road to 3.0](docs/PLAN-3.0.md): authority becomes data, and
+roles become definable.*
+
+### Changed
+- **Authority is no longer a rank ladder.** `developer < platform < admin`
+  compared with `at_least()` meant admin could do everything platform could —
+  convenient, and not a separation of duties. A role now carries explicit
+  powers on its row (`authority.py`), and **`admin` approves nothing**: it
+  manages users and reads audit, so a compromised admin account can create
+  users and read the log but cannot merge a change or weaken a rule.
+- **A `lead` role**, because the product is both a harness and a factory and
+  each needs an owner. Lead approves `harness` and `charter` (phases, prompts,
+  tool grants, the standards turns read); platform approves `factory` (the
+  stage graph, delivery, routing, quotas). A lead changing a prompt does not
+  need platform, and platform changing a route does not need a lead.
+- **`auditor` gains a role row.** It existed as a bare string `current_user`
+  returned for a time-boxed grant; a row makes it checkable and visible in
+  `/roles`.
+- **Route guards ask what a role may *do*.** Every `require("platform","admin")`
+  literal is gone, replaced by `manages_users` / `reads_audit` /
+  `sees_operations` / `approves(layer)`. A team that defines `reviewer`, or
+  splits platform in two, gets working routes with no code change.
+- **`owner_scope` keys on `sees_operations`**, so admin no longer sees
+  everyone's repos, work items, targets or routes.
+
+### Added
+- **Roles are definable.** `PUT /roles/{name}` and `DELETE /roles/{name}`
+  (user management), `GET /roles/layers` for the editor, and
+  `open-refinery roles list|layers|set|rm`. The built-ins are a **standard
+  configuration, not a limit**.
+  - **You cannot edit the role you hold** — otherwise granting yourself more
+    authority is a single PUT away.
+  - Built-ins cannot be changed or deleted; a role still assigned to someone
+    cannot be deleted; an unknown layer is rejected; every change is audited.
+  - Omitted powers are left alone, so setting a rank does not silently clear
+    what a role may approve.
+
+### Fixed
+- **The approval gate could be satisfied by anyone.** `role_rank()` returns 0
+  for a role that does not exist, so `at_least(developer, "senior")` was
+  **True** — and migration v2 set exactly `'senior'` as every process's default
+  `min_approver_role`, a role nothing ever seeded. Any process left on that
+  default had **no effective approval minimum**. `at_least` now fails closed,
+  `authority.*` fails closed on unknown role *and* unknown layer, and migration
+  **v23** repairs the rows carrying the dead default.
+- **`/events` would have locked admin out of the audit trail.** It scoped with
+  `owner_scope`, which is now operations-keyed. Added `audit_scope()` — the two
+  answer different questions, and sharing one helper hid that.
+
 ## [2.14.0] — 2026-09-27
 
 *Phase 1 on the [road to 3.0](docs/PLAN-3.0.md): every service is reached with a

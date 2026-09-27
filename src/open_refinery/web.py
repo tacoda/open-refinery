@@ -161,6 +161,8 @@ from .users import (
     count_users,
     create_session,
     create_user,
+    create_role,
+    delete_role,
     list_roles,
     list_users,
     role_rank,
@@ -343,6 +345,17 @@ class NewCampaign(BaseModel):
 class RecertDecision(BaseModel):
     decision: str                     # certified | revoked
     note: str = ""
+
+
+class RoleBody(BaseModel):
+    """A role's powers. Omitted fields are left as they are, so setting a rank
+    does not silently clear what the role may approve."""
+    rank: int = 1
+    approves: list[str] | None = None        # layers it may approve changes to
+    proposes: list[str] | None = None
+    manages_users: bool | None = None
+    reads_audit: bool | None = None
+    sees_operations: bool | None = None
 
 
 class NewCredential(BaseModel):
@@ -605,9 +618,9 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
 def _include_routers(app: FastAPI) -> None:
     from .routers import (core, credentials, governance, harness, ops, org, policy,
-                          recert, routing, scim, systems, workitem)
+                          recert, roles, routing, scim, systems, workitem)
     for mod in (core, ops, systems, governance, org, harness, workitem, routing, policy,
-                scim, recert, credentials):
+                scim, recert, credentials, roles):
         app.include_router(mod.router)
 
 
