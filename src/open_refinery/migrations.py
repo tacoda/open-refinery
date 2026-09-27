@@ -116,6 +116,21 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE integrations ADD COLUMN status_detail TEXT NOT NULL DEFAULT '';"
     "ALTER TABLE integrations ADD COLUMN shared INTEGER NOT NULL DEFAULT 0;"
     "CREATE INDEX IF NOT EXISTS ix_integrations_kind ON integrations (kind);",
+    # v23 (2.14.5): authority becomes data on the role rather than a rank, and
+    # the four built-ins are seeded/backfilled by `ensure_default_roles`.
+    "ALTER TABLE roles ADD COLUMN approves TEXT NOT NULL DEFAULT '[]';"
+    "ALTER TABLE roles ADD COLUMN proposes TEXT NOT NULL DEFAULT '[]';"
+    "ALTER TABLE roles ADD COLUMN manages_users INTEGER NOT NULL DEFAULT 0;"
+    "ALTER TABLE roles ADD COLUMN reads_audit INTEGER NOT NULL DEFAULT 0;"
+    "ALTER TABLE roles ADD COLUMN sees_operations INTEGER NOT NULL DEFAULT 0;"
+    "ALTER TABLE roles ADD COLUMN builtin INTEGER NOT NULL DEFAULT 0;"
+    # Repair the fail-open. Migration v2 defaulted min_approver_role to
+    # 'senior', a role nothing ever seeded — and because role_rank() returns 0
+    # for an unknown role, at_least(developer, 'senior') was TRUE. Every process
+    # left on that default had no effective approval minimum.
+    "UPDATE processes SET min_approver_role = 'lead' WHERE min_approver_role = 'senior';"
+    "UPDATE approval_requests SET required_roles = REPLACE(required_roles, '\"senior\"', '\"lead\"')"
+    " WHERE required_roles LIKE '%senior%';",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -166,6 +181,12 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE integrations DROP COLUMN status;"
     "ALTER TABLE integrations DROP COLUMN status_detail;"
     "ALTER TABLE integrations DROP COLUMN shared;",                                      # v22
+    "ALTER TABLE roles DROP COLUMN approves;"
+    "ALTER TABLE roles DROP COLUMN proposes;"
+    "ALTER TABLE roles DROP COLUMN manages_users;"
+    "ALTER TABLE roles DROP COLUMN reads_audit;"
+    "ALTER TABLE roles DROP COLUMN sees_operations;"
+    "ALTER TABLE roles DROP COLUMN builtin;",                                            # v23
 ]
 
 

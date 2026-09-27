@@ -82,6 +82,12 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
             "ALTER TABLE integrations DROP COLUMN status",
             "ALTER TABLE integrations DROP COLUMN status_detail",
             "ALTER TABLE integrations DROP COLUMN shared",
+            "ALTER TABLE roles DROP COLUMN approves",
+            "ALTER TABLE roles DROP COLUMN proposes",
+            "ALTER TABLE roles DROP COLUMN manages_users",
+            "ALTER TABLE roles DROP COLUMN reads_audit",
+            "ALTER TABLE roles DROP COLUMN sees_operations",
+            "ALTER TABLE roles DROP COLUMN builtin",
             "DROP TABLE systems",
             "PRAGMA user_version = 7",   # pretend this is a 1.0-era install (schema v7)
         ):

@@ -53,6 +53,9 @@ def test_viewer_rank_filters_higher_layers():
     # a platform-layer contradiction: developer viewer should not see it
     create_policy(conn, "allow", plat.id, action="x", resource="y")
     create_policy(conn, "deny", plat.id, action="x", resource="y")
-    dev_view = analyze(conn, viewer_rank=1)   # developer rank
-    plat_view = analyze(conn, viewer_rank=2)  # platform rank
+    # Derive the ranks rather than hardcode them — adding a role shifts every
+    # number below it, and a literal here just breaks on the next one.
+    from open_refinery.users import role_rank
+    dev_view = analyze(conn, viewer_rank=role_rank(conn, "developer"))
+    plat_view = analyze(conn, viewer_rank=role_rank(conn, "platform"))
     assert dev_view["total"] == 0 and plat_view["total"] >= 1

@@ -33,7 +33,9 @@ def test_single_slot_chain_defaults_to_min_approver():
     conn, dev, platform, admin, item = fixture()  # default chain = [min_approver_role=platform]
     audit = SqliteSink(conn)
     req = request_approval(conn, item.id, "done", dev.id, audit)
-    assert req.status == "pending" and req.required_roles == ["platform"]
+    # DEFAULT_MIN_APPROVER_ROLE: a work-item move is `code`, and `lead` is the
+    # weakest role above the author that can sign one off.
+    assert req.status == "pending" and req.required_roles == ["lead"]
     assert len(list_approvals(conn, status="pending")) == 1
 
     done = approve(conn, req.id, platform.id, audit)

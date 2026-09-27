@@ -18,16 +18,17 @@ def setup(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "test-secret")
     conn = connect("sqlite:///:memory:")
     dev, _ = create_user(conn, "dev@x.dev", "pw", "developer")
+    lead, _ = create_user(conn, "lead@x.dev", "pw", "lead")
     plat, _ = create_user(conn, "plat@x.dev", "pw", "platform")
     admin, _ = create_user(conn, "admin@x.dev", "pw", "admin")
-    return conn, dev, plat, admin
+    return conn, dev, lead, plat, admin
 
 
 POLICY = {"effect": "deny", "action": "invoke", "resource": "*", "strict": True}
 
 
 def test_full_accept_applies_the_change(monkeypatch):
-    conn, dev, plat, admin = setup(monkeypatch)
+    conn, dev, lead, plat, admin = setup(monkeypatch)
     audit = SqliteSink(conn)
     set_workflow(conn, "developer", ["platform", "admin"], admin.id)
     prop = propose(conn, "policy", "create", POLICY, "developer", dev.id)
@@ -48,7 +49,7 @@ def test_full_accept_applies_the_change(monkeypatch):
 
 
 def test_accepted_policy_proposal_carries_role_and_namespace(monkeypatch):
-    conn, dev, plat, admin = setup(monkeypatch)
+    conn, dev, lead, plat, admin = setup(monkeypatch)
     audit = SqliteSink(conn)
     set_workflow(conn, "developer", ["platform"], admin.id)
     payload = {"effect": "deny", "role": "developer", "action": "egress",
@@ -60,7 +61,7 @@ def test_accepted_policy_proposal_carries_role_and_namespace(monkeypatch):
 
 
 def test_deny_stops(monkeypatch):
-    conn, dev, plat, admin = setup(monkeypatch)
+    conn, dev, lead, plat, admin = setup(monkeypatch)
     audit = SqliteSink(conn)
     set_workflow(conn, "developer", ["platform"], admin.id)
     prop = propose(conn, "policy", "create", POLICY, "developer", dev.id)
@@ -72,7 +73,7 @@ def test_deny_stops(monkeypatch):
 
 
 def test_feedback_then_resubmit(monkeypatch):
-    conn, dev, plat, admin = setup(monkeypatch)
+    conn, dev, lead, plat, admin = setup(monkeypatch)
     audit = SqliteSink(conn)
     set_workflow(conn, "developer", ["platform"], admin.id)
     prop = propose(conn, "policy", "create", POLICY, "developer", dev.id)
@@ -89,28 +90,29 @@ def test_feedback_then_resubmit(monkeypatch):
 
 
 def test_default_chain_cascades_up_from_proposer(monkeypatch):
-    conn, dev, plat, admin = setup(monkeypatch)
+    conn, dev, lead, plat, admin = setup(monkeypatch)
     # no workflow configured → a developer's proposal escalates up the ladder
     prop = propose(conn, "policy", "create", POLICY, "platform", dev.id)
-    assert prop.chain == ["platform", "admin"]             # roles above developer, lowest first
+    assert prop.chain == ["lead", "platform", "admin"]     # roles above developer, lowest first
     # a platform proposer only needs admin above
     prop2 = propose(conn, "policy", "create", POLICY, "platform", plat.id)
     assert prop2.chain == ["admin"]
 
 
 def test_freetext_suggestion_cascades_and_adopts(monkeypatch):
-    conn, dev, plat, admin = setup(monkeypatch)
+    conn, dev, lead, plat, admin = setup(monkeypatch)
     audit = SqliteSink(conn)
     prop = propose(conn, "suggestion", "adopt",
                    {"text": "adopt trunk-based development"}, "platform", dev.id)
-    assert prop.chain == ["platform", "admin"]
+    assert prop.chain == ["lead", "platform", "admin"]
+    review(conn, prop.id, lead.id, "accept", audit)
     review(conn, prop.id, plat.id, "accept", audit)
     done = review(conn, prop.id, admin.id, "accept", audit)
     assert done.status == "accepted" and done.applied_ref == ""  # adopted, no artifact created
 
 
 def test_distinct_signer_per_slot(monkeypatch):
-    conn, dev, plat, admin = setup(monkeypatch)
+    conn, dev, lead, plat, admin = setup(monkeypatch)
     audit = SqliteSink(conn)
     set_workflow(conn, "developer", ["platform", "platform"], admin.id)
     prop = propose(conn, "policy", "create", POLICY, "developer", dev.id)

@@ -212,7 +212,6 @@ from .work_items import (
     transition,
 )
 from .users import (
-    DEFAULT_ROLES,
     DuplicateUser,
     User,
     at_least,
@@ -271,7 +270,6 @@ __all__ = [
     "overdue_campaigns",
     "emit_recert_overdue",
     "User",
-    "DEFAULT_ROLES",
     "role_rank",
     "at_least",
     "valid_role",

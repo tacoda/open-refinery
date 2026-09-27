@@ -28,26 +28,45 @@ def test_admin_can_configure_roles():
     assert not valid_role(conn, "senior")
 
 
-def test_admin_role_and_in_use_role_protected():
+def test_builtin_roles_are_protected():
+    """All four are load-bearing: the guards and the standard configuration
+    assume they exist."""
     conn = connect("sqlite:///:memory:")
-    with pytest.raises(ValueError):
-        delete_role(conn, "admin")          # load-bearing, never removable
-    create_user(conn, "d@x.dev", "pw", "developer")
+    for name in ("developer", "lead", "platform", "admin"):
+        with pytest.raises(ValueError, match="built-in"):
+            delete_role(conn, name)
+
+
+def test_a_custom_role_in_use_cannot_be_removed():
+    conn = connect("sqlite:///:memory:")
+    create_role(conn, "reviewer", 2)
+    create_user(conn, "d@x.dev", "pw", "reviewer")
     with pytest.raises(RoleInUse):
-        delete_role(conn, "developer")      # still assigned to a user
+        delete_role(conn, "reviewer")
 
 
 def test_default_roles_seeded():
     conn = connect("sqlite:///:memory:")
     names = [r.name for r in list_roles(conn)]
-    assert names == ["developer", "platform", "admin"]  # ordered by rank
+    assert names == ["developer", "lead", "platform", "admin"]  # ordered by rank
     assert valid_role(conn, "developer") and not valid_role(conn, "senior")
 
 
 def test_role_ladder():
+    """`at_least` is an ordering for approval chains — not an authority check."""
     conn = connect("sqlite:///:memory:")
     assert at_least(conn, "platform", "platform") and at_least(conn, "admin", "platform")
     assert not at_least(conn, "developer", "platform")
+
+
+def test_at_least_fails_closed_on_an_unknown_role():
+    """It used to fail OPEN: role_rank() returns 0 for a role that does not
+    exist, so at_least(developer, 'senior') was True — and migration v2 set
+    exactly that as every process's default min_approver_role, leaving those
+    processes with no effective approval minimum at all."""
+    conn = connect("sqlite:///:memory:")
+    assert at_least(conn, "developer", "senior") is False
+    assert at_least(conn, "senior", "developer") is False
 
 
 def fixture():
@@ -57,7 +76,7 @@ def fixture():
     platform, _ = create_user(conn, "platform@x.dev", "pw", "platform")
     repo = create_repository(conn, "or", "git@x:or.git", dev.id)
     # assisted process: every move needs approval (default approver = platform)
-    proc = create_process(conn, "flow", "board", ["todo", "done"], dev.id, oversight="assisted")
+    proc = create_process(conn, "flow", "board", ["todo", "done"], dev.id, oversight="assisted")  # min approver: lead
     item = create_work_item(conn, repo.id, proc.id, "T", dev.id)
     return conn, dev, dev2, platform, item
 

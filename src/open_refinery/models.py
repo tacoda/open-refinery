@@ -77,9 +77,22 @@ class LedgerEntry(SQLModel, table=True):
 
 
 class Role(SQLModel, table=True):
+    """A role and the powers it carries — see `authority.py`.
+
+    Powers are columns rather than a rank, because a rank cannot express "lead
+    approves the harness, platform approves the factory, and neither approves
+    the other". `rank` survives only for genuine orderings, such as walking an
+    approval chain.
+    """
     __tablename__ = "roles"
     name: str = Field(primary_key=True)
-    rank: int = Field(index=True)  # higher = more authority / wider scope
+    rank: int = Field(index=True)  # ordering only — NOT an authority check
+    approves: list = Field(default_factory=list, sa_column=Column(JSON))   # layers
+    proposes: list = Field(default_factory=list, sa_column=Column(JSON))   # layers
+    manages_users: bool = False
+    reads_audit: bool = False
+    sees_operations: bool = False   # other people's operational data, not audit
+    builtin: bool = False           # the standard configuration; cannot be deleted
     created_at: str = Field(default_factory=now_iso)
 
 

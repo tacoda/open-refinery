@@ -1,8 +1,8 @@
 """Users, authentication, sessions, and API tokens.
 
 Every actor is a `User` with a role and a personal API token. Passwords are
-salted + PBKDF2-hashed; tokens (API and OAuth/password session) are stored
-hashed. Stdlib crypto only.
+salted + PBKDF2-hashed; tokens (API and session) are stored hashed. Stdlib
+crypto only. What a role may *do* lives in `authority.py`.
 """
 
 from __future__ import annotations
@@ -16,14 +16,13 @@ from sqlmodel import Session, select
 
 from .models import Role, User, UserSession
 
-# Roles are admin-configurable DATA, not a fixed enum. A fresh store is seeded
-# with this minimal ladder; admins add/rank more (senior, lead, …) via the UI.
-#   developer — drives work on their repos.
-#   platform  — org policy + the governance surface; approves gated moves.
-#   admin     — audits everything; manages roles + approval workflows.
-DEFAULT_ROLES = (("developer", 1), ("platform", 2), ("admin", 3))
+# Roles are DATA, and what a role may do lives on its row — see `authority.py`
+# for the standard configuration and why it is not a ladder. This module owns
+# the table; `authority` owns the meaning.
 ADMIN_ROLE = "admin"
-DEFAULT_MIN_APPROVER_ROLE = "platform"  # default approver tier for a gated move
+# The default approver for a gated move: a work-item transition is `code`, and
+# `lead` is the weakest role above the author that can sign one off.
+DEFAULT_MIN_APPROVER_ROLE = "lead"
 _PBKDF2_ROUNDS = 600_000
 
 
@@ -36,11 +35,29 @@ class RoleInUse(Exception):
 
 
 def ensure_default_roles(session: Session) -> None:
-    """Seed the default role ladder into an empty roles table (idempotent)."""
-    if session.exec(select(Role)).first() is not None:
-        return
-    for name, rank in DEFAULT_ROLES:
-        session.add(Role(name=name, rank=rank))
+    """Seed the built-in roles, and backfill their powers (idempotent).
+
+    Not "only when the table is empty": an install upgrading from before 2.14.5
+    already has `developer`/`platform`/`admin` rows with no powers on them, and
+    a role with no powers can do nothing. So every built-in is reconciled to the
+    standard configuration on each call, and `lead` is created if missing.
+
+    Custom roles are never touched.
+    """
+    from .authority import BUILTIN
+
+    for name, p in BUILTIN.items():
+        row = session.get(Role, name)
+        if row is None:
+            row = Role(name=name)
+        row.rank = p["rank"]
+        row.approves = list(p["approves"])
+        row.proposes = list(p["proposes"])
+        row.manages_users = p["manages_users"]
+        row.reads_audit = p["reads_audit"]
+        row.sees_operations = p["sees_operations"]
+        row.builtin = True
+        session.add(row)
     session.commit()
 
 
@@ -58,6 +75,17 @@ def role_rank(session: Session, name: str) -> int:
 
 
 def at_least(session: Session, role: str, minimum: str) -> bool:
+    """Rank comparison, for genuine orderings such as walking an approval chain.
+
+    **Not an authority check** — use `authority.may_approve` for that.
+
+    Fails closed on an unknown role. It used to not: `role_rank()` returns 0 for
+    a role that does not exist, so `at_least(developer, "senior")` was True, and
+    every process left on migration v2's `'senior'` default had no effective
+    approval minimum at all.
+    """
+    if not valid_role(session, role) or not valid_role(session, minimum):
+        return False
     return role_rank(session, role) >= role_rank(session, minimum)
 
 
@@ -75,9 +103,10 @@ def create_role(session: Session, name: str, rank: int) -> Role:
 
 
 def delete_role(session: Session, name: str) -> None:
-    """Remove a role — admin only. Refuses the admin role or one still in use."""
-    if name == ADMIN_ROLE:
-        raise ValueError("the admin role cannot be removed")
+    """Remove a role — admin only. Refuses a built-in or one still in use."""
+    row = session.get(Role, name)
+    if row is not None and row.builtin:
+        raise ValueError(f"{name!r} is a built-in role and cannot be removed")
     if session.exec(select(User.id).where(User.role == name)).first() is not None:
         raise RoleInUse(name)
     role = session.get(Role, name)
@@ -161,7 +190,7 @@ def rotate_token(session: Session, user_id: str) -> str:
 
 
 def create_session(session: Session, user_id: str) -> str:
-    """Issue a session token (after OAuth or password login). Returns plaintext."""
+    """Issue a session token after a password login. Returns plaintext."""
     token = secrets.token_urlsafe(32)
     session.add(UserSession(token_hash=_hash_token(token), user_id=user_id))
     session.commit()

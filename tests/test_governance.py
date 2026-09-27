@@ -20,7 +20,9 @@ def test_landscape_reports_roles_and_layers():
     land = landscape(conn)
 
     roles = {r["name"]: r for r in land["roles"]}
-    assert roles["developer"]["users"] == 1 and roles["platform"]["rank"] == 2
+    from open_refinery.users import role_rank
+    assert roles["developer"]["users"] == 1
+    assert roles["platform"]["rank"] == role_rank(conn, "platform")
     ranks = [layer["rank"] for layer in land["layers"]]
     assert ranks == sorted(ranks, reverse=True)  # highest layer first
 

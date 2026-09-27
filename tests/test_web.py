@@ -82,15 +82,15 @@ def test_only_admin_creates_users(ctx):
     assert r2.status_code == 403
 
 
-def test_roles_are_a_fixed_ladder(ctx):
+def test_roles_list_the_standard_configuration(ctx):
     _, client, _, admin_token = ctx
     dev_token = client.post("/users", headers=auth(admin_token),
                             json={"email": "dev@x.dev", "password": "pw", "role": "developer"}
                             ).json()["token"]
 
-    # fixed three-tier ladder, readable by any authed user
+    # the standard configuration, readable by any authed user
     names = [r["name"] for r in client.get("/roles", headers=auth(dev_token)).json()]
-    assert names == ["developer", "platform", "admin"]
+    assert names == ["developer", "lead", "platform", "admin"]
 
     # creating/deleting arbitrary roles is intentionally not exposed
     assert client.post("/roles", headers=auth(admin_token),
