@@ -13,7 +13,7 @@ from fastapi import APIRouter
 from .. import authority
 from ..deps import *  # noqa: F401,F403
 from ..models import WorkItem
-from ..pipeline import GraphError, default_pipeline, parse
+from ..pipeline import GraphError, default_pipeline, parse, template, templates
 from ..pipeline import store as ps
 from ..pipeline.graph import plan_next, walk
 from ..pipeline.spec import ACTIONS, to_dict
@@ -83,6 +83,30 @@ def save_pipeline(body: PipelineBody, session: Session = Depends(get_session),
     return _view(row)
 
 
+@router.get("/pipelines/templates")
+def get_templates(_: User = Depends(current_user)):
+    """The defaults to build from — each saying what it **gives up**, because a
+    template chosen without knowing that is a decision nobody made."""
+    return templates()
+
+
+@router.get("/pipelines/templates/default")
+def get_default_template(_: User = Depends(current_user)):
+    """`ship-a-ticket` — the one a team gets before configuring anything."""
+    return default_pipeline()
+
+
+@router.get("/pipelines/templates/{name}")
+def get_template(name: str, _: User = Depends(current_user)):
+    try:
+        return template(name)
+    except GraphError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+# NOTE: these sit ABOVE `/pipelines/{pipeline_id}` on purpose. FastAPI matches in
+# declaration order, so a catch-all path parameter declared first swallows every
+# literal below it — `/pipelines/templates` was being read as a pipeline id.
 @router.get("/pipelines/{pipeline_id}")
 def get_pipeline(pipeline_id: str, session: Session = Depends(get_session),
                  _: User = Depends(current_user)):
@@ -101,12 +125,6 @@ def export_pipeline(pipeline_id: str, session: Session = Depends(get_session),
     if row is None:
         raise HTTPException(status_code=404, detail="unknown pipeline")
     return to_dict(ps.graph_of(row))
-
-
-@router.get("/pipelines/templates/default")
-def get_default_template(_: User = Depends(current_user)):
-    """`ship-a-ticket` — the defaults to build from."""
-    return default_pipeline()
 
 
 # --- runs -------------------------------------------------------------------

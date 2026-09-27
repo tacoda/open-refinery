@@ -355,3 +355,130 @@ def default_pipeline() -> dict:
             "rework": {"action": "prepare_workspace", "next": "run"},
         },
     }
+
+
+def quick_fix() -> dict:
+    """One turn to a pull request. For a scratch repo, a spike, or a mechanical
+    migration where the diff *is* the review.
+
+    What you give up, stated so it is a decision rather than a discovery: no
+    plan, so the turn picks the first approach that works; no proof, so "it
+    compiles" is the strongest claim anyone can make about the diff; no review;
+    and no revision loop, so a repository with a strict commit hook fails most
+    of these outright.
+    """
+    return {
+        "name": "quick-fix",
+        "first": "prepare",
+        "terminal": ["landed", "closed", "failed"],
+        "model": "claude-sonnet-5",
+        "stages": {
+            "prepare": {"action": "prepare_workspace", "next": "run"},
+            "run": {"phase": "run", "requires": ["spec"], "produces": ["work"],
+                    "next": "commit"},
+            # Rung 4 stays. Skipping it would ship things the repository itself
+            # refuses.
+            "commit": {"action": "commit_and_push", "next": "publish"},
+            "publish": {"action": "open_pull_request", "next": "waiting"},
+            "waiting": {"action": "watch_pull_request", "on_merge": "landed",
+                        "on_close": "closed", "on_comment": "rework"},
+            "rework": {"action": "prepare_workspace", "next": "run"},
+        },
+    }
+
+
+def strict() -> dict:
+    """Every check on, and one more.
+
+    For a repository with users on it. A job reaching a pull request has had its
+    plan read by a person, its software run, its diff reviewed, and its security
+    surface looked at by something shown neither the plan nor the implementer's
+    account of what it built.
+    """
+    graph = default_pipeline()
+    graph["name"] = "strict"
+    stages = graph["stages"]
+    # A plan that failed is not an empty plan to build from.
+    stages["plan"]["on_error"] = "fail"
+    stages["plan"]["max_revisions"] = 3
+    # Not optional here: "it compiles" was the strongest claim anybody could
+    # make about a diff before this stage existed.
+    stages["prove"]["optional"] = False
+    stages["review"]["optional"] = False
+    stages["review"]["next"] = "security"
+    # A second reader with a single question — what does this diff let somebody
+    # do that they could not do before — because a general reviewer asked to
+    # check everything checks the thing it read most recently.
+    stages["security"] = {
+        "phase": "security", "model": "claude-opus-5",
+        "requires": ["work"], "produces": ["review"],
+        "contract": "verdict", "optional": True, "next": "commit",
+    }
+    stages["run"]["on_refusal"] = {"goto": "run", "max": 3,
+                                   "stop_when_identical": True}
+    return graph
+
+
+def docs_only() -> dict:
+    """Prose, reviewed by a person and nothing else. No proof stage, because
+    there is nothing to run."""
+    return {
+        "name": "docs-only",
+        "first": "prepare",
+        "terminal": ["landed", "closed", "failed"],
+        "model": "claude-sonnet-5",
+        "stages": {
+            "prepare": {"action": "prepare_workspace", "next": "run"},
+            "run": {"phase": "run", "requires": ["spec"], "produces": ["work"],
+                    "next": "review"},
+            "review": {"phase": "review", "requires": ["work"],
+                       "produces": ["review"], "contract": "verdict",
+                       "next": "commit"},
+            "commit": {"action": "commit_and_push", "next": "publish"},
+            "publish": {"action": "open_pull_request", "next": "waiting"},
+            "waiting": {"action": "watch_pull_request", "on_merge": "landed",
+                        "on_close": "closed", "on_comment": "rework"},
+            "rework": {"action": "prepare_workspace", "next": "run"},
+        },
+    }
+
+
+# The defaults to build from. Each says what it gives up, because a template
+# chosen without knowing that is a decision nobody made.
+TEMPLATES: dict[str, dict] = {
+    "ship-a-ticket": {
+        "build": default_pipeline,
+        "about": "The full loop: plan, build, prove, review, then a person merges.",
+        "gives_up": "",
+    },
+    "quick-fix": {
+        "build": quick_fix,
+        "about": "One turn to a pull request.",
+        "gives_up": "No plan, no proof, no review, no revision loop — the diff is the review.",
+    },
+    "strict": {
+        "build": strict,
+        "about": "Every check on, plus a second reader for the security surface.",
+        "gives_up": "Four turns per job, two on a thinking model. It costs more.",
+    },
+    "docs-only": {
+        "build": docs_only,
+        "about": "Prose, reviewed by a person.",
+        "gives_up": "No proof stage — there is nothing to run.",
+    },
+}
+
+
+def templates() -> list[dict]:
+    """The catalog, for the canvas gallery."""
+    return [{"name": name, "about": meta["about"], "gives_up": meta["gives_up"],
+             "stages": len(meta["build"]()["stages"])}
+            for name, meta in TEMPLATES.items()]
+
+
+def template(name: str) -> dict:
+    meta = TEMPLATES.get(name)
+    if meta is None:
+        raise GraphError(f"unknown template: {name!r} "
+                         f"(have {', '.join(TEMPLATES)})")
+    return meta["build"]()

@@ -10,11 +10,15 @@ sending real work through it.
 
 from .spec import (
     ACTIONS,
+    TEMPLATES,
     Graph,
-    Stage,
     GraphError,
+    Stage,
     default_pipeline,
     parse,
+    template,
+    templates,
 )
 
-__all__ = ["ACTIONS", "Graph", "Stage", "GraphError", "default_pipeline", "parse"]
+__all__ = ["ACTIONS", "TEMPLATES", "Graph", "GraphError", "Stage",
+           "default_pipeline", "parse", "template", "templates"]

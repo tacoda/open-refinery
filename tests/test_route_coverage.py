@@ -51,6 +51,11 @@ REQUIRED = {
     "validate a pipeline": "/pipelines/validate",
     "export a pipeline": "/pipelines/{pipeline_id}/export",
     "the default template": "/pipelines/templates/default",
+    "the template gallery": "/pipelines/templates",
+    "one template": "/pipelines/templates/{name}",
+    "repo settings": "/repositories/{repo_id}",
+    "charter presets": "/repositories/charter-presets",
+    "a repo's charter": "/repositories/{repo_id}/charter",
     "the action palette": "/pipelines/actions",
     "runs": "/runs",
     "one run": "/runs/{run_id}",
@@ -96,3 +101,33 @@ def test_removed_features_leave_no_dead_routes(paths, gone):
     """A route that lingers after its feature is removed is worse than no
     route: it accepts a request and does something unexpected."""
     assert gone not in paths
+
+
+# --- declared is not the same as reachable ----------------------------------
+
+def test_literal_paths_are_not_swallowed_by_a_catch_all():
+    """FastAPI matches in declaration order, so `/pipelines/{pipeline_id}`
+    declared before `/pipelines/templates` reads "templates" as an id — the
+    route exists in the schema and 404s in practice.
+
+    Checking the schema alone missed exactly that, so this resolves them.
+    """
+    import pytest
+    from fastapi.testclient import TestClient
+
+    from open_refinery.store import connect
+    from open_refinery.users import create_session, create_user, ensure_presets
+    from open_refinery.web import create_app
+
+    session = connect("sqlite:///:memory:", check_same_thread=False)
+    ensure_presets(session)
+    user, _ = create_user(session, "ops@x.io", "pw", "platform")
+    client = TestClient(create_app(session))
+    headers = {"Authorization": f"Bearer {create_session(session, user.id)}"}
+
+    # Each of these shares a prefix with a path-parameter route declared nearby.
+    for path in ("/pipelines/templates", "/pipelines/templates/default",
+                 "/pipelines/actions", "/repositories/charter-presets",
+                 "/credentials/catalog", "/permissions", "/approvals/overdue"):
+        r = client.get(path, headers=headers)
+        assert r.status_code != 404, f"{path} is shadowed by a catch-all route"

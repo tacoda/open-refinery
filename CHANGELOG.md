@@ -3,6 +3,41 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.18.0] — 2026-09-27
+
+*Phase 3 on the [road to 3.0](docs/PLAN-3.0.md): the workflow canvas, plus the
+frontend cleanup it needed first.*
+
+### Added
+- **The workflow canvas** (`frontend/src/Canvas.tsx`). The canvas **is** the
+  builder, not a picture of one: what you draw is what gets saved, and saving
+  writes a new version rather than editing in place.
+  - **Edges are typed and drawn differently** — `next` solid, a refusal amber
+    and dashed going backwards, the pull-request outcomes in their own colours.
+    A revision loop drawn like ordinary flow is invisible until it costs a turn.
+  - **The inspector is the stage's config**: phase or action, model, contract,
+    the approval gate, the refusal policy, `requires` / `produces`. Adding a
+    preferred model is clicking a node.
+  - **Validation is inline, not on save** — `/pipelines/validate` on a 250 ms
+    debounce, so an unreachable stage shows up while you are drawing it. Save is
+    disabled while the graph is invalid.
+  - Node positions persist on the pipeline, so a graph opens how it was left.
+- **Four templates to build from**, each saying what it **gives up** — a
+  template chosen without knowing that is a decision nobody made.
+  `ship-a-ticket` (the full loop) · `quick-fix` (one turn; no plan, no proof, no
+  review, no revision loop) · `strict` (everything on, plus a second reader for
+  the security surface) · `docs-only` (no proof stage — nothing to run).
+  Every one keeps the commit gate and ends with a person.
+- `GET /pipelines/templates` and `/pipelines/templates/{name}`.
+
+### Fixed
+- **`/pipelines/templates` was being read as a pipeline id.** FastAPI matches in
+  declaration order, and `/pipelines/{pipeline_id}` was declared first, so every
+  literal below it was shadowed — the route existed in the schema and 404'd in
+  practice. The literal paths now sit above the catch-all, and
+  `test_route_coverage.py` **resolves** these paths instead of only checking the
+  schema, which is the gap that let it through.
+
 ## [2.17.0] — 2026-09-27
 
 *Phase 2 on the [road to 3.0](docs/PLAN-3.0.md): the stage graph, as a pure

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { api, post, download, getToken, setToken, clearToken } from './api'
+import { Canvas, Inspector, type Graph } from './Canvas'
 import { getTheme, applyTheme, watchSystem, type Theme } from './theme'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -1899,61 +1900,135 @@ function PermissionEditor({ user, catalog, presets, onClose, onSaved }: any) {
 }
 
 function Pipelines({ me }: any) {
+  // The canvas IS the builder: what you draw is what gets saved, and saving
+  // writes a new version rather than editing in place.
   const { rows, load } = useList('/pipelines')
+  const [graph, setGraph] = useState<Graph | null>(null)
+  const [selected, setSelected] = useState<string | null>(null)
   const [check, setCheck] = useState<any>(null)
+  const [actions, setActions] = useState<any[]>([])
+  const [templates, setTemplates] = useState<any[]>([])
   const canEdit = (me?.permissions ?? []).includes('approve:factory')
 
-  const seedDefault = () =>
-    api('/pipelines/templates/default')
-      .then((tpl) => post('/pipelines', tpl))
-      .then(() => { toast.success('Added ship-a-ticket'); load() })
-      .catch(fail)
+  useEffect(() => {
+    api('/pipelines/actions').then(setActions).catch(() => {})
+    api('/pipelines/templates').then(setTemplates).catch(() => {})
+  }, [])
 
-  const inspect = (p: any) =>
+  // Validation is inline, not on save — an unreachable stage should show up
+  // while you are drawing it, not when you press the button.
+  useEffect(() => {
+    if (!graph) return setCheck(null)
+    const id = setTimeout(() => {
+      post('/pipelines/validate', graph).then(setCheck).catch(() => {})
+    }, 250)
+    return () => clearTimeout(id)
+  }, [graph])
+
+  const openTemplate = (name: string) =>
+    api(`/pipelines/templates/${name}`).then((g) => { setGraph(g); setSelected(null) }).catch(fail)
+  const openSaved = (p: any) =>
     api(`/pipelines/${p.id}/export`)
-      .then((doc) => post('/pipelines/validate', doc))
-      .then(setCheck).catch(fail)
+      .then((g) => { setGraph({ ...g, layout: p.layout }); setSelected(null) }).catch(fail)
+
+  const addStage = () => {
+    if (!graph) return
+    let name = 'new-stage', n = 1
+    while (graph.stages[name]) name = `new-stage-${++n}`
+    setGraph({ ...graph, stages: { ...graph.stages, [name]: { action: 'teardown', next: 'landed' } } })
+    setSelected(name)
+  }
+  const removeStage = (name: string) => {
+    if (!graph) return
+    const { [name]: _drop, ...rest } = graph.stages
+    setGraph({ ...graph, stages: rest })
+    setSelected(null)
+  }
+  const save = () => {
+    if (!graph) return
+    post('/pipelines', graph)
+      .then((r) => { toast.success(`Saved ${r.name} v${r.version}`); load() })
+      .catch(fail)
+  }
+
+  if (!graph) {
+    return (
+      <section className="page">
+        <h2 className="page-title">Workflows</h2>
+        <p className="muted">How work ships here. Pick one to edit, or start from a template —
+          each says what it gives up, because a template chosen without knowing that is a
+          decision nobody made.</p>
+
+        <Card><CardHeader><CardTitle>Yours</CardTitle></CardHeader><CardContent>
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>Name</TableHead><TableHead>Version</TableHead>
+              <TableHead>Stages</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>
+              <EmptyRow show={!rows.length} cols={4}>
+                Nothing yet{canEdit ? ' — start from a template below.' : ' — ask whoever holds approve:factory.'}
+              </EmptyRow>
+              {rows.map((p: any) => (
+                <TableRow key={p.id}>
+                  <TableCell>{p.name}</TableCell>
+                  <TableCell className="muted">v{p.version}</TableCell>
+                  <TableCell className="muted">{Object.keys(p.stages ?? {}).length}</TableCell>
+                  <TableCell>
+                    <Button size="sm" variant="outline" onClick={() => openSaved(p)}>Open</Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent></Card>
+
+        <div className="template-grid">
+          {templates.map((t: any) => (
+            <Card key={t.name}>
+              <CardHeader><CardTitle>{t.name}</CardTitle></CardHeader>
+              <CardContent>
+                <p>{t.about}</p>
+                <p className="muted">{t.stages} stages</p>
+                {t.gives_up && <p className="muted">Gives up: {t.gives_up}</p>}
+                <Button size="sm" variant="outline" onClick={() => openTemplate(t.name)}>Open</Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+    )
+  }
 
   return (
-    <section className="page">
-      <h2 className="page-title">Workflows</h2>
-      <p className="muted">How work ships here. Saving writes a new version rather than editing in
-        place, so a change never reaches a run already going.</p>
-      {canEdit && !rows.length && (
-        <Button onClick={seedDefault}>Start from ship-a-ticket</Button>
-      )}
-      <Card><CardContent>
-        <Table>
-          <TableHeader><TableRow>
-            <TableHead>Name</TableHead><TableHead>Version</TableHead>
-            <TableHead>Stages</TableHead><TableHead /></TableRow></TableHeader>
-          <TableBody>
-            <EmptyRow show={!rows.length} cols={4}>
-              No workflows yet{canEdit ? '' : ' — ask whoever holds approve:factory'}.
-            </EmptyRow>
-            {rows.map((p: any) => (
-              <TableRow key={p.id}>
-                <TableCell>{p.name}</TableCell>
-                <TableCell className="muted">v{p.version}</TableCell>
-                <TableCell className="muted">{Object.keys(p.stages ?? {}).length}</TableCell>
-                <TableCell>
-                  <Button size="sm" variant="outline" onClick={() => inspect(p)}>Show path</Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent></Card>
-      {check && (
-        <Card><CardHeader><CardTitle>What a run would do</CardTitle></CardHeader><CardContent>
-          {check.ok
-            ? <p className="mono">{(check.path ?? []).join('  →  ')}</p>
-            : <p className="muted">{check.error}</p>}
-        </CardContent></Card>
-      )}
+    <section className="page canvas-page">
+      <div className="canvas-bar">
+        <Button variant="ghost" size="sm" onClick={() => { setGraph(null); setSelected(null) }}>← Workflows</Button>
+        <Input className="field" value={graph.name}
+          onChange={(e) => setGraph({ ...graph, name: e.target.value })} />
+        <Input className="field" value={graph.model ?? ''} placeholder="default model"
+          onChange={(e) => setGraph({ ...graph, model: e.target.value })} />
+        {canEdit && <Button size="sm" variant="outline" onClick={addStage}>Add stage</Button>}
+        {check && (check.ok
+          ? <Badge variant="outline">{check.stages} stages · valid</Badge>
+          : <Badge variant="destructive" title={check.error}>invalid</Badge>)}
+        {canEdit && <Button size="sm" onClick={save} disabled={!check?.ok}>Save as new version</Button>}
+      </div>
+      {check && !check.ok && <p className="muted canvas-error">{check.error}</p>}
+      {check?.ok && <p className="muted canvas-path">{(check.path ?? []).join('  →  ')}</p>}
+      <div className="canvas-layout">
+        <Canvas graph={graph} onChange={setGraph} onSelect={setSelected} selected={selected} />
+        {selected && (
+          <Inspector graph={graph} name={selected} actions={actions} phases={PHASES}
+            onChange={setGraph} onDelete={() => removeStage(selected)} />
+        )}
+      </div>
     </section>
   )
 }
+
+// The phases a stage can run. A team adds one by writing its prompt; until the
+// harness lands (Phase 5) these are the six the default pipelines use.
+const PHASES = ['refine', 'plan', 'run', 'prove', 'review', 'security', 'improve']
 
 function Runs({ me }: any) {
   const { rows, load } = useList('/runs')
