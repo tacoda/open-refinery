@@ -29,6 +29,23 @@ log; RBAC; quotas; approval workflows) is not re-ported.
 | Install | Broken on a clean clone: the wheel force-includes `src/open_refinery/static`, which only exists after `make ui`. |
 | Tests | 328 pass — but only with `SECRET_KEY` exported. `make test` does not set one. |
 
+## 0.4 The four pillars
+
+Everything in this plan serves one of four things. A feature that serves none of
+them does not ship, however finished it is — §12 is the review that applied
+that rule to what already exists.
+
+1. **A software factory** — work goes in, a pull request comes out, nothing
+   merges itself.
+2. **A harness** — the coding agent: what one turn may use, on which model,
+   under which rules.
+3. **A queue of workers** — jobs advanced one step at a time, in parallel,
+   surviving a restart.
+4. **Business features** — the audit trail, observation, and proposals.
+
+Pillars 1–3 are most of the remaining work. Pillar 4 is ahead of the others and
+mostly needs *consolidating* (§12.3).
+
 ## 0.5 The product principle
 
 **Easy to install, onboard, add users and give them roles, define roles, define
@@ -283,79 +300,65 @@ slot for that check.
 
 ---
 
-### 2.5 The authority model — authority as data, not a ladder
+### 2.5 Permissions — attached to the user
 
-The code today treats roles as a **total order**: `developer(1) < platform(2) <
-admin(3)`, compared with `at_least()`, with `_SEES_ALL = ("platform", "admin")`
-on every scoped listing. Admin can do everything platform can, and more.
+The code started with a **total order** of roles: `developer < platform <
+admin`, compared with `at_least()`. Admin could do everything platform could —
+convenient, and not a separation of duties.
 
-3.0 replaces that with **authority as data**: a role carries an explicit set of
-powers rather than a position in a line. The four built-in roles are the
-**standard configuration** — a sensible default, not a limit:
+2.14.5 replaced that with powers on a *role*. 3.0 goes one step further and puts
+them **on the user**:
 
-| role | approves | may propose | users | audit | operational visibility |
-|---|---|---|---|---|---|---|
-| **developer** | `code` | `code`, `harness`, `factory` | — | own work | own work |
-| **lead** | `harness`, `charter` | `harness`, `charter`, `factory` | — | — | own team's work |
-| **platform** | `factory` | `factory` | — | — | **org-wide operations** |
-| **admin** | — | — | **manage** | **full** | users and audit only |
+> **A user holds a set of permissions. That set is the only thing ever checked.**
 
-**The split follows the product's own thesis.** open-refinery is both a harness
-and a factory (§3.0), so each gets an owner:
+No indirection, and two people doing similar jobs can hold different permissions
+without anybody inventing a role for the difference.
 
-- **`lead` owns the harness** — how one turn is constrained: phases, prompts,
-  tool grants, models, thinking levels, and the charter those turns read. That
-  is an engineering-team judgment about how the work should be done.
-- **`platform` owns the factory** — how work *flows*: the stage graph, the
-  delivery gate, routing, quotas, targets. That is an operations judgment about
-  how work ships.
+**The vocabulary** — twelve permissions, and `layer` is what a change is *about*
+(`code` · `harness` · `factory` · `charter`):
 
-A lead changing a prompt does not need platform, and platform changing a route
-does not need a lead. That is the separation, and it is the one teams actually
-feel: the two roles argue about different things.
+| Permission | Holds the authority to |
+|---|---|
+| `approve:<layer>` | sign off a change to that layer |
+| `propose:<layer>` | put one forward for someone else to sign |
+| `run:factory` | trigger a run |
+| `manage:users` | add people and set their permissions |
+| `read:audit` | read the audit trail |
+| `see:operations` | see other people's work, not just your own |
 
-`charter` sits with `lead` by default because it is the prose the harness reads
-— rung 0 of the ladder (§4). A team that would rather admin or platform own the
-standards changes one row, because roles are data.
+**Presets are the defaults to build from.** Four named bundles —
+`developer`, `lead`, `platform`, `admin` — exist only as a **starting point you
+apply** when adding someone. The preset is copied onto the user and then edited
+freely; nothing reads the preset again afterwards. That is what keeps "add the
+users, give them permissions" a ten-second job without making the permission set
+a lie.
 
-**Roles are customizable.** `Role` already exists as a table and `create_role` /
-`delete_role` already exist in `users.py` — they are simply not exposed, with a
-note in `routers/core.py` saying arbitrary roles "proved confusing". That note
-is right about the symptom and wrong about the cause: a role that is only a
-*rank* means nothing, so a new one was unanswerable — what does rank 2.5 let you
-do? Attaching the columns above makes a custom role legible, so `Role` gains
-`approves`, `proposes`, `manages_users`, `reads_audit`, `sees_operations` and a
-`builtin` flag, and role management becomes an admin surface in the API, the
-dashboard and the CLI.
+| preset | applies |
+|---|---|
+| **developer** | `approve:code` · `propose:*` · `run:factory` |
+| **lead** | `approve:harness` · `approve:charter` · `propose:*` · `run:factory` |
+| **platform** | `approve:factory` · `propose:factory` · `see:operations` · `run:factory` |
+| **admin** | `manage:users` · `read:audit` |
 
-A team that wants `reviewer` (approves `code`, proposes nothing) or `auditor-lite`
-(reads audit only) writes it down; a team that agrees with the three defaults
-configures nothing. The built-ins cannot be deleted, and **no role may grant
-itself authority it does not have**.
+The split still follows the product's own shape (§3.0): **lead owns the
+harness**, **platform owns the factory**, and **admin approves nothing** — the
+account that grants access is not the account that approves what ships, so a
+compromised admin can create users and read the log and cannot merge a change or
+weaken a rule.
 
-Three things follow, and each is a deliberate loss of convenience:
+**Everything fails closed.** A permission absent from the set is denied; an
+unknown permission string is denied; a user with an empty set can do nothing.
+The old model failed *open* — `role_rank()` returned 0 for a role that did not
+exist, so `at_least(developer, "senior")` was True (fixed in 2.14.5, §2.14.5).
 
-- **Admin cannot approve anything that ships.** The role that grants access is
-  not the role that approves what goes out. A compromised admin account can
-  create users and read the log; it cannot merge a change or weaken a rule.
-  This is the separation an auditor actually looks for, and it is the reason
-  admin is not a superset.
-- **Nobody above developer approves ordinary code.** Lead and platform approve
-  *governance* — the harness and the factory respectively, and the ladder moves
-  that change them. A lead reviewing a teammate's pull request has no special
-  authority over it, which is correct: that review is a developer's job.
-- **Developers propose governance changes but never approve them.** The
-  improve lane (§4.1) is a proposal mechanism for exactly this reason.
+**Nobody may grant themselves a permission they do not hold.** Editing your own
+permissions is refused outright, and `manage:users` does not imply the authority
+to hand out `approve:factory`.
 
-`layer` already carries the distinction the table needs — `policies.LAYERS` is
-`("factory", "harness", "charter")`, plus `code` for ordinary work — so approval
-authority keys off the layer a change belongs to rather than off a rank.
-
-**A naming collision to fix on the way through.** "Layer" currently means two
-unrelated things: `Policy.layer` is the *artifact* layer above, while
-`ApprovalWorkflow.layer` is a **role name** (`valid_role(session, layer)`).
-Two concepts, one word, and this model puts them next to each other. The
-artifact sense keeps `layer`; the approval-workflow sense becomes `role`.
+**What this costs.** Presets stop being live: changing the `developer` preset
+does not change anyone already created from it. That is the honest trade for
+"the set on the user is what is checked", and the UI says so — a preset is
+labelled *starting point*, not *role*.
 
 ### 2.5.1 Areas — separation of duties by *where*, not just *what*
 
@@ -934,26 +937,29 @@ the factory itself.
 
 ## 6. Sequencing
 
-Each phase ends green (`make test`), and every schema change ships its migration
-and its `DOWNGRADES` reverse.
+Revised after the system review (§12). Each phase ends green, and every schema
+change ships its migration and its `DOWNGRADES` reverse.
 
-| # | Version | Ships |
-|---|---|---|
-| 0 | 2.13.0 | ✅ Install fixes · `conftest` · `init` · `doctor` · `config` · **audit chain hardened** (keyed links, signed checkpoints, authenticated head, full-export signature). A clean clone installs, tests and serves. |
-| 0.1 | 2.13.1 | `targets --check` — prove a model target authenticates without paying for a run (§9.1). |
-| 1 | 2.14.0 | **Tokens only.** `credentials.py` + catalog + API + Connections UI. Every OAuth and OIDC path deleted; migration drops `connect_states`. |
-| 1.5 | 2.14.5 | **The authority model** (§2.5). `authority.py`; the four built-in roles (`developer` · `lead` · `platform` · `admin`); customizable roles with explicit powers + admin role CRUD; **areas** — role × layer × area grants (§2.5.1); `require()` guards stop naming role literals; `owner_scope` splits operations from audit; the `layer` naming collision; the `"senior"` fail-open repaired. |
-| 2 | 2.15.0 | **Sign-up.** `org.signup` modes, `POST /auth/signup`, onboarding that ends on a verified credential. |
-| 3 | 2.16.0 | **The graph** (incl. per-stage `approve:` — plan approval, §10.3) + **canvas design mode** (§11.1). `spec.py`, `graph.py`, `contracts.py`, `document.py`, `phases.py`, the `Pipeline` + `Run` + `RunStep` models. Pure and fully tested — no agent, no git, no forge. |
-| 4 | 2.17.0 | **Workspace + forge.** `workspace.py`, `forge.py` (github/gitlab/local), `actions.py`. A run reaches a real PR with a stub phase. |
-| 5 | 2.18.0 | **The harness.** `deepagents`, `agent.py`, `GovernanceMiddleware`, routing through `Target`, oversight → interrupts → the approvals queue. |
-| 6 | 2.19.0 | **The ladder.** `Constraint`, rungs, withheld grants, the delivery gate, `/ladder` + UI. |
-| 7 | 2.20.0 | **Intake + canvas live mode.** Inbound webhooks, autostart, rework-from-comment, template gallery, **live mode** and **roles/areas on the canvas** (§11.2–11.3). |
-| 8 | **3.0.0** | Default pipeline packs, the Runs dashboard with a live trace, the `improve` lane, `docs/ADOPTING.md` + `docs/LIMITATIONS.md`, release. |
+| # | Version | Ships | Pillar |
+|---|---|---|---|
+| 0 | 2.13.0 ✅ | Install fixes · `init` · `doctor` · `config` · **audit chain hardened** | 4 |
+| 1 | 2.14.0 ✅ | **Tokens only.** Credential catalog, per-user keys, every OAuth/OIDC path deleted | — |
+| 1.5 | 2.14.5 ✅ | **Authority as data.** Powers off a rank ladder; the `'senior'` fail-open repaired | — |
+| **R** | **2.15.0** | **Removal (§12.2) + consolidation (§12.3).** ~1,700 lines out: the 0.1.0 demo core, SCIM, recert, systems, invitations, repo coverage, rollback, governance view; four improve modules become one; packs' prose becomes data | — |
+| **P** | **2.16.0** | **Permissions on the user (§2.5)** + presets · admin surface for adding people and setting permissions · CLI | — |
+| 2 | 2.17.0 | **The graph.** `Pipeline` / `Run` / `RunStep`, stage machine, contracts (absorbing attestations), the run document, per-stage `approve:` — pure, fully tested, no agent | 1 |
+| 3 | 2.18.0 | **Canvas, design mode.** Build a workflow by drawing it; templates; validation inline | 1 |
+| 4 | 2.19.0 | **Workspace + forge.** Worktree + claim, github/gitlab/local drivers, the delivery gate. A run reaches a real pull request with a stub phase | 1 |
+| 5 | 2.20.0 | **The harness.** deepagents, phases, tool grants, `GovernanceMiddleware`, oversight → interrupts → approvals | 2 |
+| 6 | 2.21.0 | **Workers.** The reconciler: N workers claiming runs, one stage each, bounded by the concurrency cap. Crash-resume | 3 |
+| 7 | 2.22.0 | **The ladder** (absorbing the policy rule engine as rung 3) + promotion/demotion, where the factory implements its own approved improvements | 4 |
+| 8 | 2.23.0 | **Intake + canvas live mode.** Tracker webhooks, autostart, rework-from-comment, runs flowing across the graph | 1, 3 |
+| 9 | **3.0.0** | The improve lane, default pipeline packs, docs, the acceptance test (§7), release | 4 |
 
-Phase 4 is the first one where the product does something it cannot do today.
-Phases 0–3 are all groundwork, and phase 3 is deliberately a pure-function
-milestone so the state machine is proven before an agent is attached to it.
+**Phase 4 is the first release that does something the product cannot do
+today.** Everything before it is groundwork, and R/P come first deliberately:
+removing 1,700 lines and settling who may do what is much cheaper before the
+factory is built on top than after.
 
 ## 7. The 3.0 acceptance test
 
@@ -1195,3 +1201,109 @@ settings page nobody reads.
 | **Read-only overlay** | 4 | Runs exist; show them on the graph before making it interactive |
 | **Live** | 7 | Needs intake, rework and several runs in flight to be worth the pixels |
 | **Roles and areas on the canvas** | 7 | Follows Phase 1.5's grants |
+
+---
+
+## 12. System review — what stays, what goes
+
+*Done 2026-09-27 against 2.14.5: ~9,900 lines of Python across 74 modules, 129
+routes, 26 dashboard views, 463 tests.*
+
+The brief is a **simple, minimal, complete** set of features that lets a software
+organization ship code through the harness and the factory. Measured against
+that, the problem is not dead code — an import graph shows nothing orphaned —
+it is **feature surface that does not serve the four pillars**, built during the
+2.x governance-maturity track for a product that still cannot open a pull
+request.
+
+### 12.1 The four pillars
+
+| # | Pillar | Where it stands |
+|---|---|---|
+| **1** | **A software factory** | **Half.** Work items move between stages, governed. No stage graph, no worktree, no forge, no delivery gate, no run. Nothing produces a diff. |
+| **2** | **A harness (coding agent)** | **Nearly nothing.** `harnesses.py` is identity and a device flow; `executor.py` makes one governed model call. No phases, no tool grants, no turn loop. |
+| **3** | **A queue of workers, by step** | **A third.** `jobs.py` is an in-process thread runner, `scheduler.py` a cadence sweep, `concurrency.py` a live cap. No `Run`, no reconciler, no claim. |
+| **4** | **Business features** | **Ahead, and over-built.** The audit chain is excellent. Observation and proposals exist but are spread across seven modules that each do a slice. |
+
+Pillars 1–3 are most of the remaining work. Pillar 4 mostly needs *consolidating*.
+
+### 12.2 Remove
+
+Straight deletion. ~1,050 lines and 33 tests, none of it reachable from the four
+pillars.
+
+| Module | LOC | Why it goes |
+|---|---|---|
+| `factory.py` + `authz.py` ✅ | 103 | **The original 0.1.0 demo core** — a recipe registry with an `Authorizer` protocol. Nothing in the product imports it: only `cli demo` and two test files. It also occupies the name the real factory needs. (`web.py:_match_authz_rule` is unrelated despite the name.) |
+| `scim.py` + `routers/scim.py` | 194 | IdP provisioning. Its partner, OIDC SSO, was already removed in 2.14.0 — SCIM without SSO provisions accounts for a login flow that no longer exists. |
+| `recert.py` + `routers/recert.py` | 163 | Access recertification campaigns. A compliance-maturity feature for an org that has not yet shipped one agent-written line. |
+| `systems.py` + `routers/systems.py` | 162 | Grouping repos into "services" for a coverage rollup. A layer above the repo that the factory never reads. |
+| `invitations.py` | 100 | Superseded: an admin adds users and attaches permissions. A token-and-set-a-password flow is a second way in with nothing extra to offer. |
+| `repo_governance.py` | 107 | `Claim` rows and coverage scoring — "does this repo's prose match its enforcement". The **ladder** (§4) answers that question properly, at a rung. |
+| `rollback.py` | 156 | A governed revert to a prior stage. Once a run produces a pull request, rolling back is `git revert` and another run — the factory already has the mechanism. |
+| `governance.py` | 67 | A read view assembled from policies and roles, now duplicated by `/roles`, `/policies` and the canvas. |
+
+### 12.3 Consolidate
+
+Same capability, far less of it.
+
+| From | LOC | To |
+|---|---|---|
+| `debt.py`, `analysis.py`, `anomalies.py`, `postmortem.py` | 451 | **`improve.py`** (~150). Four modules each reading the audit trail and reporting a slice. One lane, ghola's rules: every proposal cites the runs it came from, and **one that cannot be traced to evidence is dropped rather than repaired**. |
+| `packs.py` | 521 | **~150.** The mechanism is right and the content is wrong: 400+ lines of hardcoded prose standards compiled into the package. Standards become seed *data*, so a team edits them without a release. |
+| `attestations.py` | 56 | Folded into `pipeline/contracts.py`. "A check was attested before entering this step" and "a check's claim must carry evidence" are the same idea; the contract version is stricter. |
+| `policies.py` | 228 | Split. `scan_content` (the filter the executor needs) stays. The allow/deny rule engine becomes **rung 3 of the ladder**, which is where a rule that refuses a call belongs. |
+
+### 12.4 Defer
+
+Kept on disk, off the roadmap, out of the navigation until a pillar needs them.
+
+| | Why |
+|---|---|
+| `experiments.py` (144) | A/B evals aimed at process changes. Becomes useful when pointed at **phase prompts** (§9.2) — which needs phases to exist first. |
+| `evidence.py` (112) | Compliance packs. Small, correct, and nobody needs it before the first pull request. |
+| `escalations.py` (57) | Approval SLA sweeps. Re-enable when approvals are on the critical path of a run. |
+
+### 12.5 Keep — the spine
+
+`store` (the audit chain) · `provenance` · `audit` · `auditors` · `users` ·
+`credentials` · `crypto` · `config` · `doctor` · `client` · `deps` · `models` ·
+`migrations` · `work_items` · `processes` · `repositories` · `integrations` ·
+`targets` · `executor` · `oversight` · `approvals` · `approval_workflows` ·
+`jobs` · `scheduler` · `concurrency` · `live` · `logs` · `metrics` · `ledger` ·
+`notifications` · `webhooks` · `settings` · `email` · `mfa` · `totp` · `seeds` ·
+`ingest`
+
+`ingest` is kept **repurposed**: it already reads a repo's `CLAUDE.md` /
+`.claude/` surfaces, which is exactly what the harness should be handed as
+`memory=` and `skills=`. Today it turns them into coverage scores nobody acts
+on.
+
+### 12.6 The shape after
+
+**Done in 2.15.0** — actuals, not estimates:
+
+| | Before | After |
+|---|---|---|
+| Modules | 74 | **60** |
+| Routes | 129 | **91** |
+| Python | ~11,400 | **9,276** (−2,110 net; 2,902 deleted, 792 added) |
+| Tests | 463 | **423** (40 covering removed features; 14 new for `improve`) |
+| Dashboard views | 26 | ~12 *(frontend still to follow)* |
+
+Smaller *and* complete: for the first time the product does the thing its README
+claims.
+
+### 12.7 The navigation after
+
+Six groups and 26 views collapse to four and twelve, in the order someone
+actually meets them:
+
+| Group | Views |
+|---|---|
+| **Set up** | Connections · Repos · Users & permissions |
+| **Build** | Workflows (canvas) · Phases · Ladder |
+| **Run** | Work · Runs (canvas, live) · Approvals |
+| **Watch** | Overview · Audit log · Usage |
+
+Everything cut above leaves the navigation with it.

@@ -64,12 +64,15 @@ def test_onboarding_flag_lifecycle(ctx, monkeypatch):
     assert client.get("/onboarding", headers=h).json()["onboarded"] is True
 
 
-def test_health_areas_scores_all_three(ctx):
-    # regression: the /health route handler must not shadow the debt.health scorer
+def test_improve_reports_a_score_and_traced_findings(ctx):
+    """The three per-area debt scores became one lane (2.15.0): a team could
+    celebrate a good `charter` score while the factory refused every run."""
     _, client, admin, token, _ops = ctx
-    r = client.get("/health/areas", headers=auth(token))
+    r = client.get("/improve", headers=auth(token))
     assert r.status_code == 200
-    assert {"factory", "harness", "charter"} <= set(r.json())
+    body = r.json()
+    assert body["score"] == 100 and body["findings"] == []
+    assert all(f["evidence"] for f in body["findings"])
 
 
 def test_only_admin_creates_users(ctx):

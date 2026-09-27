@@ -6,39 +6,6 @@ from ..web import *  # noqa: F401,F403
 router = APIRouter()
 
 
-@router.post("/invitations", status_code=201)
-def invite_user(body: NewInvitation, request: Request,
-                session: Session = Depends(get_session),
-                user: User = Depends(manages_users)):
-    inv, token = create_invitation(session, body.email, body.role, user.id,
-                                   ttl_days=body.ttl_days)
-    accept_url = f"{home_url(request)}#invite={token}"
-    try:
-        send_invitation_email(body.email, accept_url)
-    except Exception:  # email may be unconfigured; the link is still returned
-        pass
-    return {"invitation": inv, "accept_url": accept_url}
-
-@router.get("/invitations")
-def get_invitations(session: Session = Depends(get_session),
-                    _: User = Depends(manages_users)):
-    return list_invitations(session, status="pending")
-
-@router.post("/invitations/{invitation_id}/revoke")
-def revoke_invite(invitation_id: str, session: Session = Depends(get_session),
-                  _: User = Depends(manages_users)):
-    revoke_invitation(session, invitation_id)
-    return {"status": "revoked"}
-
-@router.get("/invitations/lookup")
-def lookup_invite(token: str, session: Session = Depends(get_session)):
-    return {"email": invitation_email(session, token)}
-
-@router.post("/invitations/accept")
-def accept_invite(body: AcceptInvite, session: Session = Depends(get_session)):
-    user, token = accept_invitation(session, body.token, body.password)
-    return {"token": token, "user": user}
-
 @router.post("/users", status_code=201)
 def add_user(body: NewUser, session: Session = Depends(get_session),
              _: User = Depends(manages_users)):
@@ -94,30 +61,6 @@ def get_work_items(session: Session = Depends(get_session), user: User = Depends
                    repo_id: str | None = None):
     return list_work_items(session, owner_id=owner_scope(session, user), repo_id=repo_id)
 
-@router.get("/work-items/{item_id}/postmortem")
-def work_item_postmortem(item_id: str, session: Session = Depends(get_session),
-                         _: User = Depends(current_user)):
-    return postmortem(session, item_id)
-
-@router.get("/work-items/{item_id}/history")
-def work_item_history(item_id: str, session: Session = Depends(get_session),
-                      _: User = Depends(current_user)):
-    return {"history": stage_history(session, item_id),
-            "rollback_targets": rollback_targets(session, item_id)}
-
-@router.post("/work-items/{item_id}/rollback")
-def rollback_item(item_id: str, body: Move, session: Session = Depends(get_session),
-                  user: User = Depends(current_user)):
-    return rollback_work_item(session, item_id, body.to, user.id, SqliteSink(session))
-
-@router.post("/work-items/{item_id}/rollback/applied")
-def rollback_applied(item_id: str, body: RollbackApplied,
-                     session: Session = Depends(get_session),
-                     user: User = Depends(current_user)):
-    return record_rollback_applied(session, item_id, user.id, body.status,
-                                   SqliteSink(session), detail=body.detail)
-
-# --- live run logs (ephemeral, streamed over the WS hub) ---
 @router.get("/work-items/{item_id}/logs")
 def get_logs(item_id: str, _: User = Depends(current_user)):
     return recent_logs(item_id)

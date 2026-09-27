@@ -2,12 +2,9 @@ import pytest
 
 from open_refinery import (
     connect,
-    create_policy,
-    create_process,
     create_repository,
     create_user,
-    ingest,
-    list_claims,
+    repo_charter,
 )
 from open_refinery.ingest import _extract, _parse_repo
 
@@ -59,34 +56,93 @@ def test_integration_resolution_prefers_explicit_link(monkeypatch):
     assert _integration_for(conn, conn.get(Repository, repo.id)).id == i2.id  # explicit link wins
 
 
-def test_ingest_creates_claims_per_surface():
+def test_charter_returns_the_three_surfaces():
     conn, dev, repo = setup()
-    res = ingest(conn, repo.id, dev.id, reader=fake_reader)
-    assert res["created"] == 4
-    claims = list_claims(conn, repo.id)
-    assert {c.surface for c in claims} == {"charter", "harness", "code"}
+    got = repo_charter(conn, repo.id, reader=fake_reader)
+
+    assert got["charter"] == ["All code adheres to HIPAA", "TDD everywhere"]
+    assert got["harness"] == ["Use the search tool when unsure"]
+    assert got["code"] == ["Has a tests directory"]
 
 
-def test_ingest_is_idempotent():
-    conn, dev, repo = setup()
-    ingest(conn, repo.id, dev.id, reader=fake_reader)
-    res2 = ingest(conn, repo.id, dev.id, reader=fake_reader)
-    assert res2["created"] == 0 and res2["total_claims"] == 4
-
-
-def test_backing_heuristic():
-    conn, dev, repo = setup()
-    # an authored skill echoing "search"; a gated process exists
-    create_policy(conn, "allow", dev.id, kind="skill", content="Always use the search tool.")
-    create_process(conn, "flow", "board", ["a", "b"], dev.id, gates=["b"])
-    ingest(conn, repo.id, dev.id, reader=fake_reader)
-    claims = {c.text: c for c in list_claims(conn, repo.id)}
-    assert claims["Use the search tool when unsure"].has_instruction is True
-    assert claims["All code adheres to HIPAA"].has_instruction is False
-    assert all(c.has_gate for c in claims.values())  # org has a gated process
-
-
-def test_ingest_unknown_repo():
-    conn, dev, repo = setup()
+def test_charter_of_an_unknown_repo_raises():
+    conn, _, _ = setup()
     with pytest.raises(ValueError):
-        ingest(conn, "nope", dev.id, reader=fake_reader)
+        repo_charter(conn, "nope", reader=fake_reader)
+
+
+def test_a_reader_that_finds_nothing_is_not_an_error():
+    """The live path is best-effort — a repo with no agent config is normal."""
+    conn, dev, repo = setup()
+    got = repo_charter(conn, repo.id, reader=lambda s, r: {})
+    assert got == {"repo_id": repo.id, "charter": [], "harness": [], "code": []}
+
+
+# --- where the charter lives ------------------------------------------------
+
+def test_the_default_is_agents_only():
+    """`.agents/` and `AGENTS.md`, and nothing else. Tool-neutral, because the
+    charter belongs to the repository rather than to whichever agent reads it."""
+    from open_refinery.ingest import charter_paths
+
+    class Repo:
+        charter_paths = []
+    assert charter_paths(Repo()) == ((".agents",), ("AGENTS.md",))
+
+
+def test_an_override_replaces_the_default_rather_than_adding_to_it():
+    """A team that says where their charter lives means there, not there plus
+    a guess — otherwise a stale CLAUDE.md keeps being read forever."""
+    from open_refinery.ingest import charter_paths
+
+    class Repo:
+        charter_paths = ["docs/agent", "RULES.md"]
+    dirs, files = charter_paths(Repo())
+    assert dirs == ("docs/agent",) and files == ("RULES.md",)
+    assert ".agents" not in dirs and "AGENTS.md" not in files
+
+
+def test_extensions_decide_directory_versus_file():
+    from open_refinery.ingest import charter_paths
+
+    class Repo:
+        charter_paths = [".cursor/rules", ".cursorrules"]
+    dirs, files = charter_paths(Repo())
+    assert dirs == (".cursor/rules",) and files == (".cursorrules",)
+
+
+@pytest.mark.parametrize("agent", ["claude", "cursor", "copilot", "windsurf", "aider"])
+def test_any_agent_can_be_configured_from_a_preset(agent):
+    """Overriding is a pick, not research."""
+    from open_refinery.ingest import charter_paths, preset
+
+    class Repo:
+        charter_paths = list(preset(agent))
+    dirs, files = charter_paths(Repo())
+    assert dirs or files
+
+
+def test_an_unknown_preset_is_empty_not_an_error():
+    from open_refinery.ingest import preset
+    assert preset("not-an-agent") == ()
+
+
+def test_surfaces_are_read_from_the_configured_paths():
+    """The override has to reach the reader, or it is a setting that does
+    nothing."""
+    from open_refinery.ingest import _surfaces_from
+
+    files = {"docs/agent/style.md": "# House style", "RULES.md": "- be careful"}
+
+    def list_dir(path):
+        return [k.split("/")[-1] for k in files if k.startswith(f"{path}/")]
+
+    def read_text(path):
+        return files[path]
+
+    class Repo:
+        charter_paths = ["docs/agent", "RULES.md"]
+
+    got = _surfaces_from(list_dir, read_text, Repo())
+    assert got["charter"] == ["House style"]
+    assert got["harness"] == ["be careful"]

@@ -88,6 +88,7 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
             "ALTER TABLE roles DROP COLUMN reads_audit",
             "ALTER TABLE roles DROP COLUMN sees_operations",
             "ALTER TABLE roles DROP COLUMN builtin",
+            "ALTER TABLE repositories DROP COLUMN charter_paths",
             "DROP TABLE systems",
             "PRAGMA user_version = 7",   # pretend this is a 1.0-era install (schema v7)
         ):

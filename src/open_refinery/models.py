@@ -110,6 +110,10 @@ class Repository(SQLModel, table=True):
     git_url: str = Field(unique=True, index=True)
     owner_id: str = Field(foreign_key="users.id", index=True)
     integration_id: str | None = None  # explicit source integration for ingest
+    # Where this repo keeps its agent configuration. Empty = the defaults
+    # (.agents/, AGENTS.md, and the .claude/.cursor fallbacks — see ingest.py).
+    # A team whose rules live somewhere else says so here.
+    charter_paths: list = Field(default_factory=list, sa_column=Column(JSON))
     ingest_interval_hours: int = 0     # 0 = manual; >0 = auto-ingest on this cadence
     last_ingest_at: str = ""           # ISO of the last scheduled ingest
     created_at: str = Field(default_factory=now_iso)

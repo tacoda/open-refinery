@@ -28,14 +28,6 @@ from .approvals import list_approvals, reject as reject_request, request_approva
 from .escalations import current_overdue
 from .attestations import AttestationFailed, AttestationMissing, attest
 from .executor import ExecutionError, execute
-from .invitations import (
-    accept_invitation,
-    create_invitation,
-    invitation_email,
-    list_invitations,
-    revoke_invitation,
-    send_invitation_email,
-)
 from .integrations import (
     connectors,
     create_integration,
@@ -55,8 +47,7 @@ from .approval_workflows import (
     review,
     set_workflow,
 )
-from .analysis import analyze
-from .debt import health, list_audits, run_audit
+from .improve import proposals as improve_proposals, score as improve_score
 from .experiments import (
     analyze_experiment,
     conclude_experiment,
@@ -64,7 +55,7 @@ from .experiments import (
     list_experiments,
     record_eval,
 )
-from .ingest import ingest
+from .ingest import charter as repo_charter
 from .jobs import enqueue, get_job, list_jobs
 from .harnesses import (
     HARNESS_CATALOG,
@@ -86,15 +77,7 @@ from .notifications import CHANNELS, create_rule, delete_rule, list_rules
 from .live import HUB
 from .logs import append_log, recent_logs
 from .webhooks import create_webhook, delete_webhook, list_webhooks
-from .governance import landscape
 from .packs import disable_pack, enable_pack, list_packs, list_standards, pack_detail
-from .postmortem import postmortem
-from .rollback import (
-    record_rollback_applied,
-    rollback_targets,
-    rollback_work_item,
-    stage_history,
-)
 from .policies import (
     PolicyDenied,
     create_policy,
@@ -108,14 +91,6 @@ from .policies import (
 )
 from .processes import create_process, list_processes
 from .provenance import Record
-from .repo_governance import create_claim, delete_claim, list_claims, report as repo_report
-from .systems import (
-    create_system,
-    delete_system,
-    list_systems,
-    set_system_repos,
-    system_coverage,
-)
 from .repositories import (
     DuplicateRepository,
     create_repository,
@@ -281,9 +256,7 @@ class LogLine(BaseModel):
     level: str = "info"     # debug | info | warning | error
 
 
-class RollbackApplied(BaseModel):
-    status: str             # applied | failed
-    detail: str = ""
+
 
 
 class Move(BaseModel):
@@ -296,15 +269,10 @@ class RequestApproval(BaseModel):
     to: str
 
 
-class NewInvitation(BaseModel):
-    email: str
-    role: str
-    ttl_days: int = 7
 
 
-class AcceptInvite(BaseModel):
-    token: str
-    password: str
+
+
 
 
 class SettingBody(BaseModel):
@@ -332,19 +300,13 @@ class MfaCode(BaseModel):
     code: str
 
 
-class ScimGroupMap(BaseModel):
-    map: dict[str, str] = {}          # IdP group name → role
-    default_role: str = "developer"   # role when no group matches
 
 
-class NewCampaign(BaseModel):
-    name: str
-    days: int = 30                    # days until the recertification is due
 
 
-class RecertDecision(BaseModel):
-    decision: str                     # certified | revoked
-    note: str = ""
+
+
+
 
 
 class RoleBody(BaseModel):
@@ -442,14 +404,10 @@ class ResubmitBody(BaseModel):
     payload: dict | None = None
 
 
-class NewSystem(BaseModel):
-    name: str
-    kind: str = "service"
-    repo_ids: list[str] = []
 
 
-class SystemRepos(BaseModel):
-    repo_ids: list[str]
+
+
 
 
 class RepoLink(BaseModel):
@@ -460,11 +418,7 @@ class RepoSchedule(BaseModel):
     interval_hours: int = 0
 
 
-class NewClaim(BaseModel):
-    surface: str
-    text: str
-    has_instruction: bool = False
-    has_gate: bool = False
+
 
 
 class NewWebhook(BaseModel):
@@ -617,10 +571,10 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
 
 def _include_routers(app: FastAPI) -> None:
-    from .routers import (core, credentials, governance, harness, ops, org, policy,
-                          recert, roles, routing, scim, systems, workitem)
-    for mod in (core, ops, systems, governance, org, harness, workitem, routing, policy,
-                scim, recert, credentials, roles):
+    from .routers import (core, credentials, harness, ops, org, policy,
+                          roles, routing, workitem)
+    for mod in (core, ops, org, harness, workitem, routing, policy,
+                credentials, roles):
         app.include_router(mod.router)
 
 

@@ -131,6 +131,8 @@ MIGRATIONS: list[str] = [
     "UPDATE processes SET min_approver_role = 'lead' WHERE min_approver_role = 'senior';"
     "UPDATE approval_requests SET required_roles = REPLACE(required_roles, '\"senior\"', '\"lead\"')"
     " WHERE required_roles LIKE '%senior%';",
+    # v24 (2.15.0): a repo may say where its agent configuration lives.
+    "ALTER TABLE repositories ADD COLUMN charter_paths TEXT NOT NULL DEFAULT '[]';",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -187,6 +189,7 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE roles DROP COLUMN reads_audit;"
     "ALTER TABLE roles DROP COLUMN sees_operations;"
     "ALTER TABLE roles DROP COLUMN builtin;",                                            # v23
+    "ALTER TABLE repositories DROP COLUMN charter_paths;",                               # v24
 ]
 
 

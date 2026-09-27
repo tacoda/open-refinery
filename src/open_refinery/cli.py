@@ -1,4 +1,5 @@
-"""CLI — `serve` runs the API; `demo` prints one provenance record."""
+"""CLI — server maintenance runs against the database; everything else goes
+through the API (see `client.py`)."""
 
 from __future__ import annotations
 
@@ -7,7 +8,6 @@ import json
 import logging
 import os
 
-from .factory import Factory
 
 
 def _serve(args: argparse.Namespace) -> int:
@@ -371,19 +371,6 @@ def _packs(args: argparse.Namespace) -> int:
     return 0
 
 
-def _demo(args: argparse.Namespace) -> int:
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    factory = Factory()
-
-    @factory.recipe("upper")
-    def upper(text: str) -> str:
-        return text.upper()
-
-    artifact, record = factory.produce("upper", actor=args.actor, text=args.text)
-    print(f"artifact: {artifact!r}")
-    print(json.dumps(record.to_dict(), indent=2, sort_keys=True))
-    return 0
-
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="open-refinery")
@@ -475,10 +462,6 @@ def main(argv: list[str] | None = None) -> int:
     openapi = sub.add_parser("openapi", help="print the OpenAPI spec (build tooling)")
     openapi.set_defaults(func=_openapi)
 
-    demo = sub.add_parser("demo", help="produce one artifact and print its record")
-    demo.add_argument("--actor", default="demo-user")
-    demo.add_argument("--text", default="hello", help="text to refine")
-    demo.set_defaults(func=_demo)
 
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):

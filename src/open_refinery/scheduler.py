@@ -1,10 +1,11 @@
-"""Scheduled ingest — auto-ingest repos on a cadence, off the request path.
+"""Scheduled refresh — re-read repo surfaces on a cadence, off the request path.
 
-A repo with `ingest_interval_hours > 0` is re-ingested automatically. The due
-check is pure (`due_repos`) and testable; `run_due_ingests` enqueues a background
-ingest job (see `jobs`) for each due repo and stamps `last_ingest_at`. A thin
-daemon loop (`start_scheduler`) calls `run_due_ingests` on an interval — started
-only on the `serve` path, never in tests.
+A repo with `ingest_interval_hours > 0` has its charter re-read automatically,
+so the harness is handed current house rules rather than whatever they were when
+the repo was added. The due check is pure (`due_repos`) and testable;
+`run_due_ingests` enqueues a background job per due repo and stamps
+`last_ingest_at`. A thin daemon loop calls it on an interval — started only on
+the `serve` path, never in tests.
 
 In-process, zero-dep — same ethos as the job runner. A cron/Celery-beat backend
 can replace the loop later without changing `run_due_ingests`.
@@ -19,7 +20,7 @@ from datetime import datetime
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select
 
-from .ingest import ingest
+from .ingest import charter
 from .jobs import enqueue
 from .models import Repository, now_iso
 
@@ -45,7 +46,7 @@ def run_due_ingests(session: Session, engine: Engine, now: str | None = None) ->
     scheduled = []
     for repo in due_repos(session, now):
         rid, uid = repo.id, repo.owner_id
-        enqueue(session, engine, f"ingest:{rid}", lambda s, rid=rid, uid=uid: ingest(s, rid, uid))
+        enqueue(session, engine, f"charter:{rid}", lambda s, rid=rid: charter(s, rid))
         repo.last_ingest_at = now
         session.add(repo)
         scheduled.append(rid)
@@ -56,9 +57,7 @@ def run_due_ingests(session: Session, engine: Engine, now: str | None = None) ->
 def start_scheduler(engine: Engine, *, interval_seconds: int = 300) -> threading.Thread:
     """Run `run_due_ingests` and the overdue-approval escalation sweep on a loop
     in a daemon thread (the serve path)."""
-    from .anomalies import emit as emit_anomalies
     from .escalations import escalate_overdue
-    from .recert import emit_overdue as emit_recert_overdue
     from .store import SqliteSink
 
     def _loop():
@@ -67,8 +66,6 @@ def start_scheduler(engine: Engine, *, interval_seconds: int = 300) -> threading
                 with Session(engine) as session:
                     run_due_ingests(session, engine)
                     escalate_overdue(session, SqliteSink(session))
-                    emit_anomalies(session, SqliteSink(session))
-                    emit_recert_overdue(session, SqliteSink(session))
             except Exception:  # a bad tick must not kill the scheduler
                 pass
             time.sleep(interval_seconds)

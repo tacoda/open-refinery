@@ -3,6 +3,59 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.15.0] — 2026-09-27
+
+*Phase R on the [road to 3.0](docs/PLAN-3.0.md): the system review (§12) applied.
+**2,110 lines net removed** — 2,902 deleted, 792 added.*
+
+The review measured every feature against the four pillars — a software factory,
+a harness, a queue of workers, and the business features (audit, observation,
+proposals). An import graph showed nothing orphaned, so the problem was never
+dead code: it was surface built during the 2.x governance track for a product
+that still cannot open a pull request.
+
+### Removed
+- **`factory.py` + `authz.py`** — the original 0.1.0 demo core, a recipe
+  registry with an `Authorizer` protocol. Nothing in the product imported it:
+  only `cli demo` and two test files. It also occupied the name the real factory
+  needs. (`web.py:_match_authz_rule` is unrelated despite the name.)
+- **SCIM** — IdP provisioning whose partner, OIDC SSO, went in 2.14.0. SCIM
+  without SSO provisions accounts for a login flow that no longer exists.
+- **Access recertification** — a compliance-maturity feature for an org that has
+  not shipped one agent-written line.
+- **Systems** — grouping repos into "services" for a coverage rollup the factory
+  never reads.
+- **Invitations** — superseded: an admin adds a user and attaches permissions.
+- **Repo coverage / `Claim` rows** — "does this repo's prose match its
+  enforcement" is the **ladder's** question, answered at a rung.
+- **Rollback** — once a run produces a pull request, rolling back is `git revert`
+  and another run.
+- **The governance landscape view** — duplicated by `/roles`, `/policies` and
+  the canvas.
+
+### Changed
+- **`debt` + `analysis` + `anomalies` + `postmortem` → `improve.py`** (451 → 171
+  lines). Four modules each reading the audit trail for a slice, disagreeing
+  about vocabulary. Now one lane with two rules: **every finding names the
+  events it came from**, and **an untraceable finding is dropped rather than
+  repaired** — a lane that always finds three things is one nobody believes by
+  the third time. `GET /improve` and `/improve/proposals`; nothing is applied.
+- **One health score, not three.** The per-area split let a team celebrate a
+  good `charter` score while the factory refused every run.
+- **`ingest` is repurposed.** It read a repo's agent config into coverage scores
+  nobody acted on; it now returns the **charter** for the harness to be handed
+  (deepagents `memory=` / `skills=`).
+  - The default is **`.agents/` and `AGENTS.md`** — tool-neutral, because the
+    charter belongs to the repository rather than to whichever agent reads it.
+  - **Any agent is supported**: `Repository.charter_paths` overrides the
+    default, and `AGENT_PRESETS` (claude · cursor · copilot · windsurf · aider ·
+    cline · gemini) makes that a pick rather than research. An override
+    **replaces** the default rather than adding to it — a team that says where
+    their charter lives means there, not there plus a guess. Migration **v24**.
+
+### Shape
+74 modules → **60**. 129 routes → **91**. 423 tests pass.
+
 ## [2.14.5] — 2026-09-27
 
 *Phase 1.5 on the [road to 3.0](docs/PLAN-3.0.md): authority becomes data, and

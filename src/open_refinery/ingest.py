@@ -1,18 +1,20 @@
-"""Ingest repo surfaces — populate `Claim`s from reality, not seeded text.
+"""Repo surfaces — what a repository says about how work is done there.
 
-`ingest(repo)` reads a repository's actual surfaces via a **reader** (default:
-GitHub, using a connected integration's credential) and turns stated behaviors
-into `Claim`s:
+`charter(repo)` reads a repository's actual surfaces via a **reader** (default:
+GitHub, using a connected integration's credential):
 
-- **charter** ← `.claude/` docs (headings / bullet lines)
-- **harness** ← a harness/agent config file (`CLAUDE.md`, `AGENTS.md`)
+- **charter** ← `.agents/` docs (headings / bullet lines)
+- **harness** ← the repo's agent config: `AGENTS.md`
 - **code**    ← structural signals (tests present, CI workflow present)
 
-Each new claim gets a heuristic backing read: `has_instruction` if it echoes an
-authored policy/standard, `has_gate` if the org has any gated process. Re-ingest
-is idempotent (dedupe by repo+surface+text). The reader is injectable, so the
-extraction/dedup/backing pipeline is fully testable offline; the live GitHub
-path is best-effort and returns nothing on any error rather than failing the call.
+Those two are the default because they are tool-neutral. **Any agent is
+supported**: a repo whose rules live in `.claude/`, `.cursorrules`,
+`.github/copilot-instructions.md` or anywhere else sets `charter_paths`, and
+`AGENT_PRESETS` turns that into a pick rather than research.
+
+The reader is injectable, so extraction is fully testable offline; the live
+GitHub path is best-effort and returns nothing on any error rather than failing
+the call.
 """
 
 from __future__ import annotations
@@ -21,8 +23,7 @@ import base64
 
 from sqlmodel import Session, select
 
-from .models import Policy, Process, Repository, Standard
-from .repo_governance import create_claim, list_claims
+from .models import Repository
 
 
 def _norm(text: str) -> str:
@@ -47,22 +48,6 @@ def _extract(markdown: str, *, cap: int = 40) -> list[str]:
         if len(out) >= cap:
             break
     return out
-
-
-def _instruction_blob(session: Session) -> str:
-    parts = [p.content for p in session.exec(select(Policy)) if p.content]
-    parts += [s.body for s in session.exec(select(Standard))]
-    return _norm(" ".join(parts))
-
-
-def _has_gate(session: Session) -> bool:
-    # ponytail: org-wide "any gated process" — not per-repo; refine when repos link processes.
-    return any(p.gates for p in session.exec(select(Process)))
-
-
-def _backed_by_instruction(text: str, blob: str) -> bool:
-    words = [w for w in _norm(text).split() if len(w) > 4]
-    return bool(words) and any(w in blob for w in words)
 
 
 # --- readers ---------------------------------------------------------------
@@ -96,17 +81,63 @@ _CODE_SIGNALS = {
 }
 
 
-def _surfaces_from(list_dir, read_text) -> dict:
+# The default, and only the default: `.agents/` and `AGENTS.md`. Tool-neutral,
+# because the charter belongs to the repository rather than to whichever agent
+# reads it this year.
+DEFAULT_CHARTER_DIRS = (".agents",)
+DEFAULT_CHARTER_FILES = ("AGENTS.md",)
+
+# Any agent is supported — a repo that keeps its rules elsewhere overrides the
+# default with `Repository.charter_paths`. These presets exist so that override
+# is a pick rather than an afternoon of research, and adding one is a line here.
+AGENT_PRESETS: dict[str, tuple[str, ...]] = {
+    "agents":   (".agents", "AGENTS.md"),               # the default, named
+    "claude":   (".claude", "CLAUDE.md"),
+    "cursor":   (".cursor/rules", ".cursorrules"),
+    "copilot":  (".github/copilot-instructions.md",),
+    "windsurf": (".windsurf/rules", ".windsurfrules"),
+    "aider":    ("CONVENTIONS.md",),
+    "cline":    (".clinerules",),
+    "gemini":   ("GEMINI.md",),
+}
+
+
+def preset(name: str) -> tuple[str, ...]:
+    """The paths a known agent uses, for the repo settings picker."""
+    return AGENT_PRESETS.get(name, ())
+
+
+def charter_paths(repo=None) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """(directories, files) to read for this repo — its override, or the default.
+
+    An override **replaces** the default rather than adding to it: a team that
+    says where their charter lives means *there*, not there plus a guess.
+
+    A configured path with no extension is a directory and one with an extension
+    is a file, so a team writes `docs/agent` or `RULES.md` without having to say
+    which kind it is.
+    """
+    configured = list(getattr(repo, "charter_paths", None) or ())
+    if not configured:
+        return DEFAULT_CHARTER_DIRS, DEFAULT_CHARTER_FILES
+    dirs = tuple(p.rstrip("/") for p in configured if "." not in p.rsplit("/", 1)[-1])
+    files = tuple(p for p in configured if "." in p.rsplit("/", 1)[-1])
+    return dirs, files
+
+
+def _surfaces_from(list_dir, read_text, repo=None) -> dict:
     """Extract the three surfaces given a dir-lister and a file-reader (per host)."""
+    dirs, files = charter_paths(repo)
     charter: list[str] = []
-    try:
-        for entry in list_dir(".claude"):
-            if entry.endswith(".md"):
-                charter += _extract(read_text(f".claude/{entry}"))
-    except Exception:
-        pass
+    for folder in dirs:
+        try:
+            for entry in list_dir(folder):
+                if entry.endswith(".md"):
+                    charter += _extract(read_text(f"{folder}/{entry}"))
+        except Exception:
+            continue
     harness: list[str] = []
-    for cfg in ("CLAUDE.md", "AGENTS.md"):
+    for cfg in files:
         try:
             harness += _extract(read_text(cfg))
         except Exception:
@@ -122,7 +153,7 @@ def _surfaces_from(list_dir, read_text) -> dict:
     return {"charter": charter, "harness": harness, "code": code}
 
 
-def _github_surfaces(cred: dict, owner: str, name: str) -> dict:
+def _github_surfaces(cred: dict, owner: str, name: str, repo=None) -> dict:
     from .integrations import _gh
     base = f"/repos/{owner}/{name}/contents"
 
@@ -133,10 +164,10 @@ def _github_surfaces(cred: dict, owner: str, name: str) -> dict:
         item = _gh(cred, f"{base}/{path}")
         return base64.b64decode(item.get("content", "")).decode("utf-8", "replace")
 
-    return _surfaces_from(ld, rt)
+    return _surfaces_from(ld, rt, repo)
 
 
-def _gitlab_surfaces(cred: dict, owner: str, name: str) -> dict:
+def _gitlab_surfaces(cred: dict, owner: str, name: str, repo=None) -> dict:
     import urllib.parse
     from .integrations import _gl
     pid = urllib.parse.quote(f"{owner}/{name}", safe="")
@@ -152,7 +183,7 @@ def _gitlab_surfaces(cred: dict, owner: str, name: str) -> dict:
         item = _gl(cred, f"/projects/{pid}/repository/files/{fp}?ref=main")
         return base64.b64decode(item.get("content", "")).decode("utf-8", "replace")
 
-    return _surfaces_from(ld, rt)
+    return _surfaces_from(ld, rt, repo)
 
 
 READERS = {"github": _github_surfaces, "gitlab": _gitlab_surfaces}
@@ -180,34 +211,26 @@ def default_reader(session: Session, repo: Repository) -> dict:
         if integ is None or parsed is None or surfaces is None:
             return {}
         owner, name = parsed
-        return surfaces(_credential(session, integ.id), owner, name)
+        return surfaces(_credential(session, integ.id), owner, name, repo)
     except Exception:
         return {}  # ingest is best-effort — never fail the request on a read error
 
 
 # --- pipeline --------------------------------------------------------------
 
-def ingest(session: Session, repo_id: str, actor_id: str, *, reader=None) -> dict:
+def charter(session: Session, repo_id: str, *, reader=None) -> dict:
+    """The repository's own instructions, for the harness to be handed.
+
+    Returns the three surfaces as text. It used to turn them into `Claim` rows
+    and score "coverage", which nobody acted on; what the surfaces are actually
+    for is telling the agent the house style — deepagents `memory=` and
+    `skills=` (see PLAN-3.0 §9.1).
+    """
     repo = session.get(Repository, repo_id)
     if repo is None:
         raise ValueError(f"unknown repository: {repo_id!r}")
-    reader = reader or default_reader
-    surfaces = reader(session, repo)
-
-    existing = {(c.surface, _norm(c.text)) for c in list_claims(session, repo_id)}
-    blob = _instruction_blob(session)
-    gate = _has_gate(session)
-
-    created = 0
-    for surface, texts in surfaces.items():
-        for text in texts:
-            key = (surface, _norm(text))
-            if key in existing:
-                continue
-            existing.add(key)
-            create_claim(session, repo_id, surface, text, actor_id,
-                         has_instruction=_backed_by_instruction(text, blob), has_gate=gate)
-            created += 1
-
-    return {"repo_id": repo_id, "created": created,
-            "total_claims": len(list_claims(session, repo_id))}
+    surfaces = (reader or default_reader)(session, repo)
+    return {"repo_id": repo_id,
+            "charter": surfaces.get("charter", []),
+            "harness": surfaces.get("harness", []),
+            "code": surfaces.get("code", [])}

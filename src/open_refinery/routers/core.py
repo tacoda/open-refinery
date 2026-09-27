@@ -63,9 +63,5 @@ def get_roles(session: Session = Depends(get_session), _: User = Depends(current
     """
     return list_roles(session)
 
-# --- governance landscape (admin read view) ---
-@router.get("/governance")
-def get_governance(session: Session = Depends(get_session), _: User = Depends(oversight)):
-    return landscape(session)
 
 # --- evals & experiments (test if a change's effect is real) ---

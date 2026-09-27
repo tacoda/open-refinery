@@ -51,15 +51,6 @@ def remove_webhook(webhook_id: str, session: Session = Depends(get_session),
     return {"status": "deleted"}
 
 # --- debt audits & health ---
-@router.get("/health/areas")
-def get_area_health(session: Session = Depends(get_session), _: User = Depends(current_user)):
-    return health(session)  # live factory/harness/charter scores
-
-@router.get("/audits")
-def get_audits(area: str | None = None, session: Session = Depends(get_session),
-               _: User = Depends(current_user)):
-    return list_audits(session, area=area)
-
 @router.post("/audits/run", status_code=201)
 def run_audits(area: str = "all", background: bool = False,
                session: Session = Depends(get_session), user: User = Depends(current_user)):
@@ -81,3 +72,17 @@ def get_one_job(job_id: str, session: Session = Depends(get_session), _: User = 
     return job
 
 # --- systems (compose repos into services) ---
+
+
+# --- the improve lane: what went wrong, and what would have prevented it ---
+@router.get("/improve")
+def get_improve(session: Session = Depends(get_session), _: User = Depends(reads_audit)):
+    """A health score and the findings costing it, each traced to its evidence."""
+    return improve_score(session)
+
+@router.get("/improve/proposals")
+def get_improve_proposals(session: Session = Depends(get_session),
+                          _: User = Depends(reads_audit)):
+    """Findings as proposals. **Nothing here is applied** — each goes in front of
+    a person, carrying the events it came from."""
+    return improve_proposals(session)
