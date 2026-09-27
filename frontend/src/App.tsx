@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { api, post, download, getToken, setToken, clearToken, oauthLoginUrl } from './api'
+import { api, post, download, getToken, setToken, clearToken } from './api'
 import { getTheme, applyTheme, watchSystem, type Theme } from './theme'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,75 +15,79 @@ import {
 import { LogoMark } from './Brand'
 import {
   LayoutDashboard, ListChecks, CheckSquare, GitBranch, Workflow, Shield, GitPullRequest,
-  Package, Boxes, Plug, Target, Users, BarChart3, Coins, Network, Activity, ScanSearch,
-  FlaskConical, ScrollText, Mail, Settings as SettingsIcon, ShieldCheck, PanelLeftClose,
+  Package, Boxes, Plug, Target, Users as UsersIcon, BarChart3, Coins, Network, Activity,
+  FlaskConical, ScrollText, Settings as SettingsIcon, PanelLeftClose,
   PanelLeft, LogOut, Eye, Bot, Lock, ClipboardCheck,
 } from 'lucide-react'
 
 // One icon per view — used by the sidebar and (later) overview cards.
 const VIEW_ICON: Record<string, any> = {
-  overview: LayoutDashboard, work: ListChecks, approvals: CheckSquare, repos: GitBranch,
-  processes: Workflow, policies: Shield, proposals: GitPullRequest, packs: Package,
-  governance: ShieldCheck, myrules: Eye, harnesses: Bot, evidence: ClipboardCheck, systems: Boxes, integrations: Plug, targets: Target, teams: Users,
-  metrics: BarChart3, usage: Coins, traffic: Network, audits: Activity, coverage: ScanSearch,
-  experiments: FlaskConical, events: ScrollText, invitations: Mail, settings: SettingsIcon,
+  // Set up
+  connections: Plug, repos: GitBranch, users: UsersIcon, settings: SettingsIcon,
+  // Build
+  pipelines: Workflow, processes: ListChecks, packs: Package, policies: Shield,
+  targets: Target,
+  // Run
+  work: ListChecks, runs: Activity, approvals: CheckSquare,
+  proposals: GitPullRequest, harnesses: Bot,
+  // Watch
+  overview: LayoutDashboard, events: ScrollText, evidence: ClipboardCheck,
+  usage: Coins, traffic: Network, experiments: FlaskConical, teams: Boxes,
+  metrics: BarChart3, myrules: Eye,
 }
 const GROUP_ICON: Record<string, any> = {
-  Home: LayoutDashboard, Work: ListChecks, Governance: ShieldCheck, Platform: Boxes,
-  Insights: BarChart3, Admin: SettingsIcon,
+  'Set up': Plug, Build: Workflow, Run: Activity, Watch: BarChart3,
 }
 
-type View = 'overview' | 'work' | 'approvals' | 'repos' | 'processes' | 'systems' | 'integrations' | 'targets' | 'policies' | 'packs' | 'proposals' | 'coverage' | 'audits' | 'experiments' | 'invitations' | 'settings' | 'governance' | 'events' | 'metrics' | 'teams' | 'usage' | 'traffic' | 'myrules' | 'harnesses' | 'evidence' | 'recert'
+type View = 'overview' | 'connections' | 'repos' | 'users'
+  | 'pipelines' | 'processes' | 'packs' | 'policies' | 'targets'
+  | 'work' | 'runs' | 'approvals' | 'proposals' | 'harnesses'
+  | 'events' | 'usage' | 'metrics' | 'evidence' | 'traffic' | 'experiments'
+  | 'teams' | 'settings' | 'myrules'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
-// Role-scoped navigation — each view lists exactly the roles it serves. This is
-// the single source of truth for the frontend; the backend enforces the same
-// matrix with 403s. Responsibilities:
-//   developer — operates their own dev concerns (services, repos, processes,
-//               agents, work) + their own insights (metrics, coverage).
-//   platform  — platform concerns (systems, targets, teams), governance
-//               authoring, and full org insights. Approves gated work.
-//   admin     — oversight only: reporting/insights, governance landscape, and
-//               user administration. Does not operate the factory.
-type NavTab = { value: View; label: string; roles: string[] }
-const ALL = ['developer', 'platform', 'admin']
-const OVERSIGHT = ['platform', 'admin', 'auditor']  // read-only oversight incl. external auditors
+// Navigation is gated by the PERMISSIONS the signed-in person holds — the same
+// set the backend checks (see authority.py). A tab lists what it needs; holding
+// none of them hides it.
+//
+// Four groups, in the order somebody meets them: set the place up, build how
+// work should ship, run work through it, then watch what happened.
+type NavTab = { value: View; label: string; needs?: string[]; always?: boolean }
 const NAV: { group: string; tabs: NavTab[] }[] = [
-  { group: 'Home', tabs: [
-    { value: 'overview', label: 'Overview', roles: [...ALL, 'auditor'] } ] },
-  // ordered by entity dependency: services → repos → processes → agents → work → approvals
-  { group: 'Work', tabs: [
-    { value: 'integrations', label: 'Services', roles: ['developer'] },
-    { value: 'repos', label: 'Repos', roles: ['developer'] },
-    { value: 'processes', label: 'Processes', roles: ['developer'] },
-    { value: 'harnesses', label: 'Harnesses', roles: ['developer', 'platform'] },
-    { value: 'work', label: 'Work', roles: ['developer'] },
-    { value: 'approvals', label: 'Approvals', roles: ['developer', 'platform'] } ] },
-  { group: 'Governance', tabs: [
-    { value: 'myrules', label: 'My rules', roles: ['developer'] },   // read-only
-    { value: 'policies', label: 'Policies', roles: ['platform'] },
-    { value: 'proposals', label: 'Proposals', roles: ['platform'] },
-    { value: 'packs', label: 'Packs', roles: ['developer', 'platform'] },
-    { value: 'governance', label: 'Governance', roles: OVERSIGHT } ] },
-  { group: 'Platform', tabs: [
-    { value: 'systems', label: 'Systems', roles: ['platform'] },
-    { value: 'targets', label: 'Targets', roles: ['platform'] },
-    { value: 'teams', label: 'Teams', roles: ['platform', 'admin'] } ] },
-  { group: 'Insights', tabs: [
-    { value: 'metrics', label: 'Metrics', roles: [...ALL, 'auditor'] },
-    { value: 'coverage', label: 'Coverage', roles: [...ALL, 'auditor'] },
-    { value: 'evidence', label: 'Evidence', roles: OVERSIGHT },
-    { value: 'usage', label: 'Usage', roles: ['platform', 'admin'] },
-    { value: 'traffic', label: 'Traffic', roles: ['platform', 'admin'] },
-    { value: 'audits', label: 'Audits', roles: ['platform', 'admin'] },
-    { value: 'experiments', label: 'Experiments', roles: ['platform', 'admin'] },
-    { value: 'events', label: 'Audit log', roles: OVERSIGHT } ] },
-  { group: 'Admin', tabs: [
-    { value: 'invitations', label: 'Invitations', roles: ALL },  // invite your level or lower
-    { value: 'recert', label: 'Recertification', roles: ['platform', 'admin'] },
-    { value: 'settings', label: 'Settings', roles: ['platform', 'admin'] } ] },
+  { group: 'Set up', tabs: [
+    { value: 'connections', label: 'Connections', always: true },   // your own keys
+    { value: 'repos', label: 'Repos', always: true },
+    { value: 'users', label: 'Users', needs: ['manage:users'] },
+    { value: 'settings', label: 'Settings', needs: ['see:operations'] } ] },
+  { group: 'Build', tabs: [
+    { value: 'pipelines', label: 'Workflows', always: true },       // read open; edit gated
+    { value: 'processes', label: 'Processes', always: true },
+    { value: 'packs', label: 'Standards', always: true },
+    { value: 'targets', label: 'Models', needs: ['approve:factory', 'see:operations'] },
+    { value: 'policies', label: 'Policies', needs: ['approve:charter', 'see:operations'] } ] },
+  { group: 'Run', tabs: [
+    { value: 'work', label: 'Work', always: true },
+    { value: 'runs', label: 'Runs', always: true },
+    { value: 'approvals', label: 'Approvals', always: true },
+    { value: 'proposals', label: 'Proposals', always: true },
+    { value: 'harnesses', label: 'Agents', needs: ['run:factory'] } ] },
+  { group: 'Watch', tabs: [
+    { value: 'overview', label: 'Overview', always: true },
+    { value: 'events', label: 'Audit log', needs: ['read:audit'] },
+    { value: 'evidence', label: 'Evidence', needs: ['read:audit'] },
+    { value: 'usage', label: 'Usage', needs: ['see:operations'] },
+    { value: 'traffic', label: 'Traffic', needs: ['see:operations'] },
+    { value: 'experiments', label: 'Experiments', needs: ['see:operations'] },
+    { value: 'teams', label: 'Teams', needs: ['see:operations'] },
+    { value: 'metrics', label: 'Metrics', always: true },
+    { value: 'myrules', label: 'My rules', always: true } ] },
 ]
+
+// Holding ANY of a tab's permissions opens it. The backend enforces the same
+// thing per route with a 403 — this only decides what is worth showing.
+const holds = (me: any, needs?: string[]) =>
+  !needs || needs.some((p) => (me?.permissions ?? []).includes(p))
 
 // Empty-state row for a list; render inside <TableBody> when there are no rows.
 export function EmptyRow({ show, cols, children }: { show: boolean; cols: number; children: any }) {
@@ -155,20 +159,11 @@ export default function App() {
   const [roles, setRoles] = useState<Role[]>([])  // admin-configurable authority ladder
   const [view, setView] = useState<View>('overview')
 
-  // capture an OAuth result handed back in the URL fragment
+  // A session token handed back in the URL fragment (the invite-free path).
   useEffect(() => {
     const h = new URLSearchParams(window.location.hash.slice(1))
-    const t = h.get('token'), e = h.get('oauth_error')
-    const connected = h.get('connected'), connErr = h.get('integration_error')
+    const t = h.get('token')
     if (t) { setToken(t); setTok(t); history.replaceState(null, '', '/') }
-    else if (e) {
-      toast.error(e === 'no-account' ? 'No account for that GitHub email — ask an admin.' : e)
-      history.replaceState(null, '', '/')
-    } else if (connected) {
-      toast.success(`Connected ${connected}`); history.replaceState(null, '', '/')
-    } else if (connErr) {
-      toast.error('Connection failed'); history.replaceState(null, '', '/')
-    }
   }, [])
 
   const [live, setLive] = useState(false)
@@ -203,36 +198,41 @@ export default function App() {
     document.title = me ? `Open Refinery · ${view[0].toUpperCase()}${view.slice(1)}` : 'Open Refinery'
   }, [view, me])
 
-  // Never sit on a view the role can't access (defence in depth alongside the backend).
+  // Never sit on a view this person's permissions do not open (defence in
+  // depth — the backend refuses it too).
   useEffect(() => {
-    if (me && !NAV.flatMap((n) => n.tabs).find((t) => t.value === view)?.roles.includes(me.role)) {
-      setGroup('Home'); setView('overview')
+    const tab = NAV.flatMap((n) => n.tabs).find((t) => t.value === view)
+    if (me && !(tab?.always || holds(me, tab?.needs))) {
+      setGroup('Watch'); setView('overview')
     }
   }, [view, me])
 
-  // Everyone lands on the visibility-first Overview (what needs attention now).
+  // Everyone lands on the Overview — what needs attention now.
   useEffect(() => {
     if (!me) return
-    setGroup('Home')
+    setGroup('Watch')
     setView('overview')
   }, [me])
 
-  // First-run: platform/admin see the setup wizard until the org is onboarded.
+  // First-run: whoever runs the place sees the setup wizard until it is done.
   useEffect(() => {
     if (!me) return
-    if (['platform', 'admin'].includes(me.role)) {
+    if (holds(me, ['see:operations', 'manage:users'])) {
       api('/onboarding').then((r) => setOnboarded(!!r.onboarded)).catch(() => setOnboarded(true))
-    } else setOnboarded(true)  // developers inherit the configured org
+    } else setOnboarded(true)  // everyone else inherits the configured org
   }, [me])
 
-  const isAdmin = !!me && me.role === 'admin'
-  const [group, setGroup] = useState('Home')
+  const canAudit = holds(me, ['read:audit'])
+  const [group, setGroup] = useState('Watch')
   const [collapsed, setCollapsed] = useState(false)
   const [onboarded, setOnboarded] = useState<boolean | null>(null)
 
-  const allow = (t: NavTab) => !!me && t.roles.includes(me.role)
-  // is `view` permitted for the current role? (mirrors the backend authorization)
-  const can = (v: View) => !!me && (NAV.flatMap((n) => n.tabs).find((t) => t.value === v)?.roles.includes(me.role) ?? false)
+  const allow = (t: NavTab) => !!me && (t.always || holds(me, t.needs))
+  // is `view` open to this person? (mirrors the backend, which enforces it)
+  const can = (v: View) => {
+    const tab = NAV.flatMap((n) => n.tabs).find((t) => t.value === v)
+    return !!me && !!(tab?.always || holds(me, tab?.needs))
+  }
   const tabsFor = (g: string) => (NAV.find((n) => n.group === g)?.tabs ?? []).filter(allow)
   const groups = NAV.filter((n) => tabsFor(n.group).length > 0)
   // jump straight to a view from anywhere (Overview drill-in), opening its group
@@ -299,38 +299,33 @@ export default function App() {
                   ))}
                 </TabsList>
               {/* content order mirrors the nav (entity-dependency) standard */}
-              {/* Home */}
-              <TabsContent value="overview"><Overview goto={goto} can={can} /></TabsContent>
-              {/* Work: services → repos → processes → agents → work → approvals */}
-              <TabsContent value="integrations"><Integrations /></TabsContent>
+              {/* Set up */}
+              <TabsContent value="connections"><Integrations /></TabsContent>
               <TabsContent value="repos"><Repos /></TabsContent>
-              <TabsContent value="processes"><Processes /></TabsContent>
-              <TabsContent value="harnesses"><Harnesses me={me} roles={roles} /></TabsContent>
-              <TabsContent value="work"><Work /></TabsContent>
-              <TabsContent value="approvals"><Approvals /></TabsContent>
-              {/* Governance */}
-              {can('myrules') && <TabsContent value="myrules"><MyRules me={me} /></TabsContent>}
-              <TabsContent value="policies"><Policies /></TabsContent>
-              <TabsContent value="proposals"><Proposals me={me} roles={roles} isAdmin={isAdmin} /></TabsContent>
-              <TabsContent value="packs"><Packs me={me} roles={roles} /></TabsContent>
-              {can('governance') && <TabsContent value="governance"><Governance /></TabsContent>}
-              {/* Platform */}
-              <TabsContent value="systems"><Systems /></TabsContent>
-              <TabsContent value="targets"><Targets /></TabsContent>
-              <TabsContent value="teams"><Teams /></TabsContent>
-              {/* Insights */}
-              <TabsContent value="metrics"><Metrics /></TabsContent>
-              {can('evidence') && <TabsContent value="evidence"><Evidence me={me} /></TabsContent>}
-              <TabsContent value="coverage"><Coverage /></TabsContent>
-              <TabsContent value="usage"><Usage /></TabsContent>
-              <TabsContent value="traffic"><Traffic /></TabsContent>
-              <TabsContent value="audits"><Audits /></TabsContent>
-              <TabsContent value="experiments"><Experiments /></TabsContent>
-              <TabsContent value="events"><Events isAdmin={isAdmin} /></TabsContent>
-              {/* Admin */}
-              {can('invitations') && <TabsContent value="invitations"><Invitations me={me} roles={roles} /></TabsContent>}
-              {can('recert') && <TabsContent value="recert"><Recert /></TabsContent>}
+              {can('users') && <TabsContent value="users"><Users me={me} /></TabsContent>}
               {can('settings') && <TabsContent value="settings"><Settings /></TabsContent>}
+              {/* Build */}
+              <TabsContent value="pipelines"><Pipelines me={me} /></TabsContent>
+              <TabsContent value="processes"><Processes /></TabsContent>
+              <TabsContent value="packs"><Packs me={me} roles={roles} /></TabsContent>
+              {can('targets') && <TabsContent value="targets"><Targets /></TabsContent>}
+              {can('policies') && <TabsContent value="policies"><Policies /></TabsContent>}
+              {/* Run */}
+              <TabsContent value="work"><Work /></TabsContent>
+              <TabsContent value="runs"><Runs me={me} /></TabsContent>
+              <TabsContent value="approvals"><Approvals /></TabsContent>
+              <TabsContent value="proposals"><Proposals me={me} roles={roles} isAdmin={canAudit} /></TabsContent>
+              {can('harnesses') && <TabsContent value="harnesses"><Harnesses me={me} roles={roles} /></TabsContent>}
+              {/* Watch */}
+              <TabsContent value="overview"><Overview goto={goto} can={can} /></TabsContent>
+              {can('events') && <TabsContent value="events"><Events isAdmin={canAudit} /></TabsContent>}
+              {can('evidence') && <TabsContent value="evidence"><Evidence me={me} /></TabsContent>}
+              {can('usage') && <TabsContent value="usage"><Usage /></TabsContent>}
+              {can('traffic') && <TabsContent value="traffic"><Traffic /></TabsContent>}
+              {can('experiments') && <TabsContent value="experiments"><Experiments /></TabsContent>}
+              {can('teams') && <TabsContent value="teams"><Teams /></TabsContent>}
+              <TabsContent value="metrics"><Metrics /></TabsContent>
+              <TabsContent value="myrules"><MyRules me={me} /></TabsContent>
               </Tabs>
             </main>
           </div>
@@ -356,47 +351,15 @@ function ThemeToggle() {
 }
 
 function Entry({ onToken }: { onToken: (t: string) => void }) {
-  const invite = new URLSearchParams(window.location.hash.slice(1)).get('invite')
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null)
   useEffect(() => {
     applyTheme(getTheme())
     api('/setup/status').then((s) => setNeedsSetup(!!s.needs_setup)).catch(() => setNeedsSetup(false))
   }, [])
-  if (invite) return <AcceptInvite token={invite} onToken={onToken} />
   if (needsSetup === null) return null
   return needsSetup ? <SetupWizard onToken={onToken} /> : <Login onToken={onToken} />
 }
 
-function AcceptInvite({ token, onToken }: { token: string; onToken: (t: string) => void }) {
-  const [email, setEmail] = useState(''), [pw, setPw] = useState('')
-  useEffect(() => {
-    applyTheme(getTheme())
-    api(`/invitations/lookup?token=${encodeURIComponent(token)}`)
-      .then((r) => setEmail(r.email || '')).catch(() => {})
-  }, [])
-  async function go() {
-    try {
-      const r = await post('/invitations/accept', { token, password: pw })
-      setToken(r.token); onToken(r.token); history.replaceState(null, '', '/')
-      toast.success('Welcome to Open Refinery')
-    } catch (e) { fail(e) }
-  }
-  return (
-    <div className="login-screen">
-      <div className="login-card">
-        <LoginBrand tagline={email ? `Set a password to join as ${email}.` : 'This invitation is invalid or expired.'} />
-        {email && <>
-          <Input placeholder="choose a password" type="password" value={pw}
-                 onChange={(e) => setPw(e.target.value)}
-                 onKeyDown={(e) => e.key === 'Enter' && go()} />
-          <Button onClick={go}>Set password &amp; join</Button>
-        </>}
-      </div>
-    </div>
-  )
-}
-
-// Brand lockup for the login/onboarding screens: the lit mark on a dark panel.
 function LoginBrand({ tagline }: { tagline: string }) {
   return (
     <div className="login-brand">
@@ -431,14 +394,9 @@ function SetupWizard({ onToken }: { onToken: (t: string) => void }) {
 
 function Login({ onToken }: { onToken: (t: string) => void }) {
   const [email, setEmail] = useState(''), [pw, setPw] = useState('')
-  const [github, setGithub] = useState(false)
-  const [sso, setSso] = useState(false), [ssoName, setSsoName] = useState('')
   const [auditor, setAuditor] = useState(false), [code, setCode] = useState('')
   const [mfa, setMfa] = useState(false), [mfaCode, setMfaCode] = useState('')
   useEffect(() => {
-    api('/auth/providers').then((p) => {
-      setGithub(!!p.github); setSso(!!p.sso); setSsoName(p.sso_name || 'SSO')
-    }).catch(() => {})
   }, [])
   async function go() {
     try {
@@ -478,16 +436,6 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
                      onKeyDown={(e) => e.key === 'Enter' && go()} />
             )}
             <Button onClick={go}>Sign in</Button>
-            {sso && (
-              <Button variant="outline" onClick={() => { window.location.href = oauthLoginUrl('sso') }}>
-                Sign in with {ssoName}
-              </Button>
-            )}
-            {github && (
-              <Button variant="outline" onClick={() => { window.location.href = oauthLoginUrl('github') }}>
-                Sign in with GitHub
-              </Button>
-            )}
             <Button variant="link" size="sm" onClick={() => setAuditor(true)}>I have an auditor access code</Button>
           </>
         )}
@@ -556,13 +504,14 @@ export function Wizard({ onDone, me, roles }: { onDone: () => void; me: any; rol
     stages: pstages.split(',').map((s) => s.trim()).filter(Boolean),
   }).then(() => { reloadProcs(); toast.success('Process created') }).catch(fail)
 
-  // invite step (admin) — bring in the team who'll run the factory
-  const myRank = roles.find((r) => r.name === me?.role)?.rank ?? 0
-  const inviteOptions = roles.filter((r) => r.rank <= myRank).map((r) => r.name)  // your level or lower
+  // add-people step — an admin creates the account and picks a starting preset
+  const presetNames = roles.map((r) => r.name)
   const [iemail, setIemail] = useState(''), [irole, setIrole] = useState('developer')
+  const [ipw, setIpw] = useState('')
   const [invited, setInvited] = useState<string[]>([])
-  const invite = () => post('/invitations', { email: iemail, role: irole, ttl_days: 7 })
-    .then(() => { setInvited((v) => [...v, `${iemail} (${irole})`]); setIemail(''); toast.success('Invitation sent') }).catch(fail)
+  const invite = () => post('/users', { email: iemail, password: ipw, role: irole })
+    .then(() => { setInvited((v) => [...v, `${iemail} (${irole})`]); setIemail(''); setIpw(''); toast.success('Added') })
+    .catch(fail)
 
   // first work item
   const [wtitle, setWtitle] = useState(''), [wrepo, setWrepo] = useState(''), [wproc, setWproc] = useState('')
@@ -680,15 +629,17 @@ export function Wizard({ onDone, me, roles }: { onDone: () => void; me: any; rol
               <p className="muted">Bring in the team who'll run the factory. Invite users at platform or developer level — they inherit everything you set up here.</p>
               <div className="field-form">
                 <Field label="Email"><Input className="field" placeholder="teammate@acme.com" value={iemail} onChange={(e) => setIemail(e.target.value)} /></Field>
-                <Field label="Role">
+                <Field label="Password"><Input className="field" type="password" value={ipw}
+                  onChange={(e) => setIpw(e.target.value)} /></Field>
+                <Field label="Start from">
                   <Select value={irole} onValueChange={(v) => setIrole(v ?? '')}>
                     <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-                    <SelectContent>{inviteOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                    <SelectContent>{presetNames.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
                   </Select>
                 </Field>
-                <Button onClick={invite} disabled={!iemail}>Send invite</Button>
+                <Button onClick={invite} disabled={!iemail || !ipw}>Add</Button>
               </div>
-              <div className="toolbar">{invited.map((v, i) => <Badge key={i} variant="secondary">{v}</Badge>)}</div>
+              <div className="toolbar">{invited.map((v: string, i: number) => <Badge key={i} variant="secondary">{v}</Badge>)}</div>
             </div>
           )}
 
@@ -728,19 +679,15 @@ export function Wizard({ onDone, me, roles }: { onDone: () => void; me: any; rol
 
 function Repos() {
   const { rows, load } = useList('/repositories')
-  const { rows: integs } = useList('/integrations')
   const [name, setName] = useState(''), [url, setUrl] = useState('')
+  const [open, setOpen] = useState<any>(null)
   const add = () => post('/repositories', { name, git_url: url })
     .then(() => { setName(''); setUrl(''); load() }).catch(fail)
-  const linkIntegration = (repoId: string, choice: string) =>
-    post(`/repositories/${repoId}/integration`, { integration_id: choice === 'auto' ? null : choice })
-      .then(load).catch(fail)
-  const schedule = (repoId: string, interval_hours: number) =>
-    post(`/repositories/${repoId}/schedule`, { interval_hours }).then(load).catch(fail)
   return (
     <section className="page">
       <h2 className="page-title">Repositories</h2>
-      <p className="muted">A repository is a project you govern — add one here or import from a connected integration.</p>
+      <p className="muted">A repository is a project you ship work into. Each one can say where
+        its agent configuration lives — the rules a run is handed before it touches anything.</p>
       <div className="field-form">
         <Field label="Name"><Input className="field" placeholder="e.g. checkout-api" value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <Field label="Git URL"><Input className="field" placeholder="git@github.com:org/repo.git" value={url} onChange={(e) => setUrl(e.target.value)} /></Field>
@@ -748,33 +695,75 @@ function Repos() {
       </div>
       <Card><CardContent>
         <Table>
-          <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Git URL</TableHead><TableHead>Ingest source</TableHead><TableHead>Auto-ingest (h)</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow>
+            <TableHead>Name</TableHead><TableHead>Git URL</TableHead>
+            <TableHead>Charter</TableHead><TableHead /></TableRow></TableHeader>
           <TableBody>
-            <EmptyRow show={!rows.length} cols={9}>No repositories yet — add or import one.</EmptyRow>
-            {rows.map((r) => (
+            <EmptyRow show={!rows.length} cols={4}>No repositories yet — add or import one.</EmptyRow>
+            {rows.map((r: any) => (
               <TableRow key={r.id}>
                 <TableCell>{r.name}</TableCell>
                 <TableCell className="mono">{r.git_url}</TableCell>
-                <TableCell>
-                  <Select value={r.integration_id ?? 'auto'} onValueChange={(v) => linkIntegration(r.id, v ?? 'auto')}>
-                    <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">auto (by host)</SelectItem>
-                      {integs.map((i: any) => <SelectItem key={i.id} value={i.id}>{i.kind} · {i.account}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                <TableCell className="muted">
+                  {(r.charter_paths?.length ? r.charter_paths : ['.agents/', 'AGENTS.md']).join(' · ')}
                 </TableCell>
                 <TableCell>
-                  <Input className="field" type="number" defaultValue={r.ingest_interval_hours ?? 0}
-                         title="0 = manual"
-                         onBlur={(e) => schedule(r.id, Number(e.target.value) || 0)} />
+                  <Button size="sm" variant="outline" onClick={() => setOpen(r)}>Settings</Button>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </CardContent></Card>
+      <RepoSettingsDrawer repo={open} onClose={() => setOpen(null)} onSaved={load} />
     </section>
+  )
+}
+
+function RepoSettingsDrawer({ repo, onClose, onSaved }: any) {
+  const [presets, setPresets] = useState<any>({ presets: {}, default: [] })
+  const [paths, setPaths] = useState('')
+  const [hours, setHours] = useState('0')
+  useEffect(() => { api('/repositories/charter-presets').then(setPresets).catch(() => {}) }, [])
+  useEffect(() => {
+    if (!repo) return
+    setPaths((repo.charter_paths ?? []).join('\n'))
+    setHours(String(repo.ingest_interval_hours ?? 0))
+  }, [repo])
+  if (!repo) return null
+
+  const save = () =>
+    api(`/repositories/${repo.id}`, { method: 'PUT', body: JSON.stringify({
+      charter_paths: paths.split('\n').map((s) => s.trim()).filter(Boolean),
+      ingest_interval_hours: Number(hours) || 0,
+    }) }).then(() => { toast.success('Saved'); onSaved?.(); onClose() }).catch(fail)
+
+  return (
+    <Drawer open={!!repo} title={repo.name} onClose={onClose}>
+      <div className="space-y-3">
+        <Field label="Agent configuration">
+          <textarea className="field" rows={4} value={paths}
+            placeholder={(presets.default ?? []).join('\n')}
+            onChange={(e) => setPaths(e.target.value)} />
+        </Field>
+        <p className="muted">
+          One path per line. Leave it empty for the default — <span className="mono">.agents/</span> and{' '}
+          <span className="mono">AGENTS.md</span>. An override <strong>replaces</strong> the default
+          rather than adding to it, so a team that says where their rules live means there.
+        </p>
+        <div className="toolbar">
+          {Object.entries(presets.presets ?? {}).map(([agent, list]: any) => (
+            <Button key={agent} size="sm" variant="outline"
+              onClick={() => setPaths((list as string[]).join('\n'))}>{agent}</Button>
+          ))}
+        </div>
+        <Field label="Re-read every (hours)">
+          <Input className="field" type="number" value={hours} title="0 = only when asked"
+            onChange={(e) => setHours(e.target.value)} />
+        </Field>
+        <Button onClick={save}>Save</Button>
+      </div>
+    </Drawer>
   )
 }
 
@@ -851,15 +840,6 @@ function Processes() {
 }
 
 // Credential field metadata — label + placeholder + whether it's a secret.
-const FIELD_META: Record<string, { label: string; ph: string; secret?: boolean }> = {
-  token: { label: 'Access token', ph: 'paste token', secret: true },
-  site: { label: 'Site', ph: 'acme.atlassian.net' },
-  email: { label: 'Email', ph: 'you@acme.com' },
-  repo: { label: 'Repository', ph: 'owner/name (optional)' },
-}
-const CAP_LABEL: Record<string, string> = {
-  source: 'code host', tracker: 'issue tracker', workflow: 'columns', docs: 'docs', notify: 'notify',
-}
 
 // Harness identities — register a coding agent (Claude Code, …) so its CLI is
 // authenticated to the platform and governed by its role.
@@ -959,132 +939,134 @@ function Harnesses({ me, roles }: any) {
 // Shared connect flow (Integrations + onboarding). OAuth is the preferred path
 // when configured; a token is the always-available fallback.
 export function ConnectService({ onConnected }: { onConnected?: () => void }) {
+  // Driven entirely by /credentials/catalog: the fields to ask for, where to
+  // mint the key, and exactly what permissions it needs. One catalog, so adding
+  // a provider is a backend entry rather than a frontend change.
   const [catalog, setCatalog] = useState<any[]>([])
-  const [providers, setProviders] = useState<Record<string, boolean>>({})
-  const [kind, setKind] = useState('github')
+  const [key, setKey] = useState('github')
   const [creds, setCreds] = useState<Record<string, string>>({})
-  const [showToken, setShowToken] = useState(false)
-  useEffect(() => {
-    api('/connectors').then(setCatalog).catch(() => {})
-    api('/auth/providers').then(setProviders).catch(() => {})
-  }, [])
-  const conn = catalog.find((c) => c.kind === kind)
-  const fields: string[] = conn?.fields ?? ['token']
-  const oauth = !!providers[kind]                       // OAuth configured for this service
-  const missing = fields.some((f) => f !== 'repo' && !creds[f])
-  const pick = (v: string) => { setKind(v); setCreds({}); setShowToken(false) }
-  const connectToken = () => {
-    const credential: Record<string, string> = {}
-    for (const f of fields) if (creds[f]) credential[f] = creds[f]
-    post('/integrations', { kind, credential })
-      .then(() => { setCreds({}); setShowToken(false); toast.success('Connected'); onConnected?.() }).catch(fail)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { api('/credentials/catalog').then(setCatalog).catch(fail) }, [])
+
+  const provider = catalog.find((c) => c.key === key)
+  const fields: any[] = provider?.fields ?? []
+  const missing = fields.some((f) => f.required && !creds[f.name])
+  const pick = (v: string) => { setKey(v); setCreds({}) }
+
+  const connect = () => {
+    setBusy(true)
+    post('/credentials', { provider: key, credential: creds })
+      .then((row) => {
+        setCreds({})
+        // The account it resolved to — proof the key works, not just that it saved.
+        toast.success(`Connected as ${row.account}`)
+        onConnected?.()
+      })
+      .catch(fail)
+      .finally(() => setBusy(false))
   }
-  const connectOAuth = () => post(`/integrations/${kind}/oauth/start`, {})
-    .then((r) => { window.location.href = r.authorize_url }).catch(fail)
+
   return (
     <div className="space-y-3">
       <div className="field-form">
         <Field label="Service">
-          <Select value={kind} onValueChange={(v) => pick(v ?? '')}>
+          <Select value={key} onValueChange={(v) => pick(v ?? '')}>
             <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-            <SelectContent>{catalog.map((c) => <SelectItem key={c.kind} value={c.kind}>{c.label}</SelectItem>)}</SelectContent>
+            <SelectContent>
+              {catalog.map((c) => (
+                <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>
+              ))}
+            </SelectContent>
           </Select>
         </Field>
-        {oauth
-          ? <Button onClick={connectOAuth}>Continue with {conn?.label} →</Button>
-          : (
-            <>
-              {fields.map((f) => {
-                const m = FIELD_META[f] ?? { label: f, ph: f }
-                return <Field key={f} label={m.label}><Input className="field" placeholder={m.ph}
-                  type={m.secret ? 'password' : 'text'} value={creds[f] ?? ''}
-                  onChange={(e) => setCreds((c) => ({ ...c, [f]: e.target.value }))} /></Field>
-              })}
-              <Button onClick={connectToken} disabled={missing}>Connect with token</Button>
-            </>
-          )}
+        {fields.map((f) => (
+          <Field key={f.name} label={f.label}>
+            <Input className="field" placeholder={f.placeholder}
+              type={f.secret ? 'password' : 'text'} value={creds[f.name] ?? ''}
+              onChange={(e) => setCreds((c) => ({ ...c, [f.name]: e.target.value }))} />
+          </Field>
+        ))}
+        <Button onClick={connect} disabled={missing || busy}>
+          {busy ? 'Verifying…' : fields.length ? 'Connect' : `Use ${provider?.label}`}
+        </Button>
       </div>
-      {/* token fallback when OAuth is the primary path */}
-      {oauth && (showToken
-        ? (
-          <div className="field-form">
-            {fields.map((f) => {
-              const m = FIELD_META[f] ?? { label: f, ph: f }
-              return <Field key={f} label={m.label}><Input className="field" placeholder={m.ph}
-                type={m.secret ? 'password' : 'text'} value={creds[f] ?? ''}
-                onChange={(e) => setCreds((c) => ({ ...c, [f]: e.target.value }))} /></Field>
-            })}
-            <Button variant="outline" onClick={connectToken} disabled={missing}>Connect with token</Button>
-          </div>
-        )
-        : <Button variant="link" size="sm" onClick={() => setShowToken(true)}>Use an access token instead</Button>)}
-      {!oauth && conn && (
-        <p className="muted">OAuth isn’t configured for {conn.label}. Connect with a token, or an admin can set OAuth up in Settings for a one-click connect.</p>
-      )}
-      {conn && (
-        <div className="toolbar">{conn.caps.map((c: string) => <Badge key={c} variant="outline">{CAP_LABEL[c] ?? c}</Badge>)}</div>
+      {provider && (
+        <div className="space-y-1">
+          {/* What to paste, without leaving to go and find out */}
+          <p className="muted">Needs: {provider.needs}</p>
+          {provider.mint_url && (
+            <p className="muted">
+              <a href={provider.mint_url} target="_blank" rel="noreferrer">
+                Create one on {provider.label} →
+              </a>
+            </p>
+          )}
+          <p className="muted">
+            The key is verified before it is stored, and is never shown again.
+          </p>
+        </div>
       )}
     </div>
   )
 }
 
 function Integrations() {
-  const { rows, load } = useList('/integrations')
+  const { rows, load } = useList('/credentials')
+  const family = (f: string) => rows.filter((r: any) => r.family === f)
+  const verify = (id: string) =>
+    post(`/credentials/${id}/verify`, {})
+      .then((r) => { r.status === 'ok' ? toast.success(`OK — ${r.account}`) : toast.error(r.status_detail); load() })
+      .catch(fail)
+  const revoke = (id: string) =>
+    api(`/credentials/${id}`, { method: 'DELETE' }).then(load).catch(fail)
+
   return (
     <section className="page">
-      <h2 className="page-title">Services</h2>
-      <p className="muted">Connect the services you use — a code host or issue tracker. OAuth is the preferred one-click path; a token works too. Credentials are encrypted at rest.</p>
-      <Card>
-        <CardHeader><CardTitle>Connect a service</CardTitle></CardHeader>
-        <CardContent><ConnectService onConnected={load} /></CardContent>
-      </Card>
-      <div className="work-list">
-        {!rows.length && <p className="muted">No integrations connected yet.</p>}
-        {rows.map((i) => <IntegrationCard key={i.id} integ={i} onChange={load} />)}
-      </div>
+      <header><h2>Connections</h2>
+        <p className="muted">Your own keys. Every run uses the credentials of whoever started it,
+          so a pull request is authored by the person accountable for it.</p></header>
+      <Card><CardHeader><CardTitle>Connect a service</CardTitle></CardHeader>
+        <CardContent><ConnectService onConnected={load} /></CardContent></Card>
+      {['model', 'forge', 'tracker'].map((f) => (
+        <Card key={f}><CardHeader><CardTitle>{FAMILY_LABEL[f]}</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader><TableRow>
+                <TableHead>Service</TableHead><TableHead>Account</TableHead>
+                <TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
+              <TableBody>
+                <EmptyRow show={family(f).length === 0} cols={4}>Nothing connected yet.</EmptyRow>
+                {family(f).map((r: any) => (
+                  <TableRow key={r.id}>
+                    <TableCell>{r.label}{r.shared && <Badge variant="outline">org-wide</Badge>}</TableCell>
+                    <TableCell>{r.account}</TableCell>
+                    <TableCell>
+                      {r.status === 'ok'
+                        ? <Badge variant="outline">ok</Badge>
+                        : <span title={r.status_detail}><Badge variant="destructive">failing</Badge></span>}
+                    </TableCell>
+                    <TableCell className="toolbar">
+                      <Button size="sm" variant="outline" onClick={() => verify(r.id)}>Verify</Button>
+                      <Button size="sm" variant="ghost" onClick={() => revoke(r.id)}>Revoke</Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {f === 'tracker' && family(f).map((r: any) => (
+                  <TableRow key={`${r.id}-sync`}>
+                    {/* Pulling tickets in is the front door of the factory */}
+                    <TableCell colSpan={4}><SyncPanel integ={r} /></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent></Card>
+      ))}
     </section>
   )
 }
 
-const TRACKERS = ['jira', 'linear']
-
-function IntegrationCard({ integ, onChange }: any) {
-  const [repos, setRepos] = useState<any[] | null>(null)
-  const tracker = TRACKERS.includes(integ.kind)
-  const verify = () => api(`/integrations/${integ.id}/verify`, { method: 'POST' })
-    .then((r) => toast.success(`Connected as ${r.account}`)).catch(fail)
-  const browse = () => api(`/integrations/${integ.id}/repos`).then(setRepos).catch(fail)
-  const remove = () => api(`/integrations/${integ.id}`, { method: 'DELETE' })
-    .then(() => { toast.success('Disconnected'); onChange() }).catch(fail)
-  const importRepo = (r: any) => post('/repositories/import', { name: r.name, git_url: r.ssh_url })
-    .then(() => toast.success(`Imported ${r.name}`)).catch(fail)
-  return (
-    <Card>
-      <CardContent>
-        <div className="work-head">
-          <span className="work-title">{integ.account}</span>
-          <Badge variant="secondary">{integ.kind}</Badge>
-        </div>
-        <div className="work-actions">
-          <Button variant="outline" size="sm" onClick={verify}>Verify</Button>
-          {!tracker && <Button variant="secondary" size="sm" onClick={browse}>Browse repos</Button>}
-          <Button variant="outline" size="sm" onClick={remove}>Disconnect</Button>
-        </div>
-        {tracker && <SyncPanel integ={integ} />}
-        {repos && (
-          <Table>
-            <TableBody><EmptyRow show={!repos.length} cols={9}>No repositories yet — add or import one.</EmptyRow>{repos.map((r) => (
-              <TableRow key={r.full_name}>
-                <TableCell>{r.full_name}</TableCell>
-                <TableCell><Badge variant="outline">{r.private ? 'private' : 'public'}</Badge></TableCell>
-                <TableCell><Button size="sm" onClick={() => importRepo(r)}>Import</Button></TableCell>
-              </TableRow>
-            ))}</TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
-  )
+const FAMILY_LABEL: Record<string, string> = {
+  model: 'Models', forge: 'Code hosts', tracker: 'Trackers',
 }
 
 function SyncPanel({ integ }: any) {
@@ -1329,133 +1311,10 @@ function Policies() {
 }
 
 const SETTING_HINTS = [
-  'github.client_id', 'github.client_secret',
   'gitlab.client_id', 'gitlab.client_secret',
   'policy.enforcement',       // audit | strict (whitelist / default-deny)
   'policy.strict_default',    // true | false
 ]
-
-function SsoSettings() {
-  const [ok, setOk] = useState(true), [enabled, setEnabled] = useState(false)
-  const [issuer, setIssuer] = useState(''), [cid, setCid] = useState('')
-  const [secret, setSecret] = useState(''), [name, setName] = useState('')
-  const load = () => api('/auth/sso/config').then((c) => {
-    setEnabled(!!c.enabled); setIssuer(c.issuer || ''); setName(c.name || '')
-  }).catch(() => setOk(false))  // 403 for non-admins → hide the card
-  useEffect(() => { load() }, [])
-  if (!ok) return null
-  const save = () => post('/auth/sso/config',
-    { issuer, client_id: cid, client_secret: secret, name })
-    .then(() => { setSecret(''); setCid(''); load(); toast.success('SSO saved') }).catch(fail)
-  return (
-    <Card>
-      <CardHeader><CardTitle>Single sign-on (OIDC){enabled && <Badge variant="secondary" style={{ marginLeft: '.5rem' }}>enabled</Badge>}</CardTitle></CardHeader>
-      <CardContent>
-        <p className="muted">Log in via your IdP (Okta, Entra, Google, Auth0…). The IdP is the auth &amp; MFA authority; its verified email must match an existing user. Secret stored encrypted, never shown.</p>
-        <div className="field-form">
-          <Field label="Issuer URL"><Input className="field" placeholder="https://acme.okta.com" value={issuer} onChange={(e) => setIssuer(e.target.value)} /></Field>
-          <Field label="Display name"><Input className="field" placeholder="Acme SSO" value={name} onChange={(e) => setName(e.target.value)} /></Field>
-          <Field label="Client ID"><Input className="field" placeholder={enabled ? 'unchanged' : 'client id'} value={cid} onChange={(e) => setCid(e.target.value)} /></Field>
-          <Field label="Client secret"><Input className="field" type="password" placeholder={enabled ? 'unchanged' : 'client secret'} value={secret} onChange={(e) => setSecret(e.target.value)} /></Field>
-          <Button onClick={save} disabled={!issuer}>Save SSO</Button>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function Recert() {
-  const { rows, load } = useList('/recert/campaigns')
-  const [name, setName] = useState(''), [days, setDays] = useState('30')
-  const [open, setOpen] = useState<any>(null)  // {campaign, items, progress}
-  const create = () => post('/recert/campaigns', { name, days: Number(days) || 30 })
-    .then(() => { setName(''); load() }).catch(fail)
-  const view = (id: string) => api(`/recert/campaigns/${id}`).then(setOpen).catch(fail)
-  const decide = (itemId: string, decision: string) =>
-    post(`/recert/items/${itemId}/decide`, { decision }).then(() => { view(open.campaign.id); load() }).catch(fail)
-  return (
-    <section className="page">
-      <h2 className="page-title">Access recertification</h2>
-      <p className="muted">Periodically re-attest who has access. Certify to keep, revoke to deactivate. Campaigns close when every user is decided; overdue ones are flagged.</p>
-      <div className="field-form">
-        <Field label="Campaign name"><Input className="field" placeholder="e.g. Q3 access review" value={name} onChange={(e) => setName(e.target.value)} /></Field>
-        <Field label="Due in (days)"><Input className="field" type="number" min="1" value={days} onChange={(e) => setDays(e.target.value)} /></Field>
-        <Button onClick={create} disabled={!name}>Open campaign</Button>
-      </div>
-      <div className="work-list">
-        {!rows.length && <Card><CardContent><p className="muted">No campaigns yet.</p></CardContent></Card>}
-        {rows.map((c) => (
-          <Card key={c.id}>
-            <CardContent>
-              <div className="work-head">
-                <span className="work-title">{c.name}</span>
-                <Badge variant={c.status === 'open' ? 'secondary' : 'outline'}>{c.status}</Badge>
-                <Badge variant="outline">{c.progress.pending} pending / {c.progress.total}</Badge>
-                <Badge variant="outline">{c.progress.revoked} revoked</Badge>
-                <Button variant="outline" size="sm" onClick={() => view(c.id)}>Review</Button>
-              </div>
-              {open?.campaign?.id === c.id && (
-                <Table>
-                  <TableHeader><TableRow><TableHead>User</TableHead><TableHead>Role</TableHead><TableHead>Decision</TableHead><TableHead /></TableRow></TableHeader>
-                  <TableBody>{open.items.map((it: any) => (
-                    <TableRow key={it.id}>
-                      <TableCell>{it.email}</TableCell>
-                      <TableCell>{it.role}</TableCell>
-                      <TableCell><Badge variant={it.decision === 'revoked' ? 'destructive' : it.decision === 'certified' ? 'secondary' : 'outline'}>{it.decision}</Badge></TableCell>
-                      <TableCell>{it.decision === 'pending' && (
-                        <div className="toolbar">
-                          <Button size="sm" onClick={() => decide(it.id, 'certified')}>Certify</Button>
-                          <Button variant="outline" size="sm" onClick={() => decide(it.id, 'revoked')}>Revoke</Button>
-                        </div>
-                      )}</TableCell>
-                    </TableRow>
-                  ))}</TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function ScimSettings() {
-  const [ok, setOk] = useState(true), [enabled, setEnabled] = useState(false)
-  const [mapText, setMapText] = useState('{}'), [def, setDef] = useState('developer')
-  const [token, setToken] = useState('')
-  const load = () => api('/scim/config').then((c) => {
-    setEnabled(!!c.enabled); setMapText(JSON.stringify(c.group_map || {}, null, 2)); setDef(c.default_role || 'developer')
-  }).catch(() => setOk(false))  // 403 for non-admins → hide
-  useEffect(() => { load() }, [])
-  if (!ok) return null
-  const rotate = () => post('/scim/token', {}).then((r) => { setToken(r.token); load(); toast.success('token generated') }).catch(fail)
-  const saveMap = () => {
-    let map: any
-    try { map = JSON.parse(mapText) } catch { return toast.error('group map must be valid JSON') }
-    post('/scim/group-map', { map, default_role: def }).then(() => toast.success('mapping saved')).catch(fail)
-  }
-  return (
-    <Card>
-      <CardHeader><CardTitle>SCIM provisioning{enabled && <Badge variant="secondary" style={{ marginLeft: '.5rem' }}>enabled</Badge>}</CardTitle></CardHeader>
-      <CardContent>
-        <p className="muted">Let your IdP provision/deprovision users automatically. Point its SCIM base at <span className="mono">/scim/v2</span> and use the token below. Deprovisioning deactivates (never deletes) the account.</p>
-        <div className="field-form">
-          <Button variant="outline" onClick={rotate}>{enabled ? 'Regenerate token' : 'Generate token'}</Button>
-          {token && <p className="mono" style={{ wordBreak: 'break-all' }}>{token} <span className="muted">(copy now — shown once)</span></p>}
-          <Field label="Group → role map (JSON)"><textarea className="field" rows={4} value={mapText} onChange={(e) => setMapText(e.target.value)} placeholder='{"platform-team": "platform"}' /></Field>
-          <Field label="Default role (no group match)">
-            <Select value={def} onValueChange={(v) => setDef(v ?? 'developer')}>
-              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-              <SelectContent>{['developer', 'platform', 'admin'].map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-            </Select>
-          </Field>
-          <Button onClick={saveMap}>Save mapping</Button>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
 
 function Settings() {
   const [keys, setKeys] = useState<string[]>([])
@@ -1473,7 +1332,7 @@ function Settings() {
         <CardHeader><CardTitle>Configuration (stored encrypted; values never shown)</CardTitle></CardHeader>
         <CardContent>
           <div className="field-form">
-            <Field label="Key"><Input className="field" placeholder="e.g. github.client_id" value={key}
+            <Field label="Key"><Input className="field" placeholder="e.g. policy.enforcement" value={key}
                    list="setting-hints" onChange={(e) => setKey(e.target.value)} /></Field>
             <datalist id="setting-hints">{SETTING_HINTS.map((h) => <option key={h} value={h} />)}</datalist>
             <Field label="Value"><Input className="field" placeholder="stored encrypted" type="password" value={value}
@@ -1491,8 +1350,6 @@ function Settings() {
           </Table>
         </CardContent>
       </Card>
-      <SsoSettings />
-      <ScimSettings />
       <Notifications />
       <Webhooks />
     </section>
@@ -1670,161 +1527,6 @@ function Experiments() {
   )
 }
 
-function Audits() {
-  const [h, setH] = useState<any>(null)
-  const { rows: hist, load: loadHist } = useList('/audits')
-  const loadHealth = () => api('/health/areas').then(setH).catch(fail)
-  useEffect(() => { loadHealth() }, [])
-  const run = () => post('/audits/run?area=all', {}).then(() => { loadHealth(); loadHist() }).catch(fail)
-  const badge = (s: number) => s >= 80 ? 'default' : s >= 50 ? 'secondary' : 'destructive'
-  const accent: any = { factory: 'accent-blue', harness: 'accent-purple', charter: 'accent-green' }
-  return (
-    <section className="page">
-      <h2 className="page-title">Debt audits & health</h2>
-      <div className="toolbar">
-        <Button onClick={run}>Run audit</Button>
-        <span className="muted">factory (this service) · harness (artifacts) · charter (repo claims)</span>
-      </div>
-      {h && (
-        <div className="metric-grid">
-          {['factory', 'harness', 'charter'].map((a) => (
-            <Card key={a} className={accent[a]}>
-              <CardHeader><CardTitle>{a} <Badge variant={badge(h[a].score)}>{h[a].score}</Badge></CardTitle></CardHeader>
-              <CardContent>
-                {h[a].insights.length === 0 && <div className="muted">healthy — no action needed</div>}
-                {h[a].insights.map((i: string, k: number) => <div key={k} className="kv-row"><span>{i}</span></div>)}
-                {h[a].findings.length > 0 && <div className="muted mono">{h[a].findings.length} finding(s)</div>}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-      <Card>
-        <CardHeader><CardTitle>Audit history</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader><TableRow><TableHead>When</TableHead><TableHead>Area</TableHead><TableHead>Score</TableHead><TableHead>Findings</TableHead></TableRow></TableHeader>
-            <TableBody>{hist.map((a: any) => (
-              <TableRow key={a.id}>
-                <TableCell className="mono">{a.created_at.slice(0, 19)}</TableCell>
-                <TableCell>{a.area}</TableCell>
-                <TableCell><Badge variant={badge(a.score)}>{a.score}</Badge></TableCell>
-                <TableCell className="mono">{(a.findings || []).length}</TableCell>
-              </TableRow>
-            ))}</TableBody>
-          </Table>
-          {!hist.length && <div className="muted">no audits run yet</div>}
-        </CardContent>
-      </Card>
-    </section>
-  )
-}
-
-function Coverage() {
-  const { rows: repos } = useList('/repositories')
-  const [repoId, setRepoId] = useState('')
-  const [rep, setRep] = useState<any>(null)
-  const [claims, setClaims] = useState<any[]>([])
-  useEffect(() => { if (!repoId && repos.length) setRepoId(repos[0].id) }, [repos, repoId])
-  const load = (id: string) => {
-    if (!id) return
-    api(`/repositories/${id}/coverage`).then(setRep).catch(fail)
-    api(`/repositories/${id}/claims`).then(setClaims).catch(fail)
-  }
-  useEffect(() => { load(repoId) }, [repoId])
-
-  const [surface, setSurface] = useState('charter'), [text, setText] = useState('')
-  const [hasI, setHasI] = useState(false), [hasG, setHasG] = useState(false)
-  const add = () => post(`/repositories/${repoId}/claims`, {
-    surface, text, has_instruction: hasI, has_gate: hasG,
-  }).then(() => { setText(''); load(repoId) }).catch(fail)
-  const del = (id: string) => api(`/claims/${id}`, { method: 'DELETE' }).then(() => load(repoId)).catch(fail)
-
-  const cov = rep?.coverage
-  return (
-    <section className="page">
-      <h2 className="page-title">Repo coverage & drift</h2>
-      <p className="muted">Pick a repository to see how much of its claimed behavior is actually enforced, and where the surfaces drift.</p>
-      <div className="field-form">
-        <Field label="Repository">
-          <Select value={repoId} onValueChange={(v) => setRepoId(v ?? '')}>
-            <SelectTrigger className="field"><SelectValue placeholder="repository…" /></SelectTrigger>
-            <SelectContent>{repos.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
-          </Select>
-        </Field>
-        {cov && <Badge variant={cov.score >= 80 ? 'default' : cov.score >= 50 ? 'secondary' : 'destructive'}>health {cov.score}</Badge>}
-        {cov && <span className="muted">covered {cov.covered} · partial {cov.partial} · imitation {cov.imitation} / {cov.total}</span>}
-        <Button variant="outline" size="sm" disabled={!repoId}
-                onClick={() => post(`/repositories/${repoId}/ingest`, {})
-                  .then((r) => { toast.success(`Ingested ${r.created} claim(s)`); load(repoId) }).catch(fail)}>
-          Ingest from source
-        </Button>
-      </div>
-
-      {cov && cov.imitation_surfaces.length > 0 && (
-        <Card className="accent-orange">
-          <CardHeader><CardTitle>Imitation surfaces — claimed, not enforced (act here)</CardTitle></CardHeader>
-          <CardContent>{cov.imitation_surfaces.map((c: any) => (
-            <div key={c.id} className="kv-row"><Badge variant="outline">{c.surface}</Badge><span>{c.text}</span></div>
-          ))}</CardContent>
-        </Card>
-      )}
-
-      {rep && rep.drift.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Drift across surfaces</CardTitle></CardHeader>
-          <CardContent>{rep.drift.map((d: any) => (
-            <div key={d.axis}>
-              <div className="kv-row"><span className="muted mono">{d.axis}</span></div>
-              {Object.entries(d.only_in).map(([s, list]: any) => list.length > 0 && (
-                <div key={s} className="kv-row"><span className="mono">only in {s}</span><span>{list.join(' · ')}</span></div>
-              ))}
-            </div>
-          ))}</CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader><CardTitle>Claims</CardTitle></CardHeader>
-        <CardContent>
-          <div className="field-form">
-            <Field label="Surface">
-              <Select value={surface} onValueChange={(v) => setSurface(v ?? '')}>
-                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-                <SelectContent>{['charter', 'harness', 'code'].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-              </Select>
-            </Field>
-            <Field label="Claimed behavior"><Input className="field" placeholder="what it claims to do" value={text} onChange={(e) => setText(e.target.value)} /></Field>
-            <Field label="Backed by">
-              <div className="switch-row" style={{ height: '2.25rem' }}>
-                <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  <input type="checkbox" checked={hasI} onChange={(e) => setHasI(e.target.checked)} /> instruction
-                </label>
-                <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  <input type="checkbox" checked={hasG} onChange={(e) => setHasG(e.target.checked)} /> gate
-                </label>
-              </div>
-            </Field>
-            <Button onClick={add} disabled={!repoId || !text}>Add claim</Button>
-          </div>
-          <Table>
-            <TableHeader><TableRow><TableHead>Surface</TableHead><TableHead>Claim</TableHead><TableHead>Instruction</TableHead><TableHead>Gate</TableHead><TableHead /></TableRow></TableHeader>
-            <TableBody>{claims.map((c: any) => (
-              <TableRow key={c.id}>
-                <TableCell><Badge variant="outline">{c.surface}</Badge></TableCell>
-                <TableCell>{c.text}</TableCell>
-                <TableCell>{c.has_instruction ? '✓' : '—'}</TableCell>
-                <TableCell>{c.has_gate ? '✓' : '—'}</TableCell>
-                <TableCell><Button variant="outline" size="sm" onClick={() => del(c.id)}>Delete</Button></TableCell>
-              </TableRow>
-            ))}</TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </section>
-  )
-}
-
 function Proposals({ me, roles, isAdmin }: any) {
   const { rows, load } = useList('/proposals')
   const { rows: wfRows, load: loadWf } = useList('/approval-workflows')
@@ -1987,106 +1689,6 @@ function Proposals({ me, roles, isAdmin }: any) {
   )
 }
 
-function Governance() {
-  const [g, setG] = useState<any>(null)
-  useEffect(() => { api('/governance').then(setG).catch(fail) }, [])
-  if (!g) return null
-  return (
-    <section className="page">
-      <h2 className="page-title">Governance landscape</h2>
-      <p className="muted">What is defined where, and what overrides what — across the role layers.</p>
-      <div className="toolbar">
-        <span className="muted">enforcement</span>
-        <Badge variant={g.enforcement === 'strict' ? 'default' : 'outline'}>
-          {g.enforcement === 'strict' ? 'strict (whitelist / default-deny)' : 'audit (default-allow)'}
-        </Badge>
-        <span className="muted">set `policy.enforcement` in Settings to change</span>
-      </div>
-      <p className="muted">{g.enforcement === 'strict'
-        ? 'Strict: an action is blocked unless a rule explicitly allows it (whitelist). Refusals are audited.'
-        : 'Audit: an action is allowed unless a rule denies it. Denials are audited.'}
-        {' '}Higher-authority layers win; a locked (strict) rule can’t be overridden from below.</p>
-
-      <Card>
-        <CardHeader><CardTitle>Layer lattice</CardTitle></CardHeader>
-        <CardContent>
-          <p className="muted">Precedence runs downward — a higher layer overrides a lower one on the same action.</p>
-          {(() => {
-            const counts: Record<string, number> = { factory: 0, harness: 0, charter: 0 }
-            for (const l of g.layers) for (const r of l.rules) if (counts[r.layer] !== undefined) counts[r.layer]++
-            const rows = [['factory', 'org service'], ['harness', 'agent tooling'], ['charter', 'repo / project']]
-            return (
-              <div className="lattice" style={{ marginTop: '.5rem' }}>
-                {rows.map(([layer, desc], i) => (
-                  <div key={layer}>
-                    <div className="lattice-row">
-                      <span><strong>{layer}</strong> <span className="rank">{desc}</span></span>
-                      <Badge variant="secondary">{counts[layer]} rule{counts[layer] === 1 ? '' : 's'}</Badge>
-                    </div>
-                    {i < rows.length - 1 && <div className="pl-arrow" style={{ textAlign: 'center' }}>↓ overrides</div>}
-                  </div>
-                ))}
-              </div>
-            )
-          })()}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>Roles</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader><TableRow><TableHead>Role</TableHead><TableHead>Rank</TableHead><TableHead>Users</TableHead></TableRow></TableHeader>
-            <TableBody>{g.roles.map((r: any) => (
-              <TableRow key={r.name}>
-                <TableCell>{r.name}</TableCell><TableCell className="mono">{r.rank}</TableCell><TableCell className="mono">{r.users}</TableCell>
-              </TableRow>
-            ))}</TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>Rules by layer (highest authority first)</CardTitle></CardHeader>
-        <CardContent>
-          {g.layers.length === 0 && <p className="muted">No rules defined.</p>}
-          {g.layers.map((layer: any) => (
-            <div key={layer.rank} style={{ marginBottom: '.8rem' }}>
-              <div className="field-label">Authored by {layer.rules[0]?.author_role ?? `rank ${layer.rank}`} · rank {layer.rank}</div>
-              <Table>
-                <TableHeader><TableRow><TableHead>Rule</TableHead><TableHead /></TableRow></TableHeader>
-                <TableBody>{layer.rules.map((p: any) => (
-                  <TableRow key={p.id}>
-                    <TableCell className="policy-sentence">
-                      <Badge variant={p.effect === 'deny' ? 'destructive' : 'secondary'}>{p.effect}</Badge> {ruleSentence(p)}
-                    </TableCell>
-                    <TableCell>{p.strict && <Badge>locked</Badge>}</TableCell>
-                  </TableRow>
-                ))}</TableBody>
-              </Table>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>Overrides — where a locked rule shadows a lower layer</CardTitle></CardHeader>
-        <CardContent>
-          {g.overrides.length === 0
-            ? <p className="muted">No overrides — no locked rule is currently shadowing a lower layer.</p>
-            : g.overrides.map((o: any, i: number) => (
-                <div key={i} className="policy-sentence" style={{ padding: '.3rem 0' }}>
-                  <Badge>{o.winner.author_role}</Badge>’s locked <strong>{o.winner.effect}</strong> on{' '}
-                  <span className="mono">{o.winner.action}/{o.winner.resource}</span> overrides{' '}
-                  <Badge variant="outline">{o.shadowed.author_role}</Badge>’s <strong>{o.shadowed.effect}</strong>.
-                </div>
-              ))}
-        </CardContent>
-      </Card>
-    </section>
-  )
-}
-
 export function Packs({ me, roles }: any) {
   const { rows, load } = useList('/packs')
   const rank = (r: string) => roles.find((x: Role) => x.name === r)?.rank ?? 0
@@ -2179,49 +1781,234 @@ export function Packs({ me, roles }: any) {
   )
 }
 
-function Invitations({ me, roles }: any) {
-  const { rows, load } = useList('/invitations')
-  const myRank = roles.find((r: Role) => r.name === me.role)?.rank ?? 0
-  const options = roles.filter((r: Role) => r.rank <= myRank).map((r: Role) => r.name)  // your level or lower
-  const [email, setEmail] = useState(''), [role, setRole] = useState('')
-  const [ttl, setTtl] = useState('7'), [link, setLink] = useState('')
-  useEffect(() => { if (!role && options.length) setRole(options[0]) }, [options, role])
-  const invite = () => post('/invitations', { email, role, ttl_days: Number(ttl) || 7 })
-    .then((r) => { setLink(r.accept_url); setEmail(''); load(); toast.success('Invitation created') })
-    .catch(fail)
-  const revoke = (id: string) => api(`/invitations/${id}/revoke`, { method: 'POST' })
-    .then(load).catch(fail)
+function Users({ me }: any) {
+  // "Add the users, give them permissions" — one screen, and a preset is a
+  // starting point rather than a role, which the copy says out loud.
+  const { rows, load } = useList('/users')
+  const [catalog, setCatalog] = useState<any>({ permissions: [], layers: [] })
+  const [presets, setPresets] = useState<Role[]>([])
+  const [email, setEmail] = useState(''), [password, setPassword] = useState('')
+  const [preset, setPreset] = useState('developer')
+  const [open, setOpen] = useState<any>(null)
+
+  useEffect(() => {
+    api('/permissions').then(setCatalog).catch(fail)
+    api('/roles').then(setPresets).catch(() => {})
+  }, [])
+
+  const add = () => post('/users', { email, password, role: preset })
+    .then((r) => {
+      setEmail(''); setPassword('')
+      toast.success(`Added ${r.user.email} — token shown once: ${r.token}`)
+      load()
+    }).catch(fail)
+
   return (
     <section className="page">
-      <h2 className="page-title">Invitations</h2>
-      <Card>
-        <CardHeader><CardTitle>Invite a user (they set their own password)</CardTitle></CardHeader>
-        <CardContent>
-          <div className="field-form">
-            <Field label="Email"><Input className="field" placeholder="new.user@acme.com" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-            <Field label="Role">
-              <Select value={role} onValueChange={(v) => setRole(v ?? '')}>
-                <SelectTrigger className="field"><SelectValue placeholder="role…" /></SelectTrigger>
-                <SelectContent>{options.map((r: string) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-              </Select>
-            </Field>
-            <Field label="Expires (days)"><Input className="field" type="number" placeholder="7" value={ttl} onChange={(e) => setTtl(e.target.value)} /></Field>
-            <Button onClick={invite} disabled={!email || !role}>Send invite</Button>
-          </div>
-          {link && <div className="kv-row"><span className="muted">invite link</span><span className="mono">{link}</span></div>}
-        </CardContent>
-      </Card>
+      <h2 className="page-title">Users</h2>
+      <p className="muted">A person holds a set of permissions, and that set is what is checked.
+        Presets are a starting point — editing one later does not change anybody already added.</p>
+
+      <Card><CardHeader><CardTitle>Add someone</CardTitle></CardHeader><CardContent>
+        <div className="field-form">
+          <Field label="Email"><Input className="field" value={email} placeholder="dana@acme.io"
+            onChange={(e) => setEmail(e.target.value)} /></Field>
+          <Field label="Password"><Input className="field" type="password" value={password}
+            onChange={(e) => setPassword(e.target.value)} /></Field>
+          <Field label="Start from">
+            <Select value={preset} onValueChange={(v) => setPreset(v ?? 'developer')}>
+              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {presets.map((r) => <SelectItem key={r.name} value={r.name}>{r.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Button onClick={add} disabled={!email || !password}>Add</Button>
+        </div>
+      </CardContent></Card>
+
       <Card><CardContent>
         <Table>
-          <TableHeader><TableRow><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Expires</TableHead><TableHead /></TableRow></TableHeader>
-          <TableBody><EmptyRow show={!rows.length} cols={4}>No pending invitations.</EmptyRow>{rows.map((i) => (
-            <TableRow key={i.id}>
-              <TableCell>{i.email}</TableCell>
-              <TableCell><Badge variant="secondary">{i.role}</Badge></TableCell>
-              <TableCell className="mono">{i.expires_at.slice(0, 10)}</TableCell>
-              <TableCell><Button variant="outline" size="sm" onClick={() => revoke(i.id)}>Revoke</Button></TableCell>
-            </TableRow>
-          ))}</TableBody>
+          <TableHeader><TableRow>
+            <TableHead>Email</TableHead><TableHead>Started from</TableHead>
+            <TableHead>Permissions</TableHead><TableHead /></TableRow></TableHeader>
+          <TableBody>
+            <EmptyRow show={!rows.length} cols={4}>Nobody yet.</EmptyRow>
+            {rows.map((u: any) => (
+              <TableRow key={u.id}>
+                <TableCell>{u.email}</TableCell>
+                <TableCell className="muted">{u.role}</TableCell>
+                <TableCell className="muted">{(u.permissions ?? []).length} held</TableCell>
+                <TableCell>
+                  {u.id === me?.id
+                    ? <span className="muted" title="Granting yourself more is the one thing this has to prevent">your own</span>
+                    : <Button size="sm" variant="outline" onClick={() => setOpen(u)}>Permissions</Button>}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent></Card>
+
+      <PermissionEditor user={open} catalog={catalog} presets={presets}
+        onClose={() => setOpen(null)} onSaved={load} />
+    </section>
+  )
+}
+
+function PermissionEditor({ user, catalog, presets, onClose, onSaved }: any) {
+  const [held, setHeld] = useState<string[]>([])
+  useEffect(() => { setHeld(user?.permissions ?? []) }, [user])
+  if (!user) return null
+
+  const toggle = (p: string) =>
+    setHeld((h) => h.includes(p) ? h.filter((x) => x !== p) : [...h, p])
+  const applyPreset = (name: string) => {
+    const preset = presets.find((r: Role) => r.name === name) as any
+    setHeld(preset?.permissions ?? [])
+  }
+  const save = () =>
+    api(`/users/${user.id}/permissions`, { method: 'PUT', body: JSON.stringify({ permissions: held }) })
+      .then(() => { toast.success('Saved'); onSaved?.(); onClose() }).catch(fail)
+
+  return (
+    <Drawer open={!!user} title={user.email} onClose={onClose}>
+      <div className="space-y-3">
+        <div className="toolbar">
+          <span className="muted">Start from:</span>
+          {presets.map((r: Role) => (
+            <Button key={r.name} size="sm" variant="outline"
+              onClick={() => applyPreset(r.name)}>{r.name}</Button>
+          ))}
+        </div>
+        <div className="space-y-1">
+          {(catalog.permissions ?? []).map((p: any) => (
+            <label key={p.permission} className="perm-row">
+              <input type="checkbox" checked={held.includes(p.permission)}
+                onChange={() => toggle(p.permission)} />
+              <span className="mono">{p.permission}</span>
+              <span className="muted">{p.description}</span>
+            </label>
+          ))}
+        </div>
+        <p className="muted">{held.length} held. This set is what is checked — not the preset.</p>
+        <Button onClick={save}>Save permissions</Button>
+      </div>
+    </Drawer>
+  )
+}
+
+function Pipelines({ me }: any) {
+  const { rows, load } = useList('/pipelines')
+  const [check, setCheck] = useState<any>(null)
+  const canEdit = (me?.permissions ?? []).includes('approve:factory')
+
+  const seedDefault = () =>
+    api('/pipelines/templates/default')
+      .then((tpl) => post('/pipelines', tpl))
+      .then(() => { toast.success('Added ship-a-ticket'); load() })
+      .catch(fail)
+
+  const inspect = (p: any) =>
+    api(`/pipelines/${p.id}/export`)
+      .then((doc) => post('/pipelines/validate', doc))
+      .then(setCheck).catch(fail)
+
+  return (
+    <section className="page">
+      <h2 className="page-title">Workflows</h2>
+      <p className="muted">How work ships here. Saving writes a new version rather than editing in
+        place, so a change never reaches a run already going.</p>
+      {canEdit && !rows.length && (
+        <Button onClick={seedDefault}>Start from ship-a-ticket</Button>
+      )}
+      <Card><CardContent>
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Name</TableHead><TableHead>Version</TableHead>
+            <TableHead>Stages</TableHead><TableHead /></TableRow></TableHeader>
+          <TableBody>
+            <EmptyRow show={!rows.length} cols={4}>
+              No workflows yet{canEdit ? '' : ' — ask whoever holds approve:factory'}.
+            </EmptyRow>
+            {rows.map((p: any) => (
+              <TableRow key={p.id}>
+                <TableCell>{p.name}</TableCell>
+                <TableCell className="muted">v{p.version}</TableCell>
+                <TableCell className="muted">{Object.keys(p.stages ?? {}).length}</TableCell>
+                <TableCell>
+                  <Button size="sm" variant="outline" onClick={() => inspect(p)}>Show path</Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent></Card>
+      {check && (
+        <Card><CardHeader><CardTitle>What a run would do</CardTitle></CardHeader><CardContent>
+          {check.ok
+            ? <p className="mono">{(check.path ?? []).join('  →  ')}</p>
+            : <p className="muted">{check.error}</p>}
+        </CardContent></Card>
+      )}
+    </section>
+  )
+}
+
+function Runs({ me }: any) {
+  const { rows, load } = useList('/runs')
+  const { rows: items } = useList('/work-items')
+  const [item, setItem] = useState('')
+  const canRun = (me?.permissions ?? []).includes('run:factory')
+
+  const start = () => post('/runs', { work_item_id: item })
+    .then(() => { toast.success('Run started'); load() }).catch(fail)
+  const approve = (id: string) => post(`/runs/${id}/approve`, {})
+    .then(() => { toast.success('Approved'); load() }).catch(fail)
+
+  return (
+    <section className="page">
+      <h2 className="page-title">Runs</h2>
+      <p className="muted">Work going through the factory. A run advances on the server, one stage
+        at a time, and survives a restart.</p>
+      {canRun && (
+        <div className="field-form">
+          <Field label="Work item">
+            <Select value={item} onValueChange={(v) => setItem(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue placeholder="pick one" /></SelectTrigger>
+              <SelectContent>
+                {items.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.title}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Button onClick={start} disabled={!item}>Run</Button>
+        </div>
+      )}
+      <Card><CardContent>
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Run</TableHead><TableHead>Stage</TableHead><TableHead>Revisions</TableHead>
+            <TableHead>Pull request</TableHead><TableHead /></TableRow></TableHeader>
+          <TableBody>
+            <EmptyRow show={!rows.length} cols={5}>Nothing running yet.</EmptyRow>
+            {rows.map((r: any) => (
+              <TableRow key={r.id}>
+                <TableCell className="mono">{r.id.slice(0, 8)}</TableCell>
+                <TableCell>
+                  {r.outcome
+                    ? <Badge variant="outline">{r.outcome}</Badge>
+                    : r.held ? <Badge>held</Badge> : r.stage}
+                </TableCell>
+                <TableCell className="muted">{r.revisions}</TableCell>
+                <TableCell>
+                  {r.pr_url ? <a href={r.pr_url} target="_blank" rel="noreferrer">open →</a> : '—'}
+                </TableCell>
+                <TableCell>
+                  {r.held && <Button size="sm" variant="outline" onClick={() => approve(r.id)}>Approve</Button>}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
         </Table>
       </CardContent></Card>
     </section>
@@ -2330,76 +2117,6 @@ function Usage() {
   )
 }
 
-function Systems() {
-  const { rows, load } = useList('/systems')
-  const { rows: repos } = useList('/repositories')
-  const [name, setName] = useState(''), [kind, setKind] = useState('service')
-  const [picked, setPicked] = useState<string[]>([])
-  const [cov, setCov] = useState<Record<string, any>>({})
-  const toggle = (id: string) =>
-    setPicked((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])
-  const add = () => post('/systems', { name, kind, repo_ids: picked })
-    .then(() => { setName(''); setPicked([]); load() }).catch(fail)
-  const del = (id: string) => api(`/systems/${id}`, { method: 'DELETE' }).then(load).catch(fail)
-  const loadCov = (id: string) => api(`/systems/${id}/coverage`).then((r) => setCov((c) => ({ ...c, [id]: r }))).catch(fail)
-  const repoName = (id: string) => repos.find((r: any) => r.id === id)?.name ?? id.slice(0, 8)
-  const badge = (s: number) => s >= 80 ? 'default' : s >= 50 ? 'secondary' : 'destructive'
-
-  return (
-    <section className="page">
-      <h2 className="page-title">Systems</h2>
-      <p className="muted">Compose repositories into a service / microservice group / server, and roll up their governance health.</p>
-      <Card>
-        <CardHeader><CardTitle>New system</CardTitle></CardHeader>
-        <CardContent>
-          <div className="field-form">
-            <Field label="System name"><Input className="field" placeholder="e.g. checkout" value={name} onChange={(e) => setName(e.target.value)} /></Field>
-            <Field label="Kind">
-              <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
-                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-                <SelectContent>{['service', 'microservices', 'server'].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
-              </Select>
-            </Field>
-            <Button onClick={add} disabled={!name}>Create system</Button>
-          </div>
-          <div className="field-group" style={{ marginTop: '.75rem' }}>
-            <span className="field-label">Member repositories (click to include)</span>
-            <div className="toolbar">
-              {repos.map((r: any) => (
-                <Button key={r.id} size="sm" variant={picked.includes(r.id) ? 'default' : 'outline'}
-                        onClick={() => toggle(r.id)}>{r.name}</Button>
-              ))}
-              {!repos.length && <span className="muted">no repositories yet — add one under Repos</span>}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent>
-          <Table>
-            <TableHeader><TableRow><TableHead>System</TableHead><TableHead>Kind</TableHead><TableHead>Repos</TableHead><TableHead>Health</TableHead><TableHead /></TableRow></TableHeader>
-            <TableBody>
-              <EmptyRow show={!rows.length} cols={9}>No systems yet — compose repositories above.</EmptyRow>
-              {rows.map((s: any) => (
-                <TableRow key={s.id}>
-                  <TableCell>{s.name}</TableCell>
-                  <TableCell><Badge variant="secondary">{s.kind}</Badge></TableCell>
-                  <TableCell className="mono">{(s.repo_ids || []).map(repoName).join(', ') || '—'}</TableCell>
-                  <TableCell>{cov[s.id]
-                    ? <Badge variant={badge(cov[s.id].score)}>{cov[s.id].score} · {cov[s.id].imitation} imitation</Badge>
-                    : <Button size="sm" variant="outline" onClick={() => loadCov(s.id)}>Roll up</Button>}</TableCell>
-                  <TableCell><Button variant="outline" size="sm" onClick={() => del(s.id)}>Delete</Button></TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </section>
-  )
-}
-
 function RoutingPolicyEditor() {
   const [region, setRegion] = useState(''), [comp, setComp] = useState(''), [prefer, setPrefer] = useState('priority')
   useEffect(() => {
@@ -2464,14 +2181,9 @@ function Targets() {
   const { rows: routes, load: loadR } = useList('/routes')
   const { rows: quotas, load: loadQ } = useList('/quotas')
   const [procs, setProcs] = useState<any[]>([])
-  const [oauthProviders, setOauthProviders] = useState<string[]>([])
   useEffect(() => {
     api('/processes').then(setProcs).catch(() => {})
-    api('/auth/providers').then((p) => setOauthProviders(Object.keys(p).filter((k) => p[k]))).catch(() => {})
   }, [])
-  const connectOauth = (targetId: string, provider: string) =>
-    post(`/targets/${targetId}/oauth/${provider}/start`, {})
-      .then((r) => { window.location.href = r.authorize_url }).catch(fail)
 
   const [name, setName] = useState(''), [kind, setKind] = useState('model')
   const [endpoint, setEndpoint] = useState(''), [token, setToken] = useState('')
@@ -2532,9 +2244,6 @@ function Targets() {
                 <TableCell className="mono">{t.unit_cost || 0}</TableCell>
                 <TableCell>
                   <span style={{ display: 'flex', gap: '0.3rem' }}>
-                    {oauthProviders.map((p) => (
-                      <Button key={p} variant="outline" size="sm" onClick={() => connectOauth(t.id, p)}>OAuth: {p}</Button>
-                    ))}
                     <Button variant="outline" size="sm" onClick={() => delTarget(t.id)}>Delete</Button>
                   </span>
                 </TableCell>
@@ -2656,12 +2365,13 @@ export function Overview({ goto, can = () => true }: { goto: (v: any) => void; c
   const [items, setItems] = useState<any[]>([])
   const [pending, setPending] = useState(0)
   const [events, setEvents] = useState<any[]>([])
-  const [anomalies, setAnomalies] = useState<any[]>([])
+  const [findings, setFindings] = useState<any[]>([])
   useEffect(() => {
     api('/work-items').then(setItems).catch(() => {})
     api('/approvals?status=pending').then((r) => setPending(r.length)).catch(() => {})
     api('/events').then(setEvents).catch(() => {})  // 403 for some roles → stays empty
-    api('/anomalies').then(setAnomalies).catch(() => {})  // oversight-only → empty otherwise
+    // The improve lane: what went wrong, each traced to its evidence.
+    api('/improve').then((r) => setFindings(r.findings ?? [])).catch(() => {})
   }, [])
   const count = (recipe: string) => events.filter((e) => e.recipe === recipe).length
   const denials = count('denied')
@@ -2677,7 +2387,7 @@ export function Overview({ goto, can = () => true }: { goto: (v: any) => void; c
     { label: 'Policy denials', n: denials, go: 'events', attn: denials > 0, Icon: Shield },
     { label: 'Failed invokes', n: failures, go: 'events', attn: failures > 0, Icon: Activity },
     { label: 'Rollbacks to apply', n: pendingApply, go: 'work', attn: pendingApply > 0, Icon: GitBranch },
-    { label: 'Behavioral anomalies', n: anomalies.length, go: 'events', attn: anomalies.length > 0, Icon: Activity },
+    { label: 'Things to look at', n: findings.length, go: 'events', attn: findings.length > 0, Icon: Activity },
   ]
   return (
     <section className="page">
@@ -2694,12 +2404,12 @@ export function Overview({ goto, can = () => true }: { goto: (v: any) => void; c
           </button>
         ))}
       </div>
-      {anomalies.length > 0 && (
+      {findings.length > 0 && (
         <Card>
-          <CardHeader><CardTitle>Behavioral anomalies</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Things to look at</CardTitle></CardHeader>
           <CardContent>
             <div className="work-list">
-              {anomalies.map((a, i) => (
+              {findings.map((a: any, i: number) => (
                 <div key={i} className="work-head">
                   <Badge variant={a.severity === 'high' ? 'destructive' : 'secondary'}>{a.severity}</Badge>
                   <Badge variant="outline">{a.kind}</Badge>
@@ -2797,10 +2507,11 @@ function Work() {
   )
 }
 
-function WorkRow({ w, onMove, onAttest, onRequest, onReload, bare }: any) {
+function WorkRow({ w, onMove, onAttest, onRequest, bare }: any) {
+  // Rollback and post-mortems went in 2.15.0: once a run opens a pull request,
+  // rolling back is `git revert` and another run, and a run's own steps are the
+  // history worth reading.
   const [to, setTo] = useState(''), [check, setCheck] = useState('')
-  const [pm, setPm] = useState<any>(null)
-  const [hist, setHist] = useState<any>(null), [rbTo, setRbTo] = useState(''), [plan, setPlan] = useState<any>(null)
   const [logs, setLogs] = useState<any[] | null>(null)
   // live log tail: subscribe to WS-relayed log lines for this item while open
   useEffect(() => {
@@ -2811,17 +2522,6 @@ function WorkRow({ w, onMove, onAttest, onRequest, onReload, bare }: any) {
   }, [logs === null, w.id])
   const showLogs = () => logs ? setLogs(null)
     : api(`/work-items/${w.id}/logs`).then((l) => setLogs(l)).catch(fail)
-  const markApplied = (status: string) => post(`/work-items/${w.id}/rollback/applied`, { status })
-    .then(() => { toast.success(`rollback ${status}`); return api(`/work-items/${w.id}/history`).then(setHist) }).catch(fail)
-  const runPm = () => pm ? setPm(null)
-    : api(`/work-items/${w.id}/postmortem`).then(setPm).catch(fail)
-  const showHist = () => hist ? (setHist(null), setPlan(null))
-    : api(`/work-items/${w.id}/history`).then((h) => { setHist(h); setRbTo(h.rollback_targets[0] ?? '') }).catch(fail)
-  const rollback = () => post(`/work-items/${w.id}/rollback`, { to: rbTo })
-    .then((r) => {
-      setPlan(r.plan); toast.success(`rolled back to ${rbTo}`); onReload?.()
-      return api(`/work-items/${w.id}/history`).then((h) => { setHist(h); setRbTo(h.rollback_targets[0] ?? '') })
-    }).catch(fail)
   return (
     <Card>
       <CardContent>
@@ -2837,8 +2537,6 @@ function WorkRow({ w, onMove, onAttest, onRequest, onReload, bare }: any) {
           <Input className="field" placeholder="check" value={check} onChange={(e) => setCheck(e.target.value)} />
           <Button variant="outline" size="sm" onClick={() => onAttest(w.id, check, true)}>Attest ✓</Button>
           <Button variant="outline" size="sm" onClick={() => onAttest(w.id, check, false)}>Attest ✗</Button>
-          <Button variant="outline" size="sm" onClick={runPm}>{pm ? 'Hide post-mortem' : 'Post-mortem'}</Button>
-          <Button variant="outline" size="sm" onClick={showHist}>{hist ? 'Hide history' : 'History'}</Button>
           <Button variant="outline" size="sm" onClick={showLogs}>{logs ? 'Hide logs' : 'Logs'}</Button>
         </div>
         {logs && (
@@ -2848,54 +2546,7 @@ function WorkRow({ w, onMove, onAttest, onRequest, onReload, bare }: any) {
             )) : <span className="muted">no logs yet — lines stream here live</span>}
           </div>
         )}
-        {hist && (
-          <div style={{ marginTop: '0.6rem', borderTop: '1px solid var(--border)', paddingTop: '0.6rem' }}>
-            <Pipeline
-              stages={hist.history.filter((h: any) => h.kind !== 'rollback-applied')
-                .map((h: any) => h.stage).filter((s: string, i: number, a: string[]) => a.indexOf(s) === i)}
-              current={w.current_stage} />
-            <div className="mono" style={{ marginTop: '.3rem' }}>timeline: {hist.history.map((h: any) => h.kind === 'rollback' ? `↩ ${h.stage}` : h.kind === 'rollback-applied' ? `✓applied(${h.changes?.status})` : h.stage).join(' → ') || '—'}</div>
-            {hist.rollback_targets.length > 0 ? (
-              <div className="work-actions" style={{ marginTop: '0.4rem' }}>
-                <span className="muted">roll back to</span>
-                <Select value={rbTo} onValueChange={(v) => setRbTo(v ?? '')}>
-                  <SelectTrigger className="field"><SelectValue placeholder="stage…" /></SelectTrigger>
-                  <SelectContent>{hist.rollback_targets.map((s: string) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                </Select>
-                <Button variant="destructive" size="sm" onClick={rollback} disabled={!rbTo}>Roll back</Button>
-              </div>
-            ) : <div className="muted" style={{ marginTop: '0.3rem' }}>no prior stage to roll back to</div>}
-            {plan && (
-              <div style={{ marginTop: '0.4rem' }}>
-                <div className="muted">reverse plan (for the harness to apply):</div>
-                <div className="kv-row"><span className="muted">code</span><span className="mono">{plan.code ? `revert → ${plan.code.revert_to}` : '—'}</span></div>
-                <div className="kv-row"><span className="muted">migrations</span><span className="mono">{plan.migrations.map((m: any) => `↓ ${m.downgrade}`).join(', ') || '—'}</span></div>
-                {Object.entries(plan).filter(([k]) => k !== 'code' && k !== 'migrations').map(([cat, m]: any) => (
-                  <div key={cat} className="kv-row"><span className="muted">{cat}</span><span className="mono">{Object.entries(m).map(([k, v]) => `${k}→${v}`).join(', ') || '—'}</span></div>
-                ))}
-                <div className="work-actions" style={{ marginTop: '0.4rem' }}>
-                  <span className="muted">harness applied it?</span>
-                  <Button variant="secondary" size="sm" onClick={() => markApplied('applied')}>Mark applied</Button>
-                  <Button variant="outline" size="sm" onClick={() => markApplied('failed')}>Mark failed</Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        {pm && (
-          <div style={{ marginTop: '0.6rem', borderTop: '1px solid var(--border)', paddingTop: '0.6rem' }}>
-            <div className="kv-row"><span className="muted">root cause</span><span>{pm.root_cause}</span></div>
-            <div className="kv-row"><span className="muted">duration</span><span className="mono">{pm.duration_seconds}s · {pm.timeline.length} events</span></div>
-            {pm.findings.map((f: any, i: number) => (
-              <div key={i} className="kv-row"><Badge variant={f.severity === 'high' ? 'destructive' : 'secondary'}>{f.type}</Badge><span>{f.detail}</span></div>
-            ))}
-            {pm.suggestions.length > 0 && <div className="muted" style={{ marginTop: '0.3rem' }}>Suggested next steps:</div>}
-            {pm.suggestions.map((s: string, i: number) => <div key={i} className="kv-row"><span>• {s}</span></div>)}
-            <div className="mono" style={{ marginTop: '0.3rem' }}>
-              timeline: {pm.timeline.map((t: any) => t.recipe).join(' → ') || '—'}
-            </div>
-          </div>
-        )}
+
       </CardContent>
     </Card>
   )
@@ -3084,11 +2735,12 @@ function Evidence({ me }: any) {
 
 function Metrics() {
   const [m, setM] = useState<any>(null)
-  const [ga, setGa] = useState<any>(null)
+  // The improve lane replaced four separate analyses in 2.15.0.
+  const [improve, setImprove] = useState<any>(null)
+  useEffect(() => { api('/improve').then(setImprove).catch(() => {}) }, [])
   const [names, setNames] = useState<Record<string, string>>({})
   useEffect(() => {
     api('/metrics').then(setM).catch(fail)
-    api('/governance/analysis').then(setGa).catch(() => {})
     // resolve actor ids → emails when permitted (platform/admin); dev falls back to short id
     api('/users').then((us: any[]) => setNames(Object.fromEntries(us.map((u) => [u.id, u.email])))).catch(() => {})
   }, [])
@@ -3117,30 +2769,34 @@ function Metrics() {
         ))}
       </div>
 
-      {ga && (
+      {improve && (
         <Card>
-          <CardHeader><CardTitle>Governance flags {ga.total ? `(${ga.total})` : ''}</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Things to look at ({improve.total})</CardTitle></CardHeader>
           <CardContent>
             <div className="toolbar">
-              {Object.entries(ga.metrics).map(([k, v]) => (
-                <Badge key={k} variant="outline">{k}: {String(v)}</Badge>
-              ))}
-              {!ga.total && <span className="muted">no poison detected at your layer</span>}
+              <Badge variant={improve.score >= 90 ? 'outline' : 'destructive'}>
+                health {improve.score}
+              </Badge>
+              {!improve.total && <span className="muted">nothing to report</span>}
             </div>
-            {ga.total > 0 && (
+            {improve.total > 0 && (
               <Table>
-                <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Severity</TableHead><TableHead>Layer</TableHead><TableHead>Detail</TableHead><TableHead>Insight</TableHead></TableRow></TableHeader>
-                <TableBody>{ga.findings.map((f: any, i: number) => (
+                <TableHeader><TableRow>
+                  <TableHead>What</TableHead><TableHead>Severity</TableHead>
+                  <TableHead>Detail</TableHead><TableHead>Suggestion</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>{improve.findings.map((f: any, i: number) => (
                   <TableRow key={i}>
-                    <TableCell><Badge variant={f.severity === 'high' ? 'destructive' : 'secondary'}>{f.type}</Badge></TableCell>
+                    <TableCell><Badge variant={f.severity === 'high' ? 'destructive' : 'secondary'}>{f.kind}</Badge></TableCell>
                     <TableCell className="mono">{f.severity}</TableCell>
-                    <TableCell className="mono">{f.author_role}</TableCell>
                     <TableCell>{f.detail}</TableCell>
-                    <TableCell className="muted">{f.insight}</TableCell>
+                    <TableCell className="muted">{f.suggestion}</TableCell>
                   </TableRow>
                 ))}</TableBody>
               </Table>
             )}
+            <p className="muted">Every finding names the events it came from — one that cannot be
+              traced is dropped rather than repaired.</p>
           </CardContent>
         </Card>
       )}

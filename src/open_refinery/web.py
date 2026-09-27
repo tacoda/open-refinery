@@ -327,6 +327,13 @@ class PermissionsBody(BaseModel):
     preset: str = ""
 
 
+class RepoSettings(BaseModel):
+    """A repository's settings. Omitted fields are left alone."""
+    charter_paths: list[str] | None = None   # [] resets to the default
+    integration_id: str | None = None
+    ingest_interval_hours: int | None = None
+
+
 class PipelineBody(BaseModel):
     """A stage graph. `stages` is the only required part."""
     name: str = "pipeline"

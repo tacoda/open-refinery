@@ -1,6 +1,8 @@
 from fastapi import APIRouter
 
+from .. import authority
 from ..deps import *  # noqa: F401,F403
+from ..models import Repository
 from ..web import *  # noqa: F401,F403
 
 router = APIRouter()
@@ -33,6 +35,55 @@ def add_repo(body: NewRepo, session: Session = Depends(get_session),
 @router.get("/repositories")
 def get_repos(session: Session = Depends(get_session), user: User = Depends(current_user)):
     return list_repositories(session, owner_id=owner_scope(session, user))
+
+@router.put("/repositories/{repo_id}")
+def update_repo(repo_id: str, body: RepoSettings, session: Session = Depends(get_session),
+                user: User = Depends(current_user)):
+    """A repository's settings: where its agent configuration lives, which
+    credential reads it, and how often to re-read.
+
+    `charter_paths` is the one worth knowing about: the default is `.agents/`
+    and `AGENTS.md`, and a team whose rules live in `.claude/`, `.cursorrules`
+    or anywhere else says so here. An override **replaces** the default rather
+    than adding to it.
+    """
+    repo = session.get(Repository, repo_id)
+    if repo is None:
+        raise HTTPException(status_code=404, detail="unknown repository")
+    if repo.owner_id != user.id and not authority.sees_operations(user):
+        raise HTTPException(status_code=404, detail="unknown repository")
+
+    if body.charter_paths is not None:
+        repo.charter_paths = [p for p in body.charter_paths if p.strip()]
+    if body.integration_id is not None:
+        repo.integration_id = body.integration_id or None
+    if body.ingest_interval_hours is not None:
+        repo.ingest_interval_hours = max(0, body.ingest_interval_hours)
+    session.add(repo)
+    session.commit()
+    session.refresh(repo)
+    return repo
+
+
+@router.get("/repositories/charter-presets")
+def charter_presets(_: User = Depends(current_user)):
+    """Known agents' conventions, so overriding the default is a pick rather
+    than research."""
+    from ..ingest import AGENT_PRESETS, DEFAULT_CHARTER_DIRS, DEFAULT_CHARTER_FILES
+    return {"default": list(DEFAULT_CHARTER_DIRS) + list(DEFAULT_CHARTER_FILES),
+            "presets": {k: list(v) for k, v in AGENT_PRESETS.items()}}
+
+
+@router.get("/repositories/{repo_id}/charter")
+def repo_charter_view(repo_id: str, session: Session = Depends(get_session),
+                      _: User = Depends(current_user)):
+    """What this repository says about how work is done here — the text the
+    harness will be handed."""
+    try:
+        return repo_charter(session, repo_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
 
 @router.post("/repositories/import", status_code=201)
 def import_repo(body: NewRepo, session: Session = Depends(get_session),
