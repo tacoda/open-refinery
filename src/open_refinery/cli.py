@@ -232,6 +232,100 @@ def _roles(args: argparse.Namespace) -> int:
     return 0
 
 
+def _pipelines(args: argparse.Namespace) -> int:
+    import json as _json
+    import sys
+
+    from .client import ApiError
+
+    api = _client(args)
+    try:
+        if args.pipe_cmd == "list":
+            for p in api.get("/pipelines", **({"all_versions": "true"} if args.all else {})):
+                print(f"{p['name']:<20} v{p['version']:<3} {len(p['stages'])} stages")
+            return 0
+
+        if args.pipe_cmd == "show":
+            body = api.get(f"/pipelines/{args.id}/export")
+            print(_json.dumps(body, indent=2))
+            return 0
+
+        if args.pipe_cmd == "check":
+            # Print the stage graph BEFORE paying for a run — the whole point
+            # of the machine being pure.
+            raw = _json.loads(pathlib_read(args.file)) if args.file else api.get(
+                "/pipelines/templates/default")
+            result = api.post("/pipelines/validate", raw)
+            if not result["ok"]:
+                print(f"invalid: {result['error']}", file=sys.stderr)
+                return 1
+            print(f"ok — {result['stages']} stages")
+            print("  " + " → ".join(result["path"]))
+            return 0
+
+        if args.pipe_cmd == "save":
+            raw = _json.loads(pathlib_read(args.file))
+            saved = api.post("/pipelines", raw)
+            print(f"saved {saved['name']} v{saved['version']}")
+            return 0
+    except ApiError as exc:
+        print(f"error: {exc.detail}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def pathlib_read(path: str) -> str:
+    from pathlib import Path
+    return Path(path).read_text()
+
+
+def _runs(args: argparse.Namespace) -> int:
+    import sys
+
+    from .client import ApiError
+
+    api = _client(args)
+    try:
+        if args.run_cmd == "list":
+            rows = api.get("/runs", **({"active": "true"} if args.active else {}))
+            if not rows:
+                print("no runs yet")
+                return 0
+            for r in rows:
+                state = r["outcome"] or ("held" if r["held"] else r["stage"])
+                print(f"{r['id'][:8]}  {state:<12} rev {r['revisions']}  {r['pr_url'] or ''}")
+            return 0
+
+        if args.run_cmd == "start":
+            run = api.post("/runs", {"work_item_id": args.work_item,
+                                     "pipeline": args.pipeline})
+            print(f"started {run['id'][:8]} at {run['stage']}")
+            return 0
+
+        if args.run_cmd == "show":
+            run = api.get(f"/runs/{args.id}")
+            print(f"{run['id']}  {run['outcome'] or run['stage']}")
+            for s in run["steps"]:
+                print(f"  {s['stage']:<10} {s['outcome']:<9} {s['why']}")
+            print()
+            print(run["document"])
+            return 0
+
+        if args.run_cmd == "next":
+            nxt = api.get(f"/runs/{args.id}/next")
+            print(f"{nxt['to']} — {nxt['why']}")
+            return 0
+
+        if args.run_cmd == "approve":
+            api.post(f"/runs/{args.id}/approve")
+            print("approved")
+            return 0
+    except ApiError as exc:
+        print(f"error: {exc.detail}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def _create_admin(args: argparse.Namespace) -> int:
     import getpass
     import sys
@@ -439,6 +533,33 @@ def main(argv: list[str] | None = None) -> int:
 
     role_sub.add_parser("rm", help="delete a custom role").add_argument("name")
     roles.set_defaults(func=_roles)
+
+    pipes = sub.add_parser("pipelines", help="define the factory's stage graph (via the API)")
+    pipes.add_argument("--url", default=None)
+    pipes.add_argument("--token", default=None)
+    pipe_sub = pipes.add_subparsers(dest="pipe_cmd", required=True)
+    pipe_sub.add_parser("list", help="every pipeline").add_argument(
+        "--all", action="store_true", help="include older versions")
+    pipe_sub.add_parser("show", help="export one as a document").add_argument("id")
+    p_check = pipe_sub.add_parser(
+        "check", help="validate a pipeline and print its stage graph — before paying for a run")
+    p_check.add_argument("file", nargs="?", help="omit to check the shipped default")
+    pipe_sub.add_parser("save", help="save a pipeline from a file").add_argument("file")
+    pipes.set_defaults(func=_pipelines)
+
+    runs = sub.add_parser("runs", help="put work through the factory (via the API)")
+    runs.add_argument("--url", default=None)
+    runs.add_argument("--token", default=None)
+    run_sub = runs.add_subparsers(dest="run_cmd", required=True)
+    run_sub.add_parser("list", help="your runs").add_argument(
+        "--active", action="store_true", help="only those still going")
+    r_start = run_sub.add_parser("start", help="start a run")
+    r_start.add_argument("work_item")
+    r_start.add_argument("--pipeline", default="ship-a-ticket")
+    run_sub.add_parser("show", help="a run, its steps, and its document").add_argument("id")
+    run_sub.add_parser("next", help="what the machine would do next").add_argument("id")
+    run_sub.add_parser("approve", help="clear a held stage").add_argument("id")
+    runs.set_defaults(func=_runs)
 
     admin = sub.add_parser("create-admin", help="create the initial admin user")
     admin.add_argument("--email", required=True)

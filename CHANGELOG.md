@@ -3,6 +3,63 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.17.0] — 2026-09-27
+
+*Phase 2 on the [road to 3.0](docs/PLAN-3.0.md): the stage graph, as a pure
+state machine. Deliberately the milestone with **no agent, no git and no
+forge** — the factory's whole behaviour is decidable before any of those
+exist.*
+
+### Added
+- **`pipeline/spec.py`** — the stage graph. A stage names a **phase** (a turn of
+  the harness) or an **action** (something the factory does itself), never both.
+  Validation is strict about the two ways to write a pipeline that looks fine
+  and hangs: a stage nothing reaches, and a stage with no way out. Errors name
+  the **offending stage**, because an error naming a JSON path is one somebody
+  ignores. Reachability follows *every* edge — walking `next` alone reports
+  `rework` unreachable, since it is reached only by `on_comment`.
+- **`pipeline/graph.py`** — `advance` and `plan_next`, pure functions of three
+  dicts. Every branch is testable with a literal: the revision cap, an
+  **identical refusal** (a gate repeating itself word for word has shown its
+  complaint is not about the diff), `on_error: continue`, the pull-request
+  outcome edges, and the three lookalike skip conditions — `skip_when`,
+  `optional` (opt-**out**) and `opt_in`, which are separate because conflating
+  them makes every optional stage default-on.
+- **`pipeline/contracts.py`** — a check that grades itself is not a check.
+  `PROVEN: yes` with no command under it is downgraded to `unproven`; an
+  objecting review naming no `file.py:line` is downgraded to `unreadable`; and
+  **an answer that cannot be parsed is never read as a pass**, which is what
+  stops a check whose output format drifted from reading as approval for weeks.
+  Absorbs `attestations.py`, per the system review.
+- **`pipeline/document.py`** — the run document, which each stage appends to, so
+  the pull request body is **already written** by the time a person reads it.
+  A re-run replaces its section rather than appending; two contradictory
+  "What was built" sections is worse than either.
+- **`Pipeline` / `Run` / `RunStep`** (migration **v26**). Saving a pipeline
+  writes a **new version** rather than editing in place, and a run pins the
+  version it started under — so an edit never reaches work already in flight,
+  and the graph a finished run followed is still readable months later. A
+  downgraded answer is stored **structured**, so "how often did prove claim yes
+  without evidence" is a question about the factory rather than about one run.
+- **Routes**: `/pipelines` (read open — a developer must see the stages their
+  work moves between; saving is `approve:factory`), `/pipelines/validate` for
+  the canvas, `/pipelines/{id}/export`, `/pipelines/templates/default`,
+  `/runs`, `/runs/{id}/next` (pure, so it answers without touching anything),
+  `/runs/{id}/approve`.
+- **CLI**: `open-refinery pipelines list|show|check|save` and
+  `runs list|start|show|next|approve`. `pipelines check` prints the stage graph
+  **before you pay for a run**, which is what the machine being pure buys.
+
+### Notes
+- `ship-a-ticket` ships as the default to build from. Its shape carries three
+  decisions: deciding and building are separate turns on different models, a
+  check may run and may not repair, and nothing merges itself.
+- **You cannot approve your own run** — the gate is a second pair of eyes or it
+  is nothing.
+
+619 tests pass (130 new), and the surface is verified end to end against a
+running server.
+
 ## [2.16.0] — 2026-09-27
 
 *Phase P on the [road to 3.0](docs/PLAN-3.0.md): authorization is derived from

@@ -327,6 +327,27 @@ class PermissionsBody(BaseModel):
     preset: str = ""
 
 
+class PipelineBody(BaseModel):
+    """A stage graph. `stages` is the only required part."""
+    name: str = "pipeline"
+    first: str | None = None
+    terminal: list[str] | None = None
+    model: str | None = None
+    stages: dict[str, dict] = {}
+    layout: dict | None = None
+
+
+class NewRun(BaseModel):
+    """Put a work item through a pipeline. Name it or take the newest
+    `ship-a-ticket`."""
+    work_item_id: str
+    pipeline_id: str | None = None
+    pipeline: str | None = None
+    spec: str = ""
+    opt_in: list[str] = []
+    skip: list[str] = []
+
+
 class NewCredential(BaseModel):
     provider: str                   # a key from credentials.PROVIDERS
     credential: dict[str, str]      # the provider's declared fields
@@ -519,10 +540,10 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
 
 def _include_routers(app: FastAPI) -> None:
-    from .routers import (core, credentials, harness, ops, org, policy,
+    from .routers import (core, credentials, harness, ops, org, pipelines, policy,
                           proposals, roles, routing, workitem)
     for mod in (core, ops, org, harness, workitem, routing, policy,
-                credentials, roles, proposals):
+                credentials, roles, proposals, pipelines):
         app.include_router(mod.router)
 
 

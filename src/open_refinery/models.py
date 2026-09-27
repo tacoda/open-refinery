@@ -152,6 +152,93 @@ class Process(SQLModel, table=True):
 
 
 
+class Pipeline(SQLModel, table=True):
+    """A stage graph — the factory's shape, as rows.
+
+    Saving writes a **new row with a higher version** rather than editing in
+    place, and a `Run` pins the version it started under. So editing a pipeline
+    never changes a run already in flight, and "why did this run do that" stays
+    answerable months later.
+    """
+    __tablename__ = "pipelines"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    name: str = Field(index=True)
+    version: int = Field(default=1, index=True)
+    owner_id: str = Field(foreign_key="users.id", index=True)
+    first: str = ""
+    terminal: list = Field(default_factory=list, sa_column=Column(JSON))
+    model: str = ""                    # default; a stage may override
+    stages: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    # Node positions for the canvas, so a graph opens how it was left rather
+    # than being re-laid-out every time.
+    layout: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    created_at: str = Field(default_factory=now_iso)
+
+
+class Run(SQLModel, table=True):
+    """One journey of one work item through one pipeline.
+
+    **The row is the durable state.** A worker claims a run, advances it by
+    exactly one stage, and writes back — so a crash between stages resumes
+    rather than restarts, and two workers cannot take the same run.
+    """
+    __tablename__ = "runs"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    work_item_id: str = Field(foreign_key="work_items.id", index=True)
+    pipeline_id: str = Field(foreign_key="pipelines.id", index=True)
+    pipeline_version: int = 1          # pinned: edits do not reach a live run
+    repo_id: str = Field(foreign_key="repositories.id", index=True)
+    actor_id: str = Field(foreign_key="users.id", index=True)
+
+    stage: str = Field(default="", index=True)
+    reason: str = ""                   # "" | revision | rework
+    revisions: int = 0
+    last_refusal: str = ""             # verbatim, to spot a repeat
+    held: bool = Field(default=False, index=True)   # waiting on a person
+    approved_at: str = ""
+
+    document: str = ""                 # the accumulating account (markdown)
+    workspace: str = ""                # worktree path, once claimed
+    branch: str = ""
+    pr_url: str = ""
+    outcome: str = ""                  # landed | closed | failed, once finished
+    error: str = ""
+
+    # Per-run overrides of the graph's opt-in / optional stages.
+    opt_in: list = Field(default_factory=list, sa_column=Column(JSON))
+    skip: list = Field(default_factory=list, sa_column=Column(JSON))
+
+    # Claim, so two workers cannot take the same run.
+    claimed_by: str = ""
+    claimed_at: str = ""
+
+    created_at: str = Field(default_factory=now_iso, index=True)
+    updated_at: str = Field(default_factory=now_iso)
+
+
+class RunStep(SQLModel, table=True):
+    """Append-only: one row per stage attempt.
+
+    The answer is stored **structured** rather than as a prose blob, so a
+    downgrade is queryable — "how often did prove claim yes without evidence"
+    is a question about the factory, not about one run.
+    """
+    __tablename__ = "run_steps"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    run_id: str = Field(foreign_key="runs.id", index=True)
+    stage: str = Field(index=True)
+    phase: str = ""
+    action: str = ""
+    attempt: int = 1
+    outcome: str = ""                  # ok | refused | error | blocked | skipped
+    why: str = ""                      # why it moved where it did
+    answer: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    units: int = 0                     # model usage, for cost attribution
+    target_id: str = ""
+    started_at: str = Field(default_factory=now_iso)
+    finished_at: str = ""
+
+
 class WorkItem(SQLModel, table=True):
     __tablename__ = "work_items"
     id: str = Field(default_factory=new_id, primary_key=True)

@@ -46,6 +46,16 @@ REQUIRED = {
     # connections
     "credentials": "/credentials",
     "what can be connected": "/credentials/catalog",
+    # pillar 1 — the factory
+    "pipelines": "/pipelines",
+    "validate a pipeline": "/pipelines/validate",
+    "export a pipeline": "/pipelines/{pipeline_id}/export",
+    "the default template": "/pipelines/templates/default",
+    "the action palette": "/pipelines/actions",
+    "runs": "/runs",
+    "one run": "/runs/{run_id}",
+    "what happens next": "/runs/{run_id}/next",
+    "approve a held stage": "/runs/{run_id}/approve",
     # the work
     "repositories": "/repositories",
     "processes": "/processes",

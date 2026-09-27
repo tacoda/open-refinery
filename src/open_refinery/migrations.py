@@ -141,6 +141,10 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE roles ADD COLUMN permissions TEXT NOT NULL DEFAULT '[]';"
     "UPDATE users SET permissions = '[\"approve:code\", \"propose:code\", \"propose:harness\", \"propose:factory\", \"propose:charter\", \"run:factory\"]' WHERE role = 'developer' AND permissions = '[]';UPDATE users SET permissions = '[\"approve:harness\", \"approve:charter\", \"propose:code\", \"propose:harness\", \"propose:factory\", \"propose:charter\", \"run:factory\"]' WHERE role = 'lead' AND permissions = '[]';UPDATE users SET permissions = '[\"approve:factory\", \"propose:factory\", \"see:operations\", \"run:factory\"]' WHERE role = 'platform' AND permissions = '[]';UPDATE users SET permissions = '[\"manage:users\", \"read:audit\"]' WHERE role = 'admin' AND permissions = '[]';UPDATE users SET permissions = '[\"read:audit\"]' WHERE role = 'auditor' AND permissions = '[]';"
     "UPDATE roles SET permissions = '[\"approve:code\", \"propose:code\", \"propose:harness\", \"propose:factory\", \"propose:charter\", \"run:factory\"]' WHERE name = 'developer';UPDATE roles SET permissions = '[\"approve:harness\", \"approve:charter\", \"propose:code\", \"propose:harness\", \"propose:factory\", \"propose:charter\", \"run:factory\"]' WHERE name = 'lead';UPDATE roles SET permissions = '[\"approve:factory\", \"propose:factory\", \"see:operations\", \"run:factory\"]' WHERE name = 'platform';UPDATE roles SET permissions = '[\"manage:users\", \"read:audit\"]' WHERE name = 'admin';UPDATE roles SET permissions = '[\"read:audit\"]' WHERE name = 'auditor';",
+    # v26 (2.17.0): the factory's own tables — pipelines, runs, run steps. New
+    # tables are created by `create_all`; this entry is the version bump so an
+    # existing install records that it has them.
+    "SELECT 1;",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -200,6 +204,9 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE repositories DROP COLUMN charter_paths;",                               # v24
     "ALTER TABLE users DROP COLUMN permissions;"
     "ALTER TABLE roles DROP COLUMN permissions;",                                        # v25
+    "DROP TABLE IF EXISTS run_steps;"
+    "DROP TABLE IF EXISTS runs;"
+    "DROP TABLE IF EXISTS pipelines;",                                                   # v26
 ]
 
 
