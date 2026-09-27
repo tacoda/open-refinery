@@ -11,11 +11,13 @@ whatever that stage is about, which for now is the code being written.
 from fastapi import APIRouter
 
 from .. import authority
+from .. import credentials as creds_mod
 from ..deps import *  # noqa: F401,F403
 from ..models import WorkItem
 from ..pipeline import GraphError, default_pipeline, parse, template, templates
 from ..pipeline import store as ps
 from ..pipeline.graph import plan_next, walk
+from ..pipeline.runner import RunnerError, drive, step
 from ..pipeline.spec import ACTIONS, to_dict
 from ..web import *  # noqa: F401,F403
 
@@ -221,3 +223,53 @@ def approve_held_run(run_id: str, session: Session = Depends(get_session),
         recipe="run-approved", actor=user.id, owner=run.actor_id,
         inputs={"stage": run.stage}, output="approved", subject=run_id))
     return _run_view(session, updated)
+
+
+@router.post("/runs/{run_id}/advance")
+def advance_run(run_id: str, all_the_way: bool = False,
+                session: Session = Depends(get_session),
+                user: User = Depends(may_run)):
+    """Move a run forward — one stage, or until it stops.
+
+    Phase 6 replaces this with a pool of workers claiming runs on a tick. Until
+    then it is here so a run can be driven by hand, which is also how you watch
+    a pipeline behave before trusting it to a worker.
+    """
+    run = ps.get_run(session, run_id)
+    if run is None or (run.actor_id != user.id and not authority.sees_operations(user)):
+        raise HTTPException(status_code=404, detail="unknown run")
+    if run.outcome:
+        return _run_view(session, run)
+    if run.held:
+        raise HTTPException(status_code=409,
+                            detail=f"{run.stage} is waiting on a person — approve it first")
+
+    # The runner uses the *run owner's* credentials, so a pull request is
+    # authored by whoever is accountable for the work.
+    try:
+        credential = _forge_credential(session, run)
+    except creds_mod.NoCredential as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        move = drive if all_the_way else step
+        updated = move(session, run, SqliteSink(session), credential=credential)
+    except RunnerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _run_view(session, updated)
+
+
+def _forge_credential(session, run) -> dict:
+    """The run owner's key for this repository's forge.
+
+    `local` needs none, which is what makes it the path that works before
+    anybody has connected anything.
+    """
+    from ..models import Repository
+    from ..pipeline import forge as forgelib
+
+    repo = session.get(Repository, run.repo_id)
+    driver = forgelib.for_repo(repo.git_url if repo else "", repo.forge if repo else "")
+    if driver.name == "local":
+        return {}
+    return creds_mod.for_actor(session, run.actor_id, driver.name)

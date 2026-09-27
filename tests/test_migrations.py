@@ -89,6 +89,12 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
             "ALTER TABLE roles DROP COLUMN sees_operations",
             "ALTER TABLE roles DROP COLUMN builtin",
             "ALTER TABLE repositories DROP COLUMN charter_paths",
+            "ALTER TABLE repositories DROP COLUMN base_branch",
+            "ALTER TABLE repositories DROP COLUMN forge",
+            "ALTER TABLE repositories DROP COLUMN max_revisions",
+            "ALTER TABLE repositories DROP COLUMN prepare_cmd",
+            "ALTER TABLE repositories DROP COLUMN cleanup_cmd",
+            "ALTER TABLE repositories DROP COLUMN test_cmd",
             "ALTER TABLE users DROP COLUMN permissions",
             "ALTER TABLE roles DROP COLUMN permissions",
             "PRAGMA user_version = 7",   # pretend this is a 1.0-era install (schema v7)

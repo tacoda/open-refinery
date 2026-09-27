@@ -316,6 +316,17 @@ def _runs(args: argparse.Namespace) -> int:
             print(f"{nxt['to']} — {nxt['why']}")
             return 0
 
+        if args.run_cmd == "advance":
+            run = api.post(f"/runs/{args.id}/advance"
+                           + ("?all_the_way=true" if args.all else ""))
+            state = run["outcome"] or ("held at " + run["stage"] if run["held"] else run["stage"])
+            print(f"{run['id'][:8]}  {state}")
+            if run["pr_url"]:
+                print(f"  pull request: {run['pr_url']}")
+            for s in run["steps"][-3:]:
+                print(f"  {s['stage']:<10} {s['outcome']:<8} {s['why'][:70]}")
+            return 0
+
         if args.run_cmd == "approve":
             api.post(f"/runs/{args.id}/approve")
             print("approved")
@@ -558,6 +569,9 @@ def main(argv: list[str] | None = None) -> int:
     r_start.add_argument("--pipeline", default="ship-a-ticket")
     run_sub.add_parser("show", help="a run, its steps, and its document").add_argument("id")
     run_sub.add_parser("next", help="what the machine would do next").add_argument("id")
+    r_adv = run_sub.add_parser("advance", help="move a run forward one stage")
+    r_adv.add_argument("id")
+    r_adv.add_argument("--all", action="store_true", help="until it stops")
     run_sub.add_parser("approve", help="clear a held stage").add_argument("id")
     runs.set_defaults(func=_runs)
 

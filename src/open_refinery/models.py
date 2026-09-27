@@ -121,6 +121,17 @@ class Repository(SQLModel, table=True):
     # (.agents/, AGENTS.md, and the .claude/.cursor fallbacks — see ingest.py).
     # A team whose rules live somewhere else says so here.
     charter_paths: list = Field(default_factory=list, sa_column=Column(JSON))
+
+    # How the factory works in THIS repository. Without these every repo gets
+    # identical treatment, which fails on the first one whose tests need a
+    # setup step.
+    base_branch: str = "main"          # what a run branches from and targets
+    forge: str = ""                    # github | gitlab | local; "" = by git URL
+    max_revisions: int = 2             # ceiling on a stage's refusal loop
+    prepare_cmd: str = ""              # run after the worktree is claimed
+    cleanup_cmd: str = ""              # run before it is released
+    test_cmd: str = ""                 # what `prove` runs, when the repo says
+
     ingest_interval_hours: int = 0     # 0 = manual; >0 = auto-ingest on this cadence
     last_ingest_at: str = ""           # ISO of the last scheduled ingest
     created_at: str = Field(default_factory=now_iso)
@@ -200,6 +211,7 @@ class Run(SQLModel, table=True):
     document: str = ""                 # the accumulating account (markdown)
     workspace: str = ""                # worktree path, once claimed
     branch: str = ""
+    pr_number: str = ""
     pr_url: str = ""
     outcome: str = ""                  # landed | closed | failed, once finished
     error: str = ""

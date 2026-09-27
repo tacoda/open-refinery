@@ -3,6 +3,62 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.19.0] — 2026-09-27
+
+*Phase 4 on the [road to 3.0](docs/PLAN-3.0.md): the worktree, the forge, and
+the delivery gate. **A run can now reach a real pull request.** The harness is
+still a stub — Phase 5 attaches it — so the phase that would write code writes
+nothing, and the gate correctly refuses a run with no diff.*
+
+### Added
+- **`pipeline/workspace.py`** — a git worktree per run, off its own branch, so
+  several runs against one repository do not trip over each other. `git` here
+  **never uses a shell**: passing `git add -A && git commit -m x` as a command
+  tries to spawn a program with that literal name, which fails in a way that
+  reads like a commit that worked. A repository's *own* commands
+  (`prepare_cmd`, `test_cmd`) do go through a shell, because a repo says
+  `pip install -e .` and means it — safe only because that string comes from
+  the repository's config rather than from a model.
+- **`pipeline/forge.py`** — a `Forge` protocol answering four questions, with
+  **github**, **gitlab** and **local** drivers. `local` is no forge at all: the
+  request is a markdown file, a merge is whether git says the branch is an
+  ancestor of the base, and it needs no account or token. It is the shortest
+  path to seeing this work, and the proof the seam is a seam rather than a
+  rename. GitHub reports a merged request as `closed`, so the two are told
+  apart explicitly or every merge reads as an abandonment.
+- **`pipeline/actions.py`** — `prepare_workspace` · `commit_and_push` ·
+  `open_pull_request` · `watch_pull_request` · `teardown`, each returning the
+  same shape a phase does so the state machine does not care which ran.
+  - **The delivery gate.** Nothing changed → an *error*, because pushing a
+    branch with no commits on it is the failure that looks most like success.
+    The repository's hook refusing → a **refusal**, which sends the run back
+    with the hook's own words as the brief; reading a non-zero exit as success
+    would silently disable the revision loop.
+  - The pull request body **is the run document** — the account of the work is
+    already written by the time a person reads it.
+  - A comment the factory wrote is not a reviewer's: it pushes with the
+    operator's credentials and *is* the author, so telling them apart by author
+    would find none.
+- **`pipeline/runner.py`** — advances a run by exactly one stage and writes
+  back, so a crash between stages resumes rather than restarts. `POST
+  /runs/{id}/advance` and `open-refinery runs advance`.
+- **Per-repository factory config** (migration **v26**): `base_branch`,
+  `forge`, `max_revisions`, `prepare_cmd`, `cleanup_cmd`, `test_cmd`. Without
+  it every repo gets identical treatment, which fails on the first one whose
+  tests need a setup step.
+
+### Fixed
+- **A check could destroy the work it was checking.** `prove` carries
+  `revert_worktree_changes`, and reverting everything uncommitted wiped what
+  the run phase had just built — the delivery gate then reported an empty diff.
+  The work is now staged before a check runs, so reverting restores it and only
+  what the check touched goes back. Found by tracing a real run stage by stage,
+  and pinned by two tests.
+- The `run_id[:12]` slice lived in three places and a test guessed it wrong.
+  One `worktree_path()` decides.
+
+668 tests pass, including 30 that drive real git repositories rather than mocks.
+
 ## [2.18.0] — 2026-09-27
 
 *Phase 3 on the [road to 3.0](docs/PLAN-3.0.md): the workflow canvas, plus the

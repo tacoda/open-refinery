@@ -61,6 +61,7 @@ REQUIRED = {
     "one run": "/runs/{run_id}",
     "what happens next": "/runs/{run_id}/next",
     "approve a held stage": "/runs/{run_id}/approve",
+    "advance a run": "/runs/{run_id}/advance",
     # the work
     "repositories": "/repositories",
     "processes": "/processes",
