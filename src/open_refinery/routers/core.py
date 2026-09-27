@@ -19,7 +19,7 @@ def onboarding_status(session: Session = Depends(get_session), _: User = Depends
 
 @router.post("/onboarding/complete")
 def onboarding_complete(session: Session = Depends(get_session),
-                        user: User = Depends(require("platform", "admin"))):
+                        user: User = Depends(sees_operations)):
     set_setting(session, "org.onboarded", "true", user.id)
     return {"onboarded": True}
 

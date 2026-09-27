@@ -80,18 +80,18 @@ def get_teams(session: Session = Depends(get_session), _: User = Depends(current
 
 @router.post("/teams", status_code=201)
 def add_team(body: NewTeam, session: Session = Depends(get_session),
-             user: User = Depends(require("platform", "admin"))):
+             user: User = Depends(sees_operations)):
     return create_team(session, body.name, user.id, max_concurrency=body.max_concurrency)
 
 @router.delete("/teams/{team_id}")
 def remove_team(team_id: str, session: Session = Depends(get_session),
-                _: User = Depends(require("platform", "admin"))):
+                _: User = Depends(sees_operations)):
     delete_team(session, team_id)
     return {"status": "deleted"}
 
 @router.put("/users/{user_id}/team")
 def assign_team(user_id: str, body: AssignTeam, session: Session = Depends(get_session),
-                _: User = Depends(require("platform", "admin"))):
+                _: User = Depends(sees_operations)):
     u = set_user_team(session, user_id, body.team_id)
     return {"id": u.id, "team_id": u.team_id}
 

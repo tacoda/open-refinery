@@ -14,6 +14,7 @@ So a role carries an explicit set of powers, and the four built-ins are a
 | lead | harness, charter | harness, charter, factory | — | — | own team |
 | platform | factory | factory | — | — | org-wide |
 | admin | — | — | yes | yes | users + audit |
+| auditor | — | — | — | yes | — |
 
 The split follows the product's own shape: it is both a harness and a factory,
 so **lead owns the harness** (phases, prompts, tool grants, the charter turns
@@ -68,6 +69,13 @@ BUILTIN: dict[str, Powers] = {
         approves=("factory",),
         proposes=("factory",),
         sees_operations=True,
+    ),
+    # Not a person's job title — the role a time-boxed auditor grant resolves
+    # to (`deps.current_user`). It existed as a bare string before this module;
+    # giving it a row is what makes it visible in /roles and checkable here.
+    "auditor": powers(
+        rank=0,
+        reads_audit=True,
     ),
     "admin": powers(
         rank=4,

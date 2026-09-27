@@ -9,8 +9,9 @@ from open_refinery.web import create_app
 def ctx():
     conn = connect("sqlite:///:memory:", check_same_thread=False)
     admin, admin_token = create_user(conn, "admin@x.dev", "pw", "admin")
+    _, ops_token = create_user(conn, "ops@x.dev", "pw", "platform")
     client = TestClient(create_app(conn))
-    return conn, client, admin, admin_token
+    return conn, client, admin, admin_token, ops_token
 
 
 def auth(token):
@@ -34,14 +35,14 @@ def test_health_needs_no_auth(ctx):
 
 
 def test_me_requires_valid_token(ctx):
-    _, client, admin, token = ctx
+    _, client, admin, token, _ops = ctx
     assert client.get("/me").status_code == 401
     assert client.get("/me", headers=auth("bogus")).status_code == 401
     assert client.get("/me", headers=auth(token)).json()["email"] == "admin@x.dev"
 
 
 def test_me_and_users_never_leak_secret_fields(ctx):
-    _, client, admin, token = ctx
+    _, client, admin, token, _ops = ctx
     LEAKY = {"pw_hash", "pw_salt", "token_hash", "secret", "totp_secret"}
     me = client.get("/me", headers=auth(token)).json()
     assert LEAKY.isdisjoint(me) and me["email"] == "admin@x.dev"
@@ -53,23 +54,26 @@ def test_me_and_users_never_leak_secret_fields(ctx):
 
 def test_onboarding_flag_lifecycle(ctx, monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "test-secret")  # completing onboarding writes an encrypted setting
-    _, client, admin, token = ctx
-    h = auth(token)
+    _, client, admin, token, ops_token = ctx
+    h, ops = auth(token), auth(ops_token)
     assert client.get("/onboarding", headers=h).json()["onboarded"] is False
-    assert client.post("/onboarding/complete", headers=h).json()["onboarded"] is True
+    # Finishing setup is an operations act, so it is platform's — admin manages
+    # users and reads audit.
+    assert client.post("/onboarding/complete", headers=h).status_code == 403
+    assert client.post("/onboarding/complete", headers=ops).json()["onboarded"] is True
     assert client.get("/onboarding", headers=h).json()["onboarded"] is True
 
 
 def test_health_areas_scores_all_three(ctx):
     # regression: the /health route handler must not shadow the debt.health scorer
-    _, client, admin, token = ctx
+    _, client, admin, token, _ops = ctx
     r = client.get("/health/areas", headers=auth(token))
     assert r.status_code == 200
     assert {"factory", "harness", "charter"} <= set(r.json())
 
 
 def test_only_admin_creates_users(ctx):
-    _, client, _, admin_token = ctx
+    _, client, _, admin_token, ops_token = ctx
     # admin creates a developer, gets a show-once token back
     r = client.post("/users", headers=auth(admin_token),
                     json={"email": "dev@x.dev", "password": "pw", "role": "developer"})
@@ -83,14 +87,14 @@ def test_only_admin_creates_users(ctx):
 
 
 def test_roles_list_the_standard_configuration(ctx):
-    _, client, _, admin_token = ctx
+    _, client, _, admin_token, ops_token = ctx
     dev_token = client.post("/users", headers=auth(admin_token),
                             json={"email": "dev@x.dev", "password": "pw", "role": "developer"}
                             ).json()["token"]
 
     # the standard configuration, readable by any authed user
     names = [r["name"] for r in client.get("/roles", headers=auth(dev_token)).json()]
-    assert names == ["developer", "lead", "platform", "admin"]
+    assert names == ["auditor", "developer", "lead", "platform", "admin"]
 
     # creating/deleting arbitrary roles is intentionally not exposed
     assert client.post("/roles", headers=auth(admin_token),
@@ -99,20 +103,23 @@ def test_roles_list_the_standard_configuration(ctx):
 
 
 def test_ownership_scoping_on_repos(ctx):
-    _, client, _, admin_token = ctx
+    _, client, _, admin_token, ops_token = ctx
     d1 = dev_auth(client, admin_token)
     d2 = dev_auth(client, admin_token)
 
     client.post("/repositories", headers=d1, json={"name": "a", "git_url": "git@x:a.git"})
     client.post("/repositories", headers=d2, json={"name": "b", "git_url": "git@x:b.git"})
 
-    # each developer sees only their own; admin (oversight) sees all
+    # Each developer sees only their own; **platform** sees everyone's, because
+    # operational visibility is platform's. Admin manages users and reads the
+    # audit trail — it deliberately does not see the work.
     assert len(client.get("/repositories", headers=d1).json()) == 1
-    assert len(client.get("/repositories", headers=auth(admin_token)).json()) == 2
+    assert len(client.get("/repositories", headers=auth(ops_token)).json()) == 2
+    assert len(client.get("/repositories", headers=auth(admin_token)).json()) == 0
 
 
 def test_end_to_end_transition_and_audit(ctx):
-    _, client, admin, admin_token = ctx
+    _, client, admin, admin_token, ops_token = ctx
     h = dev_auth(client, admin_token)   # developers operate the dev chain
     repo = client.post("/repositories", headers=h,
                        json={"name": "or", "git_url": "git@x:or.git"}).json()
@@ -139,7 +146,7 @@ def test_end_to_end_transition_and_audit(ctx):
 
 
 def test_authorize_gate_allows_and_denies(ctx):
-    conn, client, admin, admin_token = ctx
+    conn, client, admin, admin_token, ops_token = ctx
     from open_refinery import create_policy, query_events
     h = auth(admin_token)
     # audit mode (default): an unlisted egress is allowed
@@ -162,7 +169,7 @@ def test_authorize_gate_allows_and_denies(ctx):
 
 
 def test_oversight_approval_flow(ctx):
-    _, client, _, admin_token = ctx
+    _, client, _, admin_token, ops_token = ctx
     h = dev_auth(client, admin_token)
     repo = client.post("/repositories", headers=h,
                        json={"name": "or", "git_url": "git@x:or.git"}).json()
@@ -188,7 +195,7 @@ def test_oversight_approval_flow(ctx):
 
 
 def test_duplicate_repo_conflicts(ctx):
-    _, client, _, admin_token = ctx
+    _, client, _, admin_token, ops_token = ctx
     h = dev_auth(client, admin_token)
     client.post("/repositories", headers=h, json={"name": "a", "git_url": "git@x:a.git"})
     dup = client.post("/repositories", headers=h, json={"name": "b", "git_url": "git@x:a.git"})

@@ -12,12 +12,12 @@ def get_systems(session: Session = Depends(get_session), _: User = Depends(curre
 
 @router.post("/systems", status_code=201)
 def add_system(body: NewSystem, session: Session = Depends(get_session),
-               user: User = Depends(require("platform", "admin"))):
+               user: User = Depends(sees_operations)):
     return create_system(session, body.name, body.kind, user.id, repo_ids=body.repo_ids)
 
 @router.post("/systems/{system_id}/repos")
 def set_repos(system_id: str, body: SystemRepos, session: Session = Depends(get_session),
-              _: User = Depends(require("platform", "admin"))):
+              _: User = Depends(sees_operations)):
     return set_system_repos(session, system_id, body.repo_ids)
 
 @router.get("/systems/{system_id}/coverage")
@@ -27,7 +27,7 @@ def sys_coverage(system_id: str, session: Session = Depends(get_session),
 
 @router.delete("/systems/{system_id}")
 def remove_system(system_id: str, session: Session = Depends(get_session),
-                  _: User = Depends(require("platform", "admin"))):
+                  _: User = Depends(sees_operations)):
     delete_system(session, system_id)
     return {"status": "deleted"}
 

@@ -9,7 +9,7 @@ router = APIRouter()
 @router.post("/invitations", status_code=201)
 def invite_user(body: NewInvitation, request: Request,
                 session: Session = Depends(get_session),
-                user: User = Depends(require("senior", "platform", "admin"))):
+                user: User = Depends(manages_users)):
     inv, token = create_invitation(session, body.email, body.role, user.id,
                                    ttl_days=body.ttl_days)
     accept_url = f"{home_url(request)}#invite={token}"
@@ -21,12 +21,12 @@ def invite_user(body: NewInvitation, request: Request,
 
 @router.get("/invitations")
 def get_invitations(session: Session = Depends(get_session),
-                    _: User = Depends(require("senior", "platform", "admin"))):
+                    _: User = Depends(manages_users)):
     return list_invitations(session, status="pending")
 
 @router.post("/invitations/{invitation_id}/revoke")
 def revoke_invite(invitation_id: str, session: Session = Depends(get_session),
-                  _: User = Depends(require("senior", "platform", "admin"))):
+                  _: User = Depends(manages_users)):
     revoke_invitation(session, invitation_id)
     return {"status": "revoked"}
 
@@ -41,7 +41,7 @@ def accept_invite(body: AcceptInvite, session: Session = Depends(get_session)):
 
 @router.post("/users", status_code=201)
 def add_user(body: NewUser, session: Session = Depends(get_session),
-             _: User = Depends(require("admin"))):
+             _: User = Depends(manages_users)):
     user, token = create_user(session, body.email, body.password, body.role)
     return {"user": user, "token": token}  # token shown once
 
@@ -52,7 +52,7 @@ def add_repo(body: NewRepo, session: Session = Depends(get_session),
 
 @router.get("/repositories")
 def get_repos(session: Session = Depends(get_session), user: User = Depends(current_user)):
-    return list_repositories(session, owner_id=owner_scope(user))
+    return list_repositories(session, owner_id=owner_scope(session, user))
 
 @router.post("/repositories/import", status_code=201)
 def import_repo(body: NewRepo, session: Session = Depends(get_session),
@@ -92,7 +92,7 @@ def add_work_item(body: NewWorkItem, session: Session = Depends(get_session),
 @router.get("/work-items")
 def get_work_items(session: Session = Depends(get_session), user: User = Depends(current_user),
                    repo_id: str | None = None):
-    return list_work_items(session, owner_id=owner_scope(user), repo_id=repo_id)
+    return list_work_items(session, owner_id=owner_scope(session, user), repo_id=repo_id)
 
 @router.get("/work-items/{item_id}/postmortem")
 def work_item_postmortem(item_id: str, session: Session = Depends(get_session),
@@ -128,7 +128,7 @@ def post_log(item_id: str, body: LogLine, _: User = Depends(current_user)):
 
 @router.get("/users")
 def get_users(session: Session = Depends(get_session),
-              _: User = Depends(require("platform", "admin"))):
+              _: User = Depends(manages_users)):
     return [public_user(u) for u in list_users(session)]  # projected, no hashes
 
 # --- harness identities: auth for coding agents (Claude Code, …) ---

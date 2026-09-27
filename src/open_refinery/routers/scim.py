@@ -88,18 +88,18 @@ def scim_delete(user_id: str, session: Session = Depends(get_session)):
 
 # --- admin configuration (user token, admin only) ---
 @router.get("/scim/config")
-def scim_config(session: Session = Depends(get_session), _: User = Depends(require("admin"))):
+def scim_config(session: Session = Depends(get_session), _: User = Depends(manages_users)):
     return {"enabled": scim.configured(session), "group_map": scim.group_map(session),
             "default_role": scim.default_role(session)}
 
 @router.post("/scim/token")
 def scim_rotate_token(session: Session = Depends(get_session),
-                      user: User = Depends(require("admin"))):
+                      user: User = Depends(manages_users)):
     return {"token": scim.rotate_token(session, user.id)}  # shown once
 
 @router.post("/scim/group-map")
 def scim_set_group_map(body: ScimGroupMap, session: Session = Depends(get_session),
-                       user: User = Depends(require("admin"))):
+                       user: User = Depends(manages_users)):
     if not valid_role(session, body.default_role):
         raise HTTPException(status_code=400, detail="invalid default role")
     for role in body.map.values():

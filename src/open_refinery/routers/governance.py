@@ -12,7 +12,7 @@ def get_workflows(session: Session = Depends(get_session), _: User = Depends(cur
 
 @router.post("/approval-workflows", status_code=201)
 def put_workflow(body: WorkflowBody, session: Session = Depends(get_session),
-                 user: User = Depends(require("admin"))):
+                 user: User = Depends(manages_users)):
     return set_workflow(session, body.layer, body.chain, user.id)
 
 @router.post("/proposals", status_code=201)

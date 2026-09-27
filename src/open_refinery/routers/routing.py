@@ -17,7 +17,7 @@ def add_integration(body: NewIntegration, session: Session = Depends(get_session
 
 @router.get("/integrations")
 def get_integrations(session: Session = Depends(get_session), user: User = Depends(current_user)):
-    return list_integrations(session, owner_id=owner_scope(user))
+    return list_integrations(session, owner_id=owner_scope(session, user))
 
 @router.delete("/integrations/{integ_id}")
 def remove_integration(integ_id: str, session: Session = Depends(get_session),
@@ -61,7 +61,7 @@ def add_target(body: NewTarget, session: Session = Depends(get_session),
 
 @router.get("/targets")
 def get_targets(session: Session = Depends(get_session), user: User = Depends(current_user)):
-    return list_targets(session, owner_id=owner_scope(user))
+    return list_targets(session, owner_id=owner_scope(session, user))
 
 @router.get("/routing-policy")
 def get_routing_policy(session: Session = Depends(get_session), _: User = Depends(current_user)):
@@ -69,7 +69,7 @@ def get_routing_policy(session: Session = Depends(get_session), _: User = Depend
 
 @router.put("/routing-policy")
 def set_routing_policy(body: RoutingPolicyBody, session: Session = Depends(get_session),
-                       user: User = Depends(require("platform", "admin"))):
+                       user: User = Depends(sees_operations)):
     set_setting(session, ROUTING_POLICY_KEY, json.dumps(body.model_dump()), user.id)
     return routing_policy(session)
 
@@ -91,7 +91,7 @@ def add_route(body: NewRoute, session: Session = Depends(get_session),
 
 @router.get("/routes")
 def get_routes(session: Session = Depends(get_session), user: User = Depends(current_user)):
-    return list_routes(session, owner_id=owner_scope(user))
+    return list_routes(session, owner_id=owner_scope(session, user))
 
 @router.delete("/routes/{route_id}")
 def remove_route(route_id: str, session: Session = Depends(get_session),
@@ -107,6 +107,6 @@ def add_quota(body: NewQuota, session: Session = Depends(get_session),
 
 @router.get("/quotas")
 def get_quotas(session: Session = Depends(get_session), user: User = Depends(current_user)):
-    return list_quotas(session, owner_id=owner_scope(user))
+    return list_quotas(session, owner_id=owner_scope(session, user))
 
 # --- policy governance + content filtering ---

@@ -32,7 +32,7 @@ def test_builtin_roles_are_protected():
     """All four are load-bearing: the guards and the standard configuration
     assume they exist."""
     conn = connect("sqlite:///:memory:")
-    for name in ("developer", "lead", "platform", "admin"):
+    for name in ("developer", "lead", "platform", "admin", "auditor"):
         with pytest.raises(ValueError, match="built-in"):
             delete_role(conn, name)
 
@@ -48,7 +48,9 @@ def test_a_custom_role_in_use_cannot_be_removed():
 def test_default_roles_seeded():
     conn = connect("sqlite:///:memory:")
     names = [r.name for r in list_roles(conn)]
-    assert names == ["developer", "lead", "platform", "admin"]  # ordered by rank
+    # `auditor` is the role a time-boxed audit grant resolves to — it existed
+    # as a bare string before authority.py and now has a row.
+    assert names == ["auditor", "developer", "lead", "platform", "admin"]  # by rank
     assert valid_role(conn, "developer") and not valid_role(conn, "senior")
 
 

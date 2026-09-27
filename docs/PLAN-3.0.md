@@ -29,6 +29,35 @@ log; RBAC; quotas; approval workflows) is not re-ported.
 | Install | Broken on a clean clone: the wheel force-includes `src/open_refinery/static`, which only exists after `make ui`. |
 | Tests | 328 pass — but only with `SECRET_KEY` exported. `make test` does not set one. |
 
+## 0.5 The product principle
+
+**Easy to install, onboard, add users and give them roles, define roles, define
+workflows, and manage permissions — with defaults to start from, and an easy
+path to making your own.**
+
+Every phase is measured against that sentence. It resolves ties the rest of this
+document cannot:
+
+- **Defaults ship, and they are complete.** Four built-in roles (§2.5), pipeline
+  templates (§3.2), packs of standards, a seeded model target that runs on a
+  stub so the loop works before anyone connects anything. A team that agrees
+  with the defaults configures *nothing* and still has a working factory.
+- **A default is a starting point, never a ceiling.** Roles are data, not an
+  enum. Pipelines are built on a canvas or imported as YAML. Permissions are
+  rows. Every default is visible, editable, and says where it came from
+  (`open-refinery config`).
+- **Nothing is configured by editing a file on the server.** It is the web app
+  or the CLI (§2.6), because a product whose setup requires ssh is not easy to
+  onboard onto.
+- **The hard part is made visible rather than hidden.** Separation of duties is
+  drawn on the canvas (§11.3), not buried in a settings page. A stage you may
+  not change is greyed rather than absent, because the alternative teaches
+  people the factory is smaller than it is.
+
+The test is a new team: install, sign in, add three people, give them roles,
+pick a workflow template, connect two keys, and run a ticket — without reading
+this document.
+
 ## 1. Decisions taken
 
 | Decision | Choice |

@@ -30,20 +30,23 @@ def test_setting_encrypted_and_readable():
 def test_settings_api_never_returns_values_and_is_role_gated(monkeypatch):
     conn = connect("sqlite:///:memory:", check_same_thread=False)
     admin, admin_tok = create_user(conn, "admin@x.dev", "pw", "admin")
+    ops, ops_tok = create_user(conn, "ops@x.dev", "pw", "platform")
     dev, dev_tok = create_user(conn, "dev@x.dev", "pw", "developer")
     c = TestClient(create_app(conn))
 
-    ah = {"Authorization": f"Bearer {admin_tok}"}
+    ah = {"Authorization": f"Bearer {ops_tok}"}   # settings are operations
     assert c.put("/settings", headers=ah,
                  json={"key": "github.client_id", "value": "cid123"}).status_code == 200
     body = c.get("/settings", headers=ah).json()
     assert body["keys"] == ["github.client_id"]       # keys only, no values
     assert "cid123" not in c.get("/settings", headers=ah).text
 
-    # developers can't read or write settings
-    assert c.get("/settings", headers={"Authorization": f"Bearer {dev_tok}"}).status_code == 403
-    assert c.put("/settings", headers={"Authorization": f"Bearer {dev_tok}"},
-                 json={"key": "x", "value": "y"}).status_code == 403
+    # neither developers nor admin touch settings: one has no operational
+    # authority, the other manages users and reads audit.
+    for tok in (dev_tok, admin_tok):
+        h = {"Authorization": f"Bearer {tok}"}
+        assert c.get("/settings", headers=h).status_code == 403
+        assert c.put("/settings", headers=h, json={"key": "x", "value": "y"}).status_code == 403
 
 
 def test_providers_reports_only_password_auth():

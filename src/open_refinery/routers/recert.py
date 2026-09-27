@@ -6,7 +6,8 @@ from ..web import *  # noqa: F401,F403
 
 router = APIRouter()
 
-_review = require("platform", "admin")  # who runs recertification
+# Recertification re-attests who has access — user management, not operations.
+_review = manages_users
 
 
 @router.post("/recert/campaigns", status_code=201)

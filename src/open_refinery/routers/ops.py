@@ -35,18 +35,18 @@ def end_experiment(experiment_id: str, session: Session = Depends(get_session),
 # --- webhooks (fan audit events out; HMAC-signed) ---
 @router.get("/webhooks")
 def get_webhooks(session: Session = Depends(get_session),
-                 _: User = Depends(require("platform", "admin"))):
+                 _: User = Depends(sees_operations)):
     return list_webhooks(session)  # secret is encrypted, never returned
 
 @router.post("/webhooks", status_code=201)
 def add_webhook(body: NewWebhook, session: Session = Depends(get_session),
-                user: User = Depends(require("platform", "admin"))):
+                user: User = Depends(sees_operations)):
     wh, secret = create_webhook(session, body.url, body.events, user.id)
     return {"webhook": wh, "secret": secret}  # secret shown once
 
 @router.delete("/webhooks/{webhook_id}")
 def remove_webhook(webhook_id: str, session: Session = Depends(get_session),
-                   _: User = Depends(require("platform", "admin"))):
+                   _: User = Depends(sees_operations)):
     delete_webhook(session, webhook_id)
     return {"status": "deleted"}
 

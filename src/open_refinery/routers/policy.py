@@ -9,7 +9,7 @@ router = APIRouter()
 
 @router.post("/policies", status_code=201)
 def add_policy(body: NewPolicy, session: Session = Depends(get_session),
-               user: User = Depends(require("platform", "admin"))):
+               user: User = Depends(sees_operations)):
     p = create_policy(session, body.effect, user.id, role=body.role,
                       action=body.action, resource=body.resource,
                       strict=body.strict, kind=body.kind, content=body.content,
@@ -34,7 +34,7 @@ def policy_at(t: str, session: Session = Depends(get_session), _: User = Depends
 
 @router.delete("/policies/{policy_id}")
 def remove_policy(policy_id: str, session: Session = Depends(get_session),
-                  user: User = Depends(require("platform", "admin")), note: str = ""):
+                  user: User = Depends(sees_operations), note: str = ""):
     delete_policy(session, policy_id, changed_by=user.id, note=note)
     SqliteSink(session).write(Record.of(
         recipe="policy-change", actor=user.id, owner=user.id,
@@ -44,18 +44,18 @@ def remove_policy(policy_id: str, session: Session = Depends(get_session),
 # --- governance notification rules (audit stream → slack/email/webhook) ---
 @router.get("/notification-rules")
 def get_notification_rules(session: Session = Depends(get_session),
-                           _: User = Depends(require("platform", "admin"))):
+                           _: User = Depends(sees_operations)):
     return list_rules(session)
 
 @router.post("/notification-rules", status_code=201)
 def add_notification_rule(body: NewNotificationRule, session: Session = Depends(get_session),
-                          user: User = Depends(require("platform", "admin"))):
+                          user: User = Depends(sees_operations)):
     return create_rule(session, body.label, body.channel, body.target,
                        recipe=body.recipe, created_by=user.id)
 
 @router.delete("/notification-rules/{rule_id}")
 def remove_notification_rule(rule_id: str, session: Session = Depends(get_session),
-                             _: User = Depends(require("platform", "admin"))):
+                             _: User = Depends(sees_operations)):
     delete_rule(session, rule_id)
     return {"status": "deleted"}
 
@@ -116,18 +116,18 @@ def providers():
 # --- settings (encrypted config in the DB; admin/platform) ---
 @router.get("/settings")
 def get_settings(session: Session = Depends(get_session),
-                 _: User = Depends(require("platform", "admin"))):
+                 _: User = Depends(sees_operations)):
     return {"keys": list_setting_keys(session)}  # values never returned
 
 @router.put("/settings")
 def put_setting(body: SettingBody, session: Session = Depends(get_session),
-                user: User = Depends(require("platform", "admin"))):
+                user: User = Depends(sees_operations)):
     set_setting(session, body.key, body.value, user.id)
     return {"status": "saved", "key": body.key}
 
 @router.delete("/settings/{key}")
 def remove_setting(key: str, session: Session = Depends(get_session),
-                   _: User = Depends(require("platform", "admin"))):
+                   _: User = Depends(sees_operations)):
     delete_setting(session, key)
     return {"status": "deleted"}
 
