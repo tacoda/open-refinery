@@ -520,9 +520,9 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
 def _include_routers(app: FastAPI) -> None:
     from .routers import (core, credentials, harness, ops, org, policy,
-                          roles, routing, workitem)
+                          proposals, roles, routing, workitem)
     for mod in (core, ops, org, harness, workitem, routing, policy,
-                credentials, roles):
+                credentials, roles, proposals):
         app.include_router(mod.router)
 
 

@@ -50,8 +50,22 @@ permissions held on the person, never from a role name.*
 - **Preset ranks are declared, not derived from dict order**, which had put
   `auditor` (read-only) *above* `admin` in approval chains.
 
+### Fixed (regression from 2.15.0)
+- **Proposals, approval workflows, packs and standards had no routes.** The
+  system review removed the governance *landscape* view, and those four shared
+  its router. Nothing failed, because each is tested by driving its module
+  directly — so the suite proved the code worked while the product had no way
+  to reach it. Proposals are one of the four pillars, so this was a regression
+  rather than a trim. All restored, with the new permission guards (enabling a
+  pack is now `approve:charter`, since a pack seeds standards the harness
+  reads).
+- **`tests/test_route_coverage.py`** closes the gap: one assertion per pillar
+  capability that it is reachable, plus the inverse — that a removed feature
+  leaves no dead route behind, which would accept a request and do something
+  unexpected.
+
 Migration **v25**, which backfills every existing user from the preset they were
-created with, so an upgrade changes nobody's access. 446 tests pass.
+created with, so an upgrade changes nobody's access. **491 tests pass.**
 
 ## [2.15.0] — 2026-09-27
 
