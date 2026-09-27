@@ -133,6 +133,14 @@ MIGRATIONS: list[str] = [
     " WHERE required_roles LIKE '%senior%';",
     # v24 (2.15.0): a repo may say where its agent configuration lives.
     "ALTER TABLE repositories ADD COLUMN charter_paths TEXT NOT NULL DEFAULT '[]';",
+    # v25 (2.16.0): permissions move onto the USER — that set is the only thing
+    # checked. `roles` becomes a table of presets. Existing users are backfilled
+    # from the preset they were created with, so an upgrade changes nobody's
+    # access; a user left with an empty set could do nothing at all.
+    "ALTER TABLE users ADD COLUMN permissions TEXT NOT NULL DEFAULT '[]';"
+    "ALTER TABLE roles ADD COLUMN permissions TEXT NOT NULL DEFAULT '[]';"
+    "UPDATE users SET permissions = '[\"approve:code\", \"propose:code\", \"propose:harness\", \"propose:factory\", \"propose:charter\", \"run:factory\"]' WHERE role = 'developer' AND permissions = '[]';UPDATE users SET permissions = '[\"approve:harness\", \"approve:charter\", \"propose:code\", \"propose:harness\", \"propose:factory\", \"propose:charter\", \"run:factory\"]' WHERE role = 'lead' AND permissions = '[]';UPDATE users SET permissions = '[\"approve:factory\", \"propose:factory\", \"see:operations\", \"run:factory\"]' WHERE role = 'platform' AND permissions = '[]';UPDATE users SET permissions = '[\"manage:users\", \"read:audit\"]' WHERE role = 'admin' AND permissions = '[]';UPDATE users SET permissions = '[\"read:audit\"]' WHERE role = 'auditor' AND permissions = '[]';"
+    "UPDATE roles SET permissions = '[\"approve:code\", \"propose:code\", \"propose:harness\", \"propose:factory\", \"propose:charter\", \"run:factory\"]' WHERE name = 'developer';UPDATE roles SET permissions = '[\"approve:harness\", \"approve:charter\", \"propose:code\", \"propose:harness\", \"propose:factory\", \"propose:charter\", \"run:factory\"]' WHERE name = 'lead';UPDATE roles SET permissions = '[\"approve:factory\", \"propose:factory\", \"see:operations\", \"run:factory\"]' WHERE name = 'platform';UPDATE roles SET permissions = '[\"manage:users\", \"read:audit\"]' WHERE name = 'admin';UPDATE roles SET permissions = '[\"read:audit\"]' WHERE name = 'auditor';",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -190,6 +198,8 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE roles DROP COLUMN sees_operations;"
     "ALTER TABLE roles DROP COLUMN builtin;",                                            # v23
     "ALTER TABLE repositories DROP COLUMN charter_paths;",                               # v24
+    "ALTER TABLE users DROP COLUMN permissions;"
+    "ALTER TABLE roles DROP COLUMN permissions;",                                        # v25
 ]
 
 

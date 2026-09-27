@@ -47,14 +47,14 @@ def integration_workflow(integ_id: str, session: Session = Depends(get_session),
 
 @router.post("/integrations/{integ_id}/sync")
 def sync_integration(integ_id: str, body: SyncRequest, session: Session = Depends(get_session),
-                     user: User = Depends(current_user)):
+                     user: User = Depends(may_run)):
     return sync_tracker(session, integ_id, body.repo_id, body.process_id,
                         user.id, SqliteSink(session))
 
 # --- targets, routing, quotas (Platform layer) ---
 @router.post("/targets", status_code=201)
 def add_target(body: NewTarget, session: Session = Depends(get_session),
-               user: User = Depends(current_user)):
+               user: User = Depends(approves("factory"))):
     return create_target(session, body.name, body.kind, body.endpoint, user.id,
                         credential=body.credential, output_schema=body.output_schema,
                         region=body.region, compliance=body.compliance, unit_cost=body.unit_cost)
@@ -79,13 +79,13 @@ def get_traffic(session: Session = Depends(get_session), _: User = Depends(curre
 
 @router.delete("/targets/{target_id}")
 def remove_target(target_id: str, session: Session = Depends(get_session),
-                  _: User = Depends(current_user)):
+                  _: User = Depends(approves("factory"))):
     delete_target(session, target_id)
     return {"status": "deleted"}
 
 @router.post("/routes", status_code=201)
 def add_route(body: NewRoute, session: Session = Depends(get_session),
-              user: User = Depends(current_user)):
+              user: User = Depends(approves("factory"))):
     return create_route(session, body.process_id, body.target_id, user.id,
                        step=body.step, priority=body.priority)
 
@@ -95,13 +95,13 @@ def get_routes(session: Session = Depends(get_session), user: User = Depends(cur
 
 @router.delete("/routes/{route_id}")
 def remove_route(route_id: str, session: Session = Depends(get_session),
-                 _: User = Depends(current_user)):
+                 _: User = Depends(approves("factory"))):
     delete_route(session, route_id)
     return {"status": "deleted"}
 
 @router.post("/quotas", status_code=201)
 def add_quota(body: NewQuota, session: Session = Depends(get_session),
-              user: User = Depends(current_user)):
+              user: User = Depends(approves("factory"))):
     return create_quota(session, body.target_id, body.limit, user.id,
                         window_seconds=body.window_seconds)
 

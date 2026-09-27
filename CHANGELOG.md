@@ -3,6 +3,56 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.16.0] — 2026-09-27
+
+*Phase P on the [road to 3.0](docs/PLAN-3.0.md): authorization is derived from
+permissions held on the person, never from a role name.*
+
+### Changed
+- **Permissions moved onto the user.** A user carries a set, and **that set is
+  the only thing ever checked** — no indirection, so two people doing similar
+  jobs can differ without anybody inventing a role. Twelve permissions:
+  `approve:<layer>` · `propose:<layer>` · `run:factory` · `manage:users` ·
+  `read:audit` · `see:operations`, over four layers (`code` · `harness` ·
+  `factory` · `charter`).
+- **Roles became presets** — named starting points (`developer` · `lead` ·
+  `platform` · `admin` · `auditor`) copied onto a user at creation and never
+  read again. Editing a preset does not change anyone who already exists; the
+  API and the tests say so plainly rather than letting people assume otherwise.
+- `lead` owns the harness, `platform` owns the factory, and **`admin` approves
+  nothing** — the account that grants access is not the account that approves
+  what ships.
+- Guards are pure functions of the caller's set: no session, no lookup, and
+  nothing a stale row can fool.
+
+### Removed
+- **A second authorization system.** A regex table in `web.py` matched paths to
+  role *names* and ran as middleware **on top of** the per-route dependencies.
+  Two sources of truth that could disagree — and did, the moment permissions
+  moved: a grant took effect in `/me` and was still refused by the middleware.
+  Deleted, with every route it covered given an explicit permission guard.
+
+### Added
+- `POST /users` adds a person and sets their permissions in one call.
+  `GET|PUT /users/{id}/permissions` edits them afterwards.
+  `PUT|DELETE /presets/{name}` defines your own starting points.
+  `GET /permissions` lists the vocabulary, each with a line saying what it means.
+  `GET /permissions/approvers/{layer}` answers "who do I ask" with **people**.
+- A refusal names who can actually sign it: *"you do not hold approve:factory —
+  ask platform@example.com"*.
+
+### Fixed
+- **You cannot change your own permissions.** Holding `manage:users` lets you
+  set other people's and is not a back door to holding everything else.
+- **`/events` requires `read:audit`.** It was open-but-scoped, relying on the
+  deleted middleware for its refusal — and "everyone can read the parts about
+  themselves" is the wrong default for an audit log.
+- **Preset ranks are declared, not derived from dict order**, which had put
+  `auditor` (read-only) *above* `admin` in approval chains.
+
+Migration **v25**, which backfills every existing user from the preset they were
+created with, so an upgrade changes nobody's access. 446 tests pass.
+
 ## [2.15.0] — 2026-09-27
 
 *Phase R on the [road to 3.0](docs/PLAN-3.0.md): the system review (§12) applied.

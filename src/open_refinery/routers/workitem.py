@@ -66,9 +66,16 @@ def reject_move(request_id: str, session: Session = Depends(get_session),
 
 @router.get("/events")
 def get_events(q: EventFilter = Depends(), session: Session = Depends(get_session),
-               user: User = Depends(current_user)):
-    return query_events(session, owner=audit_scope(session, user), subject=q.subject,
-                        actor=q.actor, limit=q.limit)
+               _: User = Depends(reads_audit)):
+    """The audit trail. `read:audit` and nothing less.
+
+    It used to be open and merely *scoped*, with a role-name middleware
+    supplying the refusal. That middleware is gone, and "everyone can read the
+    parts about themselves" is the wrong default for an audit log: an actor who
+    can see what was recorded about them can see it before deciding what to do
+    about it.
+    """
+    return query_events(session, subject=q.subject, actor=q.actor, limit=q.limit)
 
 @router.post("/audit/purge")
 def purge_audit(days: int, session: Session = Depends(get_session),

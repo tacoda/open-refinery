@@ -173,9 +173,15 @@ _SEES_ALL = ("platform", "admin")
 # --- request bodies -------------------------------------------------------
 
 class NewUser(BaseModel):
+    """Adding someone: pick a preset to start from, then edit freely.
+
+    `role` names the preset and is kept as a label. `permissions`, when given,
+    replaces it outright — so a person who fits no preset needs no new one.
+    """
     email: str
     password: str
-    role: str
+    role: str = "developer"
+    permissions: list[str] | None = None
 
 
 class NewRepo(BaseModel):
@@ -309,15 +315,16 @@ class MfaCode(BaseModel):
 
 
 
-class RoleBody(BaseModel):
-    """A role's powers. Omitted fields are left as they are, so setting a rank
-    does not silently clear what the role may approve."""
+class PresetBody(BaseModel):
+    """A preset: a named bundle of permissions to start people from."""
     rank: int = 1
-    approves: list[str] | None = None        # layers it may approve changes to
-    proposes: list[str] | None = None
-    manages_users: bool | None = None
-    reads_audit: bool | None = None
-    sees_operations: bool | None = None
+    permissions: list[str] = []
+
+
+class PermissionsBody(BaseModel):
+    """What a person may do. `preset` seeds the set; `permissions` adds to it."""
+    permissions: list[str] = []
+    preset: str = ""
 
 
 class NewCredential(BaseModel):
@@ -460,73 +467,14 @@ class ExecuteRequest(BaseModel):
 # First matching rule wins; anything unmatched is allowed (reads stay open for
 # oversight — dev lists are owner-scoped in their handlers). GET of operational
 # data is intentionally open so platform/admin can oversee; only *mutations* and
-# oversight/config surfaces are role-gated. Roles:
-#   developer — operates dev concerns   platform — platform concerns + authoring
-#   admin — oversight only
-_DEV = {"developer"}
-_DEV_PLAT = {"developer", "platform"}
-_PLAT = {"platform"}
-_PLAT_ADMIN = {"platform", "admin"}
-_OVERSIGHT = {"platform", "admin", "auditor"}  # read-only oversight incl. auditors
-_AUTHZ_RULES: list[tuple[set[str], re.Pattern, set[str]]] = [
-    # developer operates the dev chain (writes only; reads stay open for oversight)
-    ({"POST", "PUT", "DELETE"}, re.compile(r"^/integrations(/|$)"), _DEV),
-    ({"POST", "PUT", "DELETE"}, re.compile(r"^/repositories(/|$)"), _DEV),
-    ({"POST", "PUT", "DELETE"}, re.compile(r"^/processes(/|$)"), _DEV),
-    ({"POST", "PUT", "DELETE"}, re.compile(r"^/work-items(/|$)"), _DEV),
-    # approving gated moves: developer or platform
-    ({"POST"}, re.compile(r"^/approvals/"), _DEV_PLAT),
-    # registering agents / enabling packs: developer or platform
-    ({"POST", "PUT", "DELETE"}, re.compile(r"^/harnesses(/|$)"), _DEV_PLAT),
-    ({"POST"}, re.compile(r"^/packs/[^/]+/(enable|disable)$"), _DEV_PLAT),
-    # platform config + governance authoring: platform only
-    ({"POST", "PUT", "DELETE"}, re.compile(r"^/(targets|routes|quotas|systems|policies|proposals|approval-workflows)(/|$)"), _PLAT),
-    ({"PUT"}, re.compile(r"^/routing-policy$"), _PLAT),
-    # teams + cost: platform or admin
-    ({"POST", "PUT", "DELETE"}, re.compile(r"^/teams(/|$)"), _PLAT_ADMIN),
-    ({"PUT"}, re.compile(r"^/users/[^/]+/team$"), _PLAT_ADMIN),
-    # oversight reads — platform, admin, and read-only auditors
-    ({"GET"}, re.compile(r"^/(usage|traffic|experiments|events|governance|evidence)(/|$)"), _OVERSIGHT),
-    ({"GET"}, re.compile(r"^/audits(/|$)"), _OVERSIGHT),
-    ({"GET"}, re.compile(r"^/audit/(verify|export)"), _OVERSIGHT),
-    ({"GET"}, re.compile(r"^/policies/(history|at)"), _OVERSIGHT),
-    # running an audit / purge / config are platform-admin (not auditors)
-    ({"POST"}, re.compile(r"^/audits(/|$)"), _PLAT_ADMIN),
-    ({"POST"}, re.compile(r"^/audit/purge"), _PLAT_ADMIN),
-    ({"GET", "PUT", "DELETE"}, re.compile(r"^/settings(/|$)"), _PLAT_ADMIN),
-    # minting/revoking auditor grants: admin only
-    ({"POST", "DELETE"}, re.compile(r"^/auditor-grants(/|$)"), {"admin"}),
-]
-
-
-def _match_authz_rule(method: str, path: str):
-    for methods, pattern, allowed in _AUTHZ_RULES:
-        if method in methods and pattern.match(path):
-            return allowed
-    return None
-
-
-def _principal_role(session, token: str) -> str | None:
-    """The role of whoever holds this token: a user, a time-boxed auditor, or None."""
-    if not token:
-        return None
-    user = user_by_token(session, token) or session_user(session, token)
-    if user is not None:
-        return user.role
-    return "auditor" if resolve_auditor(session, token) else None
-
-
-async def _enforce_roles(request, call_next):
-    """Central role authorization — 403 if the caller's role can't do this."""
-    allowed = _match_authz_rule(request.method, request.url.path)
-    if allowed is not None:
-        token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
-        with Session(request.app.state.engine) as s:
-            role = _principal_role(s, token)
-        if role is not None and role not in allowed:  # authenticated but out of scope
-            return JSONResponse({"detail": f"{role} is not authorized for this action"},
-                                status_code=403)
-    return await call_next(request)
+# NOTE (2.16.0): a regex table mapping paths to role *names* used to run here
+# as middleware, on top of the per-route dependencies. Two authorization
+# systems, and they drifted the moment permissions moved onto the user — a
+# permission grant took effect in `/me` and was still refused by the middleware.
+#
+# One source of truth now: the `Depends(...)` guard on each route (see
+# `deps.py`). It is precise about the route it guards, it is testable, and it
+# reads the same permission set everything else does.
 
 
 async def _live_ws(websocket: WebSocket, token: str = ""):
@@ -617,7 +565,6 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
         allow_headers=["*"],
     )
 
-    app.middleware("http")(_enforce_roles)
     app.add_api_websocket_route("/ws", _live_ws)
     _register_exception_handlers(app)
     _include_routers(app)

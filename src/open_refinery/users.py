@@ -35,30 +35,29 @@ class RoleInUse(Exception):
 
 
 def ensure_default_roles(session: Session) -> None:
-    """Seed the built-in roles, and backfill their powers (idempotent).
+    """Seed the shipped **presets** (idempotent).
 
-    Not "only when the table is empty": an install upgrading from before 2.14.5
-    already has `developer`/`platform`/`admin` rows with no powers on them, and
-    a role with no powers can do nothing. So every built-in is reconciled to the
-    standard configuration on each call, and `lead` is created if missing.
+    A preset is a named bundle of permissions you apply when adding someone —
+    nothing authorizes against it. Reconciled on every call rather than only
+    when the table is empty, because an install upgrading from an older version
+    has rows with no permissions on them.
 
-    Custom roles are never touched.
+    Custom presets are never touched.
     """
-    from .authority import BUILTIN
+    from .authority import PRESETS, RANKS
 
-    for name, p in BUILTIN.items():
-        row = session.get(Role, name)
-        if row is None:
-            row = Role(name=name)
-        row.rank = p["rank"]
-        row.approves = list(p["approves"])
-        row.proposes = list(p["proposes"])
-        row.manages_users = p["manages_users"]
-        row.reads_audit = p["reads_audit"]
-        row.sees_operations = p["sees_operations"]
+    for name, perms in PRESETS.items():
+        row = session.get(Role, name) or Role(name=name)
+        row.rank = RANKS.get(name, 1)
+        row.permissions = list(perms)
         row.builtin = True
         session.add(row)
     session.commit()
+
+
+# The presets are what a team starts from; `ensure_presets` is the name that
+# says so. The old name stays because `store._init_schema` calls it.
+ensure_presets = ensure_default_roles
 
 
 def list_roles(session: Session) -> list[Role]:
@@ -90,41 +89,36 @@ def at_least(session: Session, role: str, minimum: str) -> bool:
 
 
 def create_role(session: Session, name: str, rank: int, *,
-                approves: list | None = None, proposes: list | None = None,
-                manages_users: bool | None = None, reads_audit: bool | None = None,
-                sees_operations: bool | None = None) -> Role:
-    """Create or update a role and its powers.
+                permissions: list[str] | None = None) -> Role:
+    """Create or update a **preset** — a named bundle to start people from.
 
-    Every power is optional and **only a provided one is written**, so updating
-    a rank does not silently clear what the role may approve. A new role starts
-    with nothing: authority is granted deliberately rather than inherited from
-    wherever its rank happens to land.
+    An unknown permission is dropped rather than stored: one nothing checks is
+    one somebody believes they have.
     """
-    from .authority import LAYERS
+    from .authority import clean
 
-    for field, value in (("approves", approves), ("proposes", proposes)):
-        for layer in value or ():
-            if layer not in LAYERS:
-                raise ValueError(f"{field}: unknown layer {layer!r} (expected {LAYERS})")
-
-    role = session.get(Role, name)
-    if role is None:
-        role = Role(name=name, rank=rank, approves=[], proposes=[])
+    role = session.get(Role, name) or Role(name=name, permissions=[])
     role.rank = rank
-    if approves is not None:
-        role.approves = list(approves)
-    if proposes is not None:
-        role.proposes = list(proposes)
-    if manages_users is not None:
-        role.manages_users = manages_users
-    if reads_audit is not None:
-        role.reads_audit = reads_audit
-    if sees_operations is not None:
-        role.sees_operations = sees_operations
+    if permissions is not None:
+        role.permissions = clean(permissions)
     session.add(role)
     session.commit()
     session.refresh(role)
     return role
+
+
+def set_permissions(session: Session, user_id: str, permissions: list[str]) -> User:
+    """Replace a user's permissions. The set is what is checked from here on."""
+    from .authority import clean
+
+    user = session.get(User, user_id)
+    if user is None:
+        raise ValueError(f"unknown user: {user_id!r}")
+    user.permissions = clean(permissions)
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
 
 
 def delete_role(session: Session, name: str) -> None:
@@ -155,13 +149,27 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def create_user(session: Session, email: str, password: str, role: str) -> tuple[User, str]:
-    """Create a user, returning the user and their plaintext token (shown once)."""
-    if not valid_role(session, role):
-        raise ValueError(f"unknown role: {role!r} (not a configured role)")
+def create_user(session: Session, email: str, password: str, role: str,
+                *, permissions: list[str] | None = None) -> tuple[User, str]:
+    """Create a user, returning the user and their plaintext token (shown once).
+
+    `role` names the **preset** to start from and is kept only as a label;
+    `permissions` overrides it outright. What the user ends up holding is what
+    is checked from then on — editing the preset later changes nobody.
+    """
+    from .authority import clean, of_preset
+
+    if permissions is None:
+        if not valid_role(session, role):
+            raise ValueError(f"unknown preset: {role!r}")
+        row = session.get(Role, role)
+        permissions = list(row.permissions or of_preset(role))
+    held = clean(permissions)
+
     salt_hex, hash_hex = _hash_pw(password)
     token = secrets.token_urlsafe(32)
-    user = User(email=email, role=role, pw_salt=salt_hex, pw_hash=hash_hex,
+    user = User(email=email, role=role, permissions=held,
+                pw_salt=salt_hex, pw_hash=hash_hex,
                 token_hash=_hash_token(token))
     session.add(user)
     try:

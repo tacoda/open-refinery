@@ -27,6 +27,10 @@ class User(SQLModel, table=True):
     __tablename__ = "users"
     id: str = Field(default_factory=new_id, primary_key=True)
     email: str = Field(unique=True, index=True)
+    # `permissions` is what is checked (see authority.py). `role` is only the
+    # name of the preset this user was started from — a label kept for display
+    # and for "start from", never read by an authority check.
+    permissions: list = Field(default_factory=list, sa_column=Column(JSON))
     role: str
     pw_salt: str
     pw_hash: str
@@ -77,23 +81,26 @@ class LedgerEntry(SQLModel, table=True):
 
 
 class Role(SQLModel, table=True):
-    """A role and the powers it carries — see `authority.py`.
+    """A **preset** — a named bundle of permissions to start a person from.
 
-    Powers are columns rather than a rank, because a rank cannot express "lead
-    approves the harness, platform approves the factory, and neither approves
-    the other". `rank` survives only for genuine orderings, such as walking an
-    approval chain.
+    Not a role in the authorizing sense: nothing checks a preset. It is copied
+    onto the user at creation, and the user's own set is what is checked from
+    then on (see `authority.py`). `rank` survives only for genuine orderings,
+    such as walking an approval chain.
     """
     __tablename__ = "roles"
     name: str = Field(primary_key=True)
     rank: int = Field(index=True)  # ordering only — NOT an authority check
-    approves: list = Field(default_factory=list, sa_column=Column(JSON))   # layers
-    proposes: list = Field(default_factory=list, sa_column=Column(JSON))   # layers
+    permissions: list = Field(default_factory=list, sa_column=Column(JSON))
+    builtin: bool = False          # a shipped preset; cannot be deleted
+    created_at: str = Field(default_factory=now_iso)
+    # Superseded by `permissions` in 2.16.0; kept because the schema is
+    # append-only. Nothing reads them. Removed in 3.1.
+    approves: list = Field(default_factory=list, sa_column=Column(JSON))
+    proposes: list = Field(default_factory=list, sa_column=Column(JSON))
     manages_users: bool = False
     reads_audit: bool = False
-    sees_operations: bool = False   # other people's operational data, not audit
-    builtin: bool = False           # the standard configuration; cannot be deleted
-    created_at: str = Field(default_factory=now_iso)
+    sees_operations: bool = False
 
 
 class UserSession(SQLModel, table=True):
@@ -143,17 +150,6 @@ class Process(SQLModel, table=True):
     def required_checks(self, to: str) -> tuple[str, ...]:
         return tuple(self.checks.get(to, ()))
 
-
-class System(SQLModel, table=True):
-    """A platform-level grouping of repositories that compose a service /
-    microservice group / server. Membership drives system-level coverage rollups."""
-    __tablename__ = "systems"
-    id: str = Field(default_factory=new_id, primary_key=True)
-    name: str
-    kind: str = "service"             # service | microservices | server | … (customizable)
-    repo_ids: list = Field(default_factory=list, sa_column=Column(JSON))
-    owner_id: str = Field(foreign_key="users.id", index=True)
-    created_at: str = Field(default_factory=now_iso)
 
 
 class WorkItem(SQLModel, table=True):

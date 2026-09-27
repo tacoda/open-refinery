@@ -80,7 +80,7 @@ this document.
 | Decision | Choice |
 |---|---|
 | Auth scope | **Strip every authorization-code flow.** GitHub OAuth login, the `/integrations/*/oauth/*` and `/targets/*/oauth/*` connect paths, *and* OIDC SSO all go. Humans: email + password + TOTP. Machines: API tokens. Services: keys/PATs. |
-| `deepagents` | **Core dependency**, not an extra. One install, one command. |
+| `deepagents` | **Core dependency**, not an extra. One install, one command, and the turn loop, filesystem tools, planning, sub-agents, skills, interrupts and checkpointing all come for free. Measured cost: **56 transitive packages, 63 MB** — against 20 packages today. |
 | Pipeline model | **Its own concept**, not an extension of `Process`. `Process` is untouched. |
 | Pipeline storage | **SQLite, in JSON columns** — the same shape `Process` already uses for `stages` / `transitions` / `gates`. YAML is an import/export *format* for portability, never a storage or override mechanism. |
 | State | **All state lives in SQLite.** No `settings/*.yaml`, no job files, no document files. The only thing on disk is the git worktree, because git requires one — and even its claim and path are rows. |
@@ -985,7 +985,8 @@ When that runs from a clean machine without a detour, it is 3.0.
 
 | Risk | Handling |
 |---|---|
-| `deepagents` + LangChain + LangGraph in core | Taken deliberately (§1). Pin a floor, and keep `agent.py` the only module importing it, so the blast radius of an API change is one file. |
+| `deepagents` + LangChain + LangGraph in core | Taken deliberately (§1), with the cost measured: 56 packages against 20 today, landing the week after the review removed 2,110 lines. |
+| **deepagents is pre-1.0 and moves fast** | It is on 0.7.19 after ~60 releases across 0.0.x–0.7.x, and it carries **pillar 2**. Mitigation: pin a floor *and* a ceiling, and keep **`pipeline/agent.py` the only module that imports it** — so an upstream API change has a one-file blast radius and swapping it later is a rewrite of one file rather than of the factory. |
 | The harness/platform thesis change | Stated in PLAN.md (§1), not smuggled in. The governance seam is unchanged. |
 | Agent writes outside the worktree | `FilesystemBackend(root_dir=worktree)` is the boundary; rung 1 withholds what a phase never needs; rung 4 sees the finished diff. |
 | Cost runaway | `max_turns` per phase, existing quotas at the call site, and windowed rate caps. `consume_quota` already refuses before consuming. |

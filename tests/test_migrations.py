@@ -89,7 +89,8 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
             "ALTER TABLE roles DROP COLUMN sees_operations",
             "ALTER TABLE roles DROP COLUMN builtin",
             "ALTER TABLE repositories DROP COLUMN charter_paths",
-            "DROP TABLE systems",
+            "ALTER TABLE users DROP COLUMN permissions",
+            "ALTER TABLE roles DROP COLUMN permissions",
             "PRAGMA user_version = 7",   # pretend this is a 1.0-era install (schema v7)
         ):
             raw.execute(stmt)
@@ -107,8 +108,12 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
         assert "integration_id" in repo
         usr = {r[1] for r in raw.execute("PRAGMA table_info(users)").fetchall()}
         assert "team_id" in usr
+        # `create_all` adds tables an older install never had. `roles` is the
+        # current example; `systems` was, until it went in 2.15.0.
         assert raw.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='systems'").fetchone()
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='roles'").fetchone()
+        usr = {r[1] for r in raw.execute("PRAGMA table_info(users)").fetchall()}
+        assert "permissions" in usr
         assert raw.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
     finally:
         raw.close()

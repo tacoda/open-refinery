@@ -99,12 +99,11 @@ def test_roles_list_the_standard_configuration(ctx):
     names = [r["name"] for r in client.get("/roles", headers=auth(dev_token)).json()]
     assert names == ["auditor", "developer", "lead", "platform", "admin"]
 
-    # Roles ARE customizable now (see test_roles_api.py) — the built-ins are a
-    # standard configuration, not a limit. What stays closed is touching one of
-    # them, or the role you hold.
-    assert client.put("/roles/admin", headers=auth(admin_token),
-                      json={"rank": 15}).status_code == 403
-    assert client.delete("/roles/lead", headers=auth(admin_token)).status_code == 403
+    # These are PRESETS — starting points, not roles (2.16.0). Defining your
+    # own lives at /presets; the shipped ones cannot be changed.
+    assert client.put("/presets/admin", headers=auth(admin_token),
+                      json={"rank": 15, "permissions": []}).status_code == 403
+    assert client.delete("/presets/lead", headers=auth(admin_token)).status_code == 403
 
 
 def test_ownership_scoping_on_repos(ctx):
@@ -125,10 +124,11 @@ def test_ownership_scoping_on_repos(ctx):
 
 def test_end_to_end_transition_and_audit(ctx):
     _, client, admin, admin_token, ops_token = ctx
-    h = dev_auth(client, admin_token)   # developers operate the dev chain
+    h = dev_auth(client, admin_token)   # a developer does the work
     repo = client.post("/repositories", headers=h,
                        json={"name": "or", "git_url": "git@x:or.git"}).json()
-    proc = client.post("/processes", headers=h,
+    # The stage graph is factory configuration, so platform authors it (2.16.0).
+    proc = client.post("/processes", headers=auth(ops_token),
                        json={"name": "flow", "archetype": "doctrine",
                              "stages": ["todo", "doing", "done"]}).json()
     item = client.post("/work-items", headers=h,
@@ -178,7 +178,7 @@ def test_oversight_approval_flow(ctx):
     h = dev_auth(client, admin_token)
     repo = client.post("/repositories", headers=h,
                        json={"name": "or", "git_url": "git@x:or.git"}).json()
-    proc = client.post("/processes", headers=h,
+    proc = client.post("/processes", headers=auth(ops_token),   # factory config
                        json={"name": "flow", "archetype": "board", "stages": ["todo", "doing"],
                              "oversight": "assisted", "min_approver_role": "developer"}).json()
     item = client.post("/work-items", headers=h,

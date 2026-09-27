@@ -8,9 +8,22 @@ router = APIRouter()
 
 @router.post("/users", status_code=201)
 def add_user(body: NewUser, session: Session = Depends(get_session),
-             _: User = Depends(manages_users)):
-    user, token = create_user(session, body.email, body.password, body.role)
-    return {"user": user, "token": token}  # token shown once
+             actor: User = Depends(manages_users)):
+    """Add a person and give them permissions, in one call."""
+    try:
+        user, token = create_user(session, body.email, body.password, body.role,
+                                  permissions=body.permissions)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except DuplicateUser as exc:
+        raise HTTPException(status_code=409,
+                            detail=f"{body.email} already has an account") from exc
+
+    SqliteSink(session).write(Record.of(
+        recipe="user-added", actor=actor.id, owner=actor.id,
+        inputs={"preset": body.role, "permissions": user.permissions},
+        output=user.email, subject=user.id))
+    return {"user": public_user(user), "token": token}  # token shown once
 
 @router.post("/repositories", status_code=201)
 def add_repo(body: NewRepo, session: Session = Depends(get_session),
@@ -28,7 +41,7 @@ def import_repo(body: NewRepo, session: Session = Depends(get_session),
 
 @router.post("/processes", status_code=201)
 def add_process(body: NewProcess, session: Session = Depends(get_session),
-                user: User = Depends(current_user)):
+                user: User = Depends(approves("factory"))):
     return create_process(
         session, body.name, body.archetype, body.stages, user.id,
         transitions=body.transitions, initial=body.initial,
@@ -53,7 +66,7 @@ def get_processes(session: Session = Depends(get_session), _: User = Depends(cur
 
 @router.post("/work-items", status_code=201)
 def add_work_item(body: NewWorkItem, session: Session = Depends(get_session),
-                  user: User = Depends(current_user)):
+                  user: User = Depends(may_run)):
     return create_work_item(session, body.repo_id, body.process_id, body.title, user.id)
 
 @router.get("/work-items")

@@ -1,158 +1,164 @@
-"""Authority — what a role may do, as data rather than a position in a line.
+"""Permissions — what a person may do, held on the person.
 
-The old model was a **total order**: `developer < platform < admin`, compared
-with `at_least()`. Admin could do everything platform could, and more. That is
-convenient and it is not a separation of duties — the account that grants access
-was also the account that could approve what ships.
+A user carries a set of permissions, and **that set is the only thing ever
+checked**. No indirection: two people doing similar jobs can hold different
+permissions without anybody inventing a role for the difference.
 
-So a role carries an explicit set of powers, and the four built-ins are a
-**standard configuration** rather than a limit:
+This is the third and last shape. It began as a rank ladder (`developer <
+platform < admin`, compared with `at_least()`), which meant admin could do
+everything platform could — convenient, and not a separation of duties. 2.14.5
+moved the powers onto a *role*; 3.0 moves them onto the *user*.
 
-| role | approves | proposes | users | audit | operations |
-|---|---|---|---|---|---|
-| developer | code | everything | — | own work | own work |
-| lead | harness, charter | harness, charter, factory | — | — | own team |
-| platform | factory | factory | — | — | org-wide |
-| admin | — | — | yes | yes | users + audit |
-| auditor | — | — | — | yes | — |
+**Presets are the defaults to build from.** `developer`, `lead`, `platform`,
+`admin` and `auditor` are named bundles you *apply* when adding someone. The
+preset is copied onto the user and then edited freely, and nothing reads it
+again afterwards. That keeps "add the users, give them permissions" a
+ten-second job without making the permission set a lie — the cost being that
+editing a preset does not change anyone already created from it, which the UI
+says plainly.
 
-The split follows the product's own shape: it is both a harness and a factory,
-so **lead owns the harness** (phases, prompts, tool grants, the charter turns
-read) and **platform owns the factory** (the stage graph, delivery, routing,
-quotas). A lead changing a prompt does not need platform; platform changing a
-route does not need a lead.
+The split follows the product's own shape (it is both a harness and a factory):
+**lead owns the harness**, **platform owns the factory**, and **admin approves
+nothing** — the account that grants access is not the account that approves what
+ships, so a compromised admin can create users and read the log and cannot merge
+a change or weaken a rule.
 
-Everything here **fails closed**. An unknown role, an unknown layer, or a role
-row that has lost its powers grants nothing — which is the opposite of what the
-rank model did, where an unknown role ranked 0 and so satisfied every minimum.
+Everything here **fails closed**: an absent permission is denied, an unknown
+permission string is denied, and a user with an empty set can do nothing.
 """
 
 from __future__ import annotations
 
-from sqlmodel import Session
+# What a change is *about*. `code` is ordinary work; the other three mirror
+# `policies.LAYERS`.
+CODE, HARNESS, FACTORY, CHARTER = "code", "harness", "factory", "charter"
+LAYERS = (CODE, HARNESS, FACTORY, CHARTER)
 
-# What a change can be *about*. `policies.LAYERS` covers the three governance
-# layers; `code` is ordinary work, which has no Policy rows but does have
-# approvers, so authority needs a name for it.
-CODE = "code"
-LAYERS = (CODE, "harness", "factory", "charter")
+# The whole vocabulary. Anything not here is not a permission, and asking for it
+# is denied rather than ignored.
+APPROVE = tuple(f"approve:{layer}" for layer in LAYERS)
+PROPOSE = tuple(f"propose:{layer}" for layer in LAYERS)
+RUN_FACTORY = "run:factory"
+MANAGE_USERS = "manage:users"
+READ_AUDIT = "read:audit"
+SEE_OPERATIONS = "see:operations"
 
+PERMISSIONS: tuple[str, ...] = (
+    *APPROVE, *PROPOSE, RUN_FACTORY, MANAGE_USERS, READ_AUDIT, SEE_OPERATIONS)
 
-class Powers(dict):
-    """One role's authority, as a plain dict so it round-trips to JSON columns."""
-
-
-def powers(*, rank: int, approves: tuple = (), proposes: tuple = (),
-           manages_users: bool = False, reads_audit: bool = False,
-           sees_operations: bool = False) -> Powers:
-    return Powers(rank=rank, approves=list(approves), proposes=list(proposes),
-                  manages_users=manages_users, reads_audit=reads_audit,
-                  sees_operations=sees_operations)
-
-
-# The standard configuration. A team that agrees with it configures nothing.
-BUILTIN: dict[str, Powers] = {
-    "developer": powers(
-        rank=1,
-        approves=(CODE,),
-        # A developer may propose a change to anything — that is what the
-        # improve lane is for — but approves only the code they write.
-        proposes=(CODE, "harness", "factory", "charter"),
-    ),
-    "lead": powers(
-        rank=2,
-        approves=("harness", "charter"),
-        proposes=("harness", "charter", "factory"),
-    ),
-    "platform": powers(
-        rank=3,
-        approves=("factory",),
-        proposes=("factory",),
-        sees_operations=True,
-    ),
-    # Not a person's job title — the role a time-boxed auditor grant resolves
-    # to (`deps.current_user`). It existed as a bare string before this module;
-    # giving it a row is what makes it visible in /roles and checkable here.
-    "auditor": powers(
-        rank=0,
-        reads_audit=True,
-    ),
-    "admin": powers(
-        rank=4,
-        # Deliberately empty. The role that grants access does not approve what
-        # ships: a compromised admin account can create users and read the log,
-        # and cannot merge a change or weaken a rule.
-        manages_users=True,
-        reads_audit=True,
-    ),
+# One line each, for the permission editor. A checkbox whose meaning you have to
+# guess is a checkbox that gets ticked.
+DESCRIPTIONS: dict[str, str] = {
+    "approve:code": "sign off a change to the code itself",
+    "approve:harness": "sign off a change to how the agent runs — phases, prompts, tool grants",
+    "approve:factory": "sign off a change to how work flows — the stage graph, delivery, routing",
+    "approve:charter": "sign off a change to the standards agents read",
+    "propose:code": "put a code change forward for someone else to sign",
+    "propose:harness": "put a harness change forward",
+    "propose:factory": "put a factory change forward",
+    "propose:charter": "put a standards change forward",
+    RUN_FACTORY: "trigger a run",
+    MANAGE_USERS: "add people and set their permissions",
+    READ_AUDIT: "read the audit trail",
+    SEE_OPERATIONS: "see other people's work, not only your own",
 }
 
-BUILTIN_NAMES = tuple(BUILTIN)
+# The presets. A team that agrees with these configures nothing.
+PRESETS: dict[str, tuple[str, ...]] = {
+    # Writes the code, and may put anything forward for someone else to sign.
+    "developer": ("approve:code", *PROPOSE, RUN_FACTORY),
+    # Owns the harness: how one turn is constrained, and the standards it reads.
+    "lead": ("approve:harness", "approve:charter", *PROPOSE, RUN_FACTORY),
+    # Owns the factory: how work flows, and the only role that sees all of it.
+    "platform": ("approve:factory", "propose:factory", SEE_OPERATIONS, RUN_FACTORY),
+    # Approves nothing, deliberately.
+    "admin": (MANAGE_USERS, READ_AUDIT),
+    # What a time-boxed external audit grant resolves to.
+    "auditor": (READ_AUDIT,),
+}
+
+DEFAULT_PRESET = "developer"
+
+# Ordering only, for walking an approval chain — never an authority check.
+# Declared rather than derived from the order above, which put `auditor`
+# (read-only) above `admin`.
+RANKS: dict[str, int] = {"auditor": 0, "developer": 1, "lead": 2,
+                         "platform": 3, "admin": 4}
 
 
-def _row(session: Session, role: str):
-    from .models import Role
-    return session.get(Role, role) if role else None
+def valid(permission: str) -> bool:
+    return permission in PERMISSIONS
 
 
-def _powers_of(session: Session, role: str) -> Powers | None:
-    """A role's powers from its row, or None when the role does not exist."""
-    row = _row(session, role)
-    if row is None:
-        return None
-    return Powers(rank=row.rank, approves=list(row.approves or []),
-                  proposes=list(row.proposes or []),
-                  manages_users=bool(row.manages_users),
-                  reads_audit=bool(row.reads_audit),
-                  sees_operations=bool(row.sees_operations))
+def clean(permissions) -> list[str]:
+    """Keep only real permissions, deduped, in vocabulary order.
+
+    An unknown string is dropped rather than stored: a permission nothing checks
+    is a permission somebody believes they have.
+    """
+    held = set(permissions or ())
+    return [p for p in PERMISSIONS if p in held]
 
 
-def may_approve(session: Session, role: str, layer: str) -> bool:
-    """Whether `role` may approve a change to `layer`."""
-    p = _powers_of(session, role)
-    return bool(p and layer in p["approves"])
+def of_preset(name: str) -> list[str]:
+    """The permissions a preset applies. Unknown preset → nothing."""
+    return list(PRESETS.get(name, ()))
 
 
-def may_propose(session: Session, role: str, layer: str) -> bool:
-    p = _powers_of(session, role)
-    return bool(p and layer in p["proposes"])
+def has(user, permission: str) -> bool:
+    """The only check. Pure — no session, no lookup, no indirection."""
+    return permission in (getattr(user, "permissions", None) or ())
 
 
-def manages_users(session: Session, role: str) -> bool:
-    p = _powers_of(session, role)
-    return bool(p and p["manages_users"])
+def may_approve(user, layer: str) -> bool:
+    return layer in LAYERS and has(user, f"approve:{layer}")
 
 
-def reads_audit(session: Session, role: str) -> bool:
-    p = _powers_of(session, role)
-    return bool(p and p["reads_audit"])
+def may_propose(user, layer: str) -> bool:
+    return layer in LAYERS and has(user, f"propose:{layer}")
 
 
-def sees_operations(session: Session, role: str) -> bool:
-    """Whether the role sees other people's operational data — work items,
-    runs, targets, routing. Not the audit trail, which is `reads_audit`."""
-    p = _powers_of(session, role)
-    return bool(p and p["sees_operations"])
+def manages_users(user) -> bool:
+    return has(user, MANAGE_USERS)
 
 
-def approvers_for(session: Session, layer: str) -> list[str]:
-    """Every role that may approve this layer, weakest first.
+def reads_audit(user) -> bool:
+    return has(user, READ_AUDIT)
 
-    For a UI that has to answer "who do I ask", and for the delivery gate
-    working out which roles a diff needs.
+
+def sees_operations(user) -> bool:
+    """Other people's operational work — not the audit trail, which is
+    `reads_audit`. Keeping them apart is what stops the role that grants access
+    from also watching the work."""
+    return has(user, SEE_OPERATIONS)
+
+
+def may_run(user) -> bool:
+    return has(user, RUN_FACTORY)
+
+
+def approvers_of(session, layer: str) -> list[str]:
+    """Who can approve this layer — emails, for "who do I ask".
+
+    A question the UI has to answer at the moment somebody is blocked, and the
+    alternative to answering it is them asking around.
     """
     from sqlmodel import select
 
-    from .models import Role
-    # Name breaks a rank tie, so the list is stable between page loads.
-    rows = session.exec(select(Role).order_by(Role.rank, Role.name)).all()
-    return [r.name for r in rows if layer in (r.approves or [])]
+    from .models import User
+
+    if layer not in LAYERS:
+        return []
+    need = f"approve:{layer}"
+    return [u.email for u in session.exec(select(User).order_by(User.email))
+            if u.active and need in (u.permissions or [])]
 
 
-def describe(session: Session, role: str) -> dict:
-    """One role's authority, for the API and the dashboard."""
-    p = _powers_of(session, role)
-    row = _row(session, role)
-    if p is None or row is None:
-        return {}
-    return {"name": role, "builtin": bool(row.builtin), **p}
+def catalog() -> list[dict]:
+    """The vocabulary and the presets, for the permission editor."""
+    return [{"permission": p, "description": DESCRIPTIONS.get(p, "")} for p in PERMISSIONS]
+
+
+def describe(user) -> dict:
+    held = clean(getattr(user, "permissions", None))
+    return {"permissions": held, "preset": getattr(user, "role", ""), "count": len(held)}

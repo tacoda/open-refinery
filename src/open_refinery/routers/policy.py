@@ -9,7 +9,7 @@ router = APIRouter()
 
 @router.post("/policies", status_code=201)
 def add_policy(body: NewPolicy, session: Session = Depends(get_session),
-               user: User = Depends(sees_operations)):
+               user: User = Depends(approves("charter"))):
     p = create_policy(session, body.effect, user.id, role=body.role,
                       action=body.action, resource=body.resource,
                       strict=body.strict, kind=body.kind, content=body.content,
