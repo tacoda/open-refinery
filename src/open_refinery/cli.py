@@ -363,6 +363,49 @@ def _phases(args: argparse.Namespace) -> int:
         return 1
 
 
+def _ladder(args: argparse.Namespace) -> int:
+    import sys
+
+    from .client import ApiError
+
+    api = _client(args)
+    try:
+        if args.ladder_cmd == "show":
+            view = api.get("/ladder")
+            print("rungs — where a rule can be carried\n")
+            for r in view["rungs"]:
+                mark = "·" if r["ours"] else " "
+                print(f"  {mark} {r['rung']}  {r['sees']}")
+            for side in ("constraints", "capabilities"):
+                rows = view[side]
+                print(f"\n{side} ({len(rows)})")
+                for c in rows:
+                    how = c["predicate"] or (",".join(c["withholds"]) or "prose")
+                    flag = "" if c["mechanical"] else "   ← asks, does not enforce"
+                    print(f"  rung {c['rung']}  {c['text'][:44]:<46} {how}{flag}")
+            print(f"\nwithheld from every phase: {', '.join(view['withheld']) or '—'}")
+            return 0
+
+        if args.ladder_cmd == "predicates":
+            for p in api.get("/ladder")["predicates"]:
+                print(f"  {p['name']:<30} sees {p['sees']:<5} {p['about']}")
+            return 0
+
+        if args.ladder_cmd == "preview":
+            m = api.get(f"/ladder/{args.id}/move", **{"to": args.to})
+            print(f"  {m['direction']}: rung {m['from']} → {m['to']}")
+            print(f"  at rung {m['to']} it sees: {m['sees']}")
+            if m["needs_predicate"]:
+                print("  needs a predicate — a rule at a rung nothing enforces looks enforced")
+            if m["needs_second_signer"]:
+                print("  needs a SECOND SIGNER — this removes enforcement")
+            return 0
+    except ApiError as exc:
+        print(f"error: {exc.detail}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def _create_admin(args: argparse.Namespace) -> int:
     import getpass
     import sys
@@ -605,6 +648,17 @@ def main(argv: list[str] | None = None) -> int:
     ph.add_argument("--url", default=None)
     ph.add_argument("--token", default=None)
     ph.set_defaults(func=_phases)
+
+    lad = sub.add_parser("ladder", help="where each rule is carried (via the API)")
+    lad.add_argument("--url", default=None)
+    lad.add_argument("--token", default=None)
+    lad_sub = lad.add_subparsers(dest="ladder_cmd", required=True)
+    lad_sub.add_parser("show", help="both ladders and the net grant")
+    lad_sub.add_parser("predicates", help="what a rule can be made mechanical with")
+    prev = lad_sub.add_parser("preview", help="what moving a rule would take")
+    prev.add_argument("id")
+    prev.add_argument("to", type=int)
+    lad.set_defaults(func=_ladder)
 
     admin = sub.add_parser("create-admin", help="create the initial admin user")
     admin.add_argument("--email", required=True)

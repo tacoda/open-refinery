@@ -35,6 +35,8 @@ class Context:
     cleanup_cmd: str = ""
     author: str = ""             # "Name <email>", so the commit names a person
     pipeline_model: str = ""     # the workflow default a phase falls back to
+    # Rung 4, injected so the actions stay testable against a bare git repo.
+    gate: object = None          # (diff) -> Verdict
 
     def driver(self) -> forgelib.Forge:
         return self.forge or forgelib.FORGES["local"]
@@ -80,6 +82,14 @@ def commit_and_push(run: dict, ctx: Context) -> Result:
 
     if not ws.dirty(path):
         return Result(ERROR, error="nothing was changed — there is no diff to ship")
+
+    # Rung 4. It sees what nothing below it can: rung 3 saw calls and never the
+    # diff, and a commit message is not part of any diff, so nothing below has
+    # seen that either.
+    if ctx.gate is not None:
+        verdict = ctx.gate(ws.diff(path, base=ctx.base))
+        if verdict.refused:
+            return Result(REFUSED, reason=verdict.why)
 
     title = _title(run)
     committed = ws.commit(path, title, author=ctx.author)

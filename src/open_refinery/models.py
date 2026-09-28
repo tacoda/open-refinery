@@ -186,6 +186,29 @@ class Pipeline(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
+class Constraint(SQLModel, table=True):
+    """One rule, and the rung that carries it — see `ladder.py`.
+
+    `side` is what it does: a **constraint** withholds, a **capability** grants.
+    They are the same shape because they are the same idea pointing opposite
+    ways, and they join at rung 1.
+    """
+    __tablename__ = "constraints"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    text: str                              # the rule, in its own words
+    side: str = Field(default="constraint", index=True)
+    layer: str = Field(default="code", index=True)   # code|harness|factory|charter
+    rung: int = Field(default=0, index=True)
+    predicate: str = ""                    # a registered predicate, for rungs 2-4
+    withholds: list = Field(default_factory=list, sa_column=Column(JSON))  # rung 1
+    scope: str = "*"                       # which tools / paths it applies to
+    enabled: bool = True
+    author_id: str | None = None
+    moved_by: str | None = None            # who last changed its rung
+    moved_at: str = ""
+    created_at: str = Field(default_factory=now_iso)
+
+
 class PhaseConfig(SQLModel, table=True):
     """A team's override of one phase — see `pipeline/phases.py`.
 

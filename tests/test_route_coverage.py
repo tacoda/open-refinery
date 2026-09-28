@@ -35,6 +35,8 @@ REQUIRED = {
     "signed export": "/audit/export",
     "evidence packs": "/evidence",
     "the improve lane": "/improve",
+    "the ladder": "/ladder",
+    "move a rule": "/ladder/{rule_id}/move",
     "improve proposals": "/improve/proposals",
     "auditor grants": "/auditor-grants",
     # permissions and people

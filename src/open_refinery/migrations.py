@@ -152,7 +152,10 @@ MIGRATIONS: list[str] = [
     # v27 (2.20.0): a team may override a phase. New table — `create_all` makes
     # it; this entry is the version bump.
     "SELECT 1;",
-    # v28 (2.17.0): the factory's own tables — pipelines, runs, run steps. New
+    # v28 (2.23.0): the ladder — rules and the rung that carries each. New
+    # table; `create_all` makes it.
+    "SELECT 1;",
+    # v29 (2.17.0): the factory's own tables — pipelines, runs, run steps. New
     # tables are created by `create_all`; this entry is the version bump so an
     # existing install records that it has them.
     "SELECT 1;",
@@ -224,9 +227,10 @@ DOWNGRADES: list[str] = [
     "DROP TABLE IF EXISTS run_steps;"
     "DROP TABLE IF EXISTS runs;"
     "DROP TABLE IF EXISTS phase_configs;",                                               # v27
+    "DROP TABLE IF EXISTS constraints;",                                                 # v28
     "DROP TABLE IF EXISTS run_steps;"
     "DROP TABLE IF EXISTS runs;"
-    "DROP TABLE IF EXISTS pipelines;",                                                   # v28
+    "DROP TABLE IF EXISTS pipelines;",                                                   # v29
 ]
 
 

@@ -334,6 +334,24 @@ class RepoSettings(BaseModel):
     ingest_interval_hours: int | None = None
 
 
+class NewRule(BaseModel):
+    """A rule, and the rung that carries it."""
+    text: str
+    layer: str = "code"
+    rung: int = 0
+    side: str = "constraint"
+    predicate: str = ""
+    withholds: list[str] = []
+    scope: str = "*"
+
+
+class MoveRule(BaseModel):
+    """Carry a rule at a different rung. A demotion needs a second signer."""
+    to: int
+    predicate: str = ""
+    second_signer: str = ""      # email; required for a demotion
+
+
 class PhaseBody(BaseModel):
     """A team's override of one phase. Omitted fields keep the built-in."""
     prompt: str | None = None
@@ -557,10 +575,10 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
 
 def _include_routers(app: FastAPI) -> None:
-    from .routers import (core, credentials, harness, ops, org, pipelines, policy,
-                          proposals, roles, routing, workitem)
+    from .routers import (core, credentials, harness, ladder, ops, org, pipelines,
+                          policy, proposals, roles, routing, workitem)
     for mod in (core, ops, org, harness, workitem, routing, policy,
-                credentials, roles, proposals, pipelines):
+                credentials, roles, proposals, pipelines, ladder):
         app.include_router(mod.router)
 
 

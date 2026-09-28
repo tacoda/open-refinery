@@ -38,7 +38,12 @@ def context_for(session: Session, run: Run, *, credential: dict | None = None) -
 
     driver = forgelib.for_repo(repo.git_url, repo.forge)
     pipeline = ps.get_pipeline(session, run.pipeline_id)
+    def gate(diff: str):
+        from ..ladder import gate as ladder_gate
+        return ladder_gate(session, diff=diff, scope=repo.name)
+
     return Context(
+        gate=gate,
         pipeline_model=(pipeline.model if pipeline else ""),
         checkout=repo.git_url,          # a local repo's URL is its path
         repo_slug=forgelib.slug(repo.git_url),

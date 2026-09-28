@@ -90,13 +90,18 @@ def governance_middleware(governed: Governed):
 
 def build(phase: Phase, *, model, workspace: str, governed: Governed,
           memory: list[str] | None = None, oversight: str = "supervised",
-          checkpointer=None):
-    """Assemble the agent for one phase. Nothing is called yet."""
+          checkpointer=None, withheld: tuple[str, ...] = ()):
+    """Assemble the agent for one phase. Nothing is called yet.
+
+    `withheld` is **rung 1** of the ladder: a tool the phase never gets cannot
+    be called, so there is nothing for rung 3 to refuse and nothing to argue
+    past. It is the cheapest rung that can see a tool at all.
+    """
     from deepagents import create_deep_agent
     from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
     from deepagents.middleware import FilesystemMiddleware
 
-    grant = phase.granted()
+    grant = phase.granted(withheld)
     backend = CompositeBackend(
         default=StateBackend(),
         # Rooted at the worktree, so the turn cannot write outside the run's own
@@ -185,9 +190,11 @@ def run_phase(session, run: Run, stage, ctx, *, audit, session_factory,
 
     try:
         model = model_for(session, run, phase, ctx.pipeline_model)
+        from ..ladder import withheld as ladder_withholds
         agent = build(phase, model=model, workspace=str(workspace),
                       governed=governed, memory=charter_of(session, repo),
-                      oversight=oversight)
+                      oversight=oversight,
+                      withheld=ladder_withholds(session, phase=stage.phase))
     except HarnessError as exc:
         return Result(ERROR, error=str(exc))
     except ModuleNotFoundError as exc:

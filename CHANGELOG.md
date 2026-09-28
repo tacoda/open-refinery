@@ -3,6 +3,64 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.23.0] — 2026-09-28
+
+*Phase 7 on the [road to 3.0](docs/PLAN-3.0.md): the ladder. Where a rule is
+carried, and what it costs to move it.*
+
+### Added
+- **`ladder.py`** — six rungs, and each says **what it can see**:
+
+  | rung | carried by | sees |
+  |---|---|---|
+  | 0 | prose in the charter | nothing. It asks |
+  | 1 | the tool grant | function ids, before any call |
+  | 2 | a hook on the call | the arguments, before the write lands |
+  | 3 | a callback in the turn | the call, and it may hold it for a person |
+  | 4 | the delivery gate | the finished diff, before the commit |
+  | 5 | CI | the merged tree, after everybody left |
+
+  This product carries **0, 1, 3 and 4**. Rung 2 is the target repository's own
+  commit hook and rung 5 is its CI — both real, and neither ours.
+- **The rungs are load-bearing, not a catalogue.** Rung 1 subtracts from a
+  phase's tool grant before the agent is built; rung 3 runs inside every tool
+  call (`pipeline/middleware.py` already called it behind an import guard);
+  rung 4 reads the finished diff in `commit_and_push`. Verified live: a rule
+  written as prose refused nothing, and the same sentence at rung 3 refused a
+  write carrying a credential — **in the rule's own words**.
+- **A rule cannot claim a rung that cannot carry it.** Rungs 2–4 need a
+  predicate and rung 1 needs something to withhold, because a rule stored where
+  nothing enforces it is how a system ends up believing it is protected.
+- **Capabilities climb the other way.** A constraint withholds a function, a
+  capability grants one; they join at rung 1, and `withheld()` is the net — the
+  one number both ladders exist to produce.
+- **Predicates are a registry, not a directory.** Dropping a `.py` into a folder
+  is right for a kit you clone and own, and is arbitrary code execution as a
+  feature in a multi-user server (PLAN-3.0 §9.3). Four ship: `no-secrets`,
+  `no-force-push`, `no-secrets-in-diff`, `no-migration-without-downgrade`.
+
+### The asymmetry
+**Promotion and demotion are not the same request**, and this is where that
+stops being a comment:
+
+- a **promotion** adds enforcement → the layer's owner, one signature
+- a **demotion** removes it → the owner **and a second signer**, who must be
+  somebody else and must themselves hold `approve:<layer>` — a signature from
+  somebody who could not have approved it is not a signature
+- **switching an enforced rule off is refused** — demote it to rung 0 first, so
+  there is a record of who weakened it. Otherwise the two-signer rule is one
+  `DELETE` away from meaningless.
+
+Both are audited under their own names (`ladder-promotion` / `ladder-demotion`),
+with the second signer recorded.
+
+- `GET /ladder` (open — a constraint nobody can read is one nobody can rely on),
+  `POST /ladder`, `GET|POST /ladder/{id}/move`, `DELETE /ladder/{id}`.
+  `open-refinery ladder show|predicates|preview`, where `preview` answers "what
+  would it take to make this real?" without changing anything.
+
+815 tests pass.
+
 ## [2.22.0] — 2026-09-28
 
 *Phase 6 on the [road to 3.0](docs/PLAN-3.0.md): the factory floor. Runs advance
