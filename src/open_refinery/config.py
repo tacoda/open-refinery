@@ -50,6 +50,8 @@ KEYS: tuple[Key, ...] = (
     Key("LOG_LEVEL", ENV, "info", help="server log level (critical|error|warning|info|debug|trace)."),
     Key("APP_BASE_URL", ENV, "",
         help="public base URL behind a proxy. Blank = derived per request."),
+    Key("WORKERS", ENV, "2",
+        help="factory workers advancing runs in the background. 0 = drive runs by hand."),
 
     Key("org.onboarded", DB, "false",
         help="whether the first-run setup wizard has been completed."),
@@ -59,12 +61,6 @@ KEYS: tuple[Key, ...] = (
         help="whether a new policy defaults to strict."),
     Key("routing.policy", DB, "",
         help="org-wide routing inputs as JSON (required region, compliance, cost preference)."),
-    Key("scim.default_role", DB, "developer",
-        help="role given to a SCIM-provisioned user whose groups map to nothing."),
-    Key("scim.group_map", DB, "{}",
-        help="IdP group → role mapping, as JSON."),
-    Key("scim.token_hash", DB, "", secret=True,
-        help="hash of the SCIM bearer token. Rotate in the UI."),
 )
 
 _BY_NAME = {k.name: k for k in KEYS}

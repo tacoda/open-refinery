@@ -614,7 +614,20 @@ def create_app(session: Session | None = None, database_url: str = DEFAULT_DATAB
 
 
 def create_app_from_env() -> FastAPI:
+    """The `serve` path: the API, plus the background loops that make it a
+    factory rather than a filing cabinet."""
+    from .config import get as setting
+
     app = create_app(database_url=os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL))
+
     from .scheduler import start_scheduler
-    start_scheduler(app.state.engine)  # auto-ingest loop (serve path only, not tests)
+    start_scheduler(app.state.engine)   # re-read repo charters on a cadence
+
+    # The factory floor. Runs advance on the server, unattended — which is the
+    # difference between supervising agents and running them. Set WORKERS=0 to
+    # drive runs by hand instead.
+    count = int(setting("WORKERS") or 0)
+    if count > 0:
+        from .pipeline.workers import start_pool
+        start_pool(app.state.engine, workers=count)
     return app

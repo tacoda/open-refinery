@@ -3,6 +3,42 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.22.0] — 2026-09-28
+
+*Phase 6 on the [road to 3.0](docs/PLAN-3.0.md): the factory floor. Runs advance
+on the server, unattended, in parallel.*
+
+### Added
+- **`pipeline/workers.py`** — a pool of workers, each doing one thing per tick:
+  **claim an actionable run → advance it by one stage → release it.** The unit
+  is a *stage* rather than a run, so a worker never holds a run for long and a
+  crash loses at most the step in flight. Nothing is kept in memory between
+  ticks — the `Run` row is the durable state, which is what makes resume free.
+- **The claim is a conditional update, not a lock file.** Two workers cannot
+  take the same run because the `UPDATE` matches only an unclaimed row; checking
+  first and then writing would leave exactly the gap between. A crash leaves a
+  **stale** claim that a later worker can take over, where a lock file would
+  just stay locked. Six threads racing for one run produce one winner, and a
+  test holds that.
+- **Parallelism is runs, not turns.** Ten tickets go through at once because ten
+  runs are in flight, each a clean governed unit with its own worktree, branch
+  and pull request — not because one run was shattered into pieces that have to
+  be reassembled.
+- Bounded by the **team concurrency cap** that already existed. A team at its
+  cap is *skipped*, not failed: try again next tick, and let another team's run
+  through in the meantime.
+- Oldest run first, so a run cannot be starved by newer work arriving.
+- `WORKERS` (default **2**) starts the pool on the `serve` path. `WORKERS=0`
+  drives runs by hand instead.
+
+### Removed
+- The `scim.*` settings keys, stale since SCIM went in 2.15.0.
+
+771 tests pass. Verified live: three tickets started at once, picked up
+unattended by three workers, each advanced to the plan gate, approved by a
+second person, then driven on in parallel — **no stage run twice**, and the
+audit chain still verifies under concurrent writes.
+
 ## [2.21.0] — 2026-09-27
 
 *Providers, models, forges and trackers — as ports. **9 → 19 providers**, and
