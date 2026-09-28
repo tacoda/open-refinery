@@ -1,6 +1,6 @@
 """Policy governance — org-wide allow/deny rules, and content filtering.
 
-A `Policy` is a rule `(effect, role, action, resource)`; `decide()` evaluates a
+A `Policy` is a rule `(effect, applies_to, action, resource)`; `decide()` evaluates a
 request against all policies with **deny-overrides** and a default of allow.
 Policies are set by platform users and apply fleet-wide (single-tenant).
 
@@ -18,12 +18,13 @@ from sqlmodel import Session, select
 
 from .models import Policy, User
 from .settings import get_setting
-from .users import role_rank
 
 EFFECTS = ("allow", "deny")
-# Artifact axis of the governance layer graph: factory (org service) > harness
-# (agent tooling) > charter (repo/project). Precedence resolves on the lattice
-# (author role rank, then layer).
+# The governance layer graph: factory (org service) > harness (agent tooling) >
+# charter (repo/project). Precedence resolves on **this axis alone**. It used to
+# be a lattice of (author's role rank, layer), which made a rule's weight depend
+# on who wrote it — role rank is ordering, not authority, and the rest of the
+# product had already stopped treating it as authority.
 LAYERS = ("factory", "harness", "charter")
 LAYER_RANK = {"charter": 1, "harness": 2, "factory": 3}
 STRICT_DEFAULT_KEY = "policy.strict_default"  # admin setting; "true"/"false"
@@ -49,7 +50,8 @@ def _match(pattern: str, value: str) -> bool:
 POLICY_KINDS = ("rule", "skill", "command", "agent")  # what a governed harness artifact can be
 
 
-_SNAP = ("kind", "effect", "role", "action", "resource", "strict", "layer", "content", "namespace")
+_SNAP = ("kind", "effect", "applies_to", "action", "resource", "strict", "layer",
+         "content", "namespace")
 
 
 def _record_version(session: Session, policy: Policy, change: str, changed_by: str, note: str) -> None:
@@ -61,12 +63,21 @@ def _record_version(session: Session, policy: Policy, change: str, changed_by: s
     session.commit()
 
 
-def create_policy(session: Session, effect: str, owner_id: str, *, role: str = "*",
+def create_policy(session: Session, effect: str, owner_id: str, *, applies_to: str = "*",
                   action: str = "*", resource: str = "*", strict: bool | None = None,
                   kind: str = "rule", content: str = "", namespace: str = "",
                   pack: str = "", layer: str = "charter", note: str = "") -> Policy:
+    """`applies_to` is `*` or a permission the actor must hold — never a role
+    name. A role is a preset, copied once and never read again, so scoping a
+    live rule to one judged people by a label that had stopped being true."""
+    from .authority import PERMISSIONS
+
     if effect not in EFFECTS:
         raise ValueError(f"unknown effect: {effect!r} (expected {EFFECTS})")
+    if applies_to != "*" and applies_to not in PERMISSIONS:
+        raise ValueError(
+            f"applies_to must be '*' or a permission: {applies_to!r} "
+            f"(known: {', '.join(sorted(PERMISSIONS))})")
     if kind not in POLICY_KINDS:
         raise ValueError(f"unknown policy kind: {kind!r} (expected {POLICY_KINDS})")
     if layer not in LAYERS:
@@ -75,7 +86,7 @@ def create_policy(session: Session, effect: str, owner_id: str, *, role: str = "
         raise ValueError(f"unknown owner: {owner_id!r}")
     if strict is None:
         strict = strict_default(session)  # admin-configured default (off unless set)
-    policy = Policy(effect=effect, role=role, action=action, resource=resource,
+    policy = Policy(effect=effect, applies_to=applies_to, action=action, resource=resource,
                     strict=strict, kind=kind, content=content, namespace=namespace,
                     pack=pack, layer=layer, owner_id=owner_id)
     session.add(policy)
@@ -131,14 +142,17 @@ def _ns_match(policy_ns: str, request_ns: str) -> bool:
     return policy_ns == "" or policy_ns == request_ns
 
 
-def decide(policies: list[Policy], role: str, action: str, resource: str,
-           *, rank_of=None, default_allow: bool = True, namespace: str = "") -> bool:
+def decide(policies: list[Policy], permissions, action: str, resource: str,
+           *, default_allow: bool = True, namespace: str = "") -> bool:
     """Decide whether an action is permitted by the rule set.
 
-    Only `rule` policies gate. **Layer graph:** precedence resolves on the lattice
-    of (author role rank, artifact layer) — role axis dominant, artifact axis
-    (factory > harness > charter) as tiebreak; a **strict** rule locks the
-    decision at the highest lattice point (ties deny-override).
+    Only `rule` policies gate. **Who it applies to** is `applies_to`: `*` for
+    anyone, or a permission in `permissions` — the set the actor actually holds,
+    rather than the name of the preset they were created from.
+
+    **Layer graph:** precedence resolves on the artifact axis alone
+    (factory > harness > charter); a **strict** rule locks the decision at the
+    highest layer that locked (ties deny-override).
 
     **Namespace:** a namespaced policy gates only requests in that namespace; a
     blank-namespace policy is global. So a per-namespace whitelist is a set of
@@ -149,10 +163,11 @@ def decide(policies: list[Policy], role: str, action: str, resource: str,
     rule explicitly allows (and none in the deciding pool denies). No matching
     rule at all → the default.
     """
-    rank_of = rank_of or (lambda _p: 0)
-    key = lambda p: (rank_of(p), layer_rank(p.layer))
+    held = set(permissions or ())
+    key = lambda p: layer_rank(p.layer)
     matches = [p for p in policies if p.kind == "rule"
-               and _match(p.role, role) and _match(p.action, action) and _match(p.resource, resource)
+               and (p.applies_to == "*" or p.applies_to in held)
+               and _match(p.action, action) and _match(p.resource, resource)
                and _ns_match(p.namespace, namespace)]
     if not matches:
         return default_allow
@@ -174,8 +189,8 @@ def enforcement_mode(session: Session) -> str:
     return "strict" if mode in ("strict", "whitelist", "deny") else "audit"
 
 
-def enforce(session: Session, role: str, action: str, resource: str, *,
-            audit=None, actor_id: str | None = None, subject: str | None = None,
+def enforce(session: Session, user: User, action: str, resource: str, *,
+            audit=None, subject: str | None = None,
             namespace: str = "", intent: str = "") -> None:
     """Proactively gate an action: raise `PolicyDenied` if not permitted, and
     **record the refusal in the audit log** (when an audit sink is given).
@@ -185,24 +200,20 @@ def enforce(session: Session, role: str, action: str, resource: str, *,
     declared purpose) is recorded on the refusal for verification/audit.
 
     Honors the org enforcement mode — `audit` (default-allow) or `strict`
-    (whitelist / default-deny). Resolves each rule's layer from its author's role
-    rank, so a higher-layer strict rule can't be overridden by a lower one.
+    (whitelist / default-deny). The actor is judged by the **permissions they
+    hold**, which is the set `authority.py` uses for every route.
     """
-    policies = list_policies(session)
-    owners = {p.owner_id for p in policies}
-    ranks = {oid: role_rank(session, u.role)
-             for oid in owners if (u := session.get(User, oid)) is not None}
-    rank_of = lambda p: ranks.get(p.owner_id, 0)
+    actor_id = user.id
     allow_default = enforcement_mode(session) == "audit"
-    if not decide(policies, role, action, resource, rank_of=rank_of,
+    if not decide(list_policies(session), user.permissions, action, resource,
                   default_allow=allow_default, namespace=namespace):
-        reason = f"policy denies {role!r} {action!r} on {resource!r}"
+        reason = f"policy denies {action!r} on {resource!r}"
         if namespace:
             reason += f" in {namespace!r}"
         if audit is not None:  # every refused attempt is auditable
             from .provenance import Record
-            audit.write(Record.of(recipe="denied", actor=actor_id or role, owner=actor_id or role,
-                                  inputs={"role": role, "action": action, "resource": resource,
+            audit.write(Record.of(recipe="denied", actor=actor_id, owner=actor_id,
+                                  inputs={"action": action, "resource": resource,
                                           "namespace": namespace, "intent": intent,
                                           "mode": enforcement_mode(session)},
                                   output=reason, subject=subject))

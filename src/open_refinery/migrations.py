@@ -172,6 +172,17 @@ MIGRATIONS: list[str] = [
     # v32 (3.0.0): a ceiling on what one run may spend. `budgets` is a new table,
     # so create_all builds it and it needs no entry here.
     "ALTER TABLE repositories ADD COLUMN max_run_units INTEGER NOT NULL DEFAULT 0;",
+    # v33 (3.0.0): a policy applies to a **permission**, not a role name. The
+    # carry-over fails closed **per effect**, because there is no single safe
+    # default: broadening a deny is safe and broadening an allow is not. A
+    # role-scoped deny becomes everyone's; a role-scoped allow is pinned to a
+    # permission nobody can hold, so it grants nothing until re-authored.
+    "ALTER TABLE policies ADD COLUMN applies_to TEXT NOT NULL DEFAULT '*';"
+    "ALTER TABLE policy_versions ADD COLUMN applies_to TEXT NOT NULL DEFAULT '*';"
+    "UPDATE policies SET applies_to = CASE WHEN role = '*' THEN '*'"
+    " WHEN effect = 'deny' THEN '*' ELSE '!legacy-role' END;"
+    "UPDATE policy_versions SET applies_to = CASE WHEN role = '*' THEN '*'"
+    " WHEN effect = 'deny' THEN '*' ELSE '!legacy-role' END;",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -251,6 +262,8 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE integrations DROP COLUMN autostart;",                                   # v30
     "ALTER TABLE repositories DROP COLUMN oversight;",                                   # v31
     "ALTER TABLE repositories DROP COLUMN max_run_units;",                               # v32
+    "ALTER TABLE policies DROP COLUMN applies_to;"
+    "ALTER TABLE policy_versions DROP COLUMN applies_to;",                               # v33
 ]
 
 

@@ -131,6 +131,7 @@ from .users import (
     delete_role,
     list_roles,
     list_users,
+    grants_beyond,
     role_rank,
     rotate_token,
     session_user,
@@ -381,7 +382,7 @@ class SyncRequest(BaseModel):
 
 class NewPolicy(BaseModel):
     effect: str = "allow"
-    role: str = "*"
+    applies_to: str = "*"        # "*" or a permission the actor must hold
     action: str = "*"
     resource: str = "*"
     strict: bool | None = None   # None → admin-configured default

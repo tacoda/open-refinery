@@ -16,7 +16,6 @@ from sqlmodel import Session, select
 
 from .models import PackState, Policy, Standard, User
 from .policies import PolicyDenied, create_policy
-from .users import at_least
 
 
 @dataclass(frozen=True)
@@ -416,15 +415,22 @@ def pack_detail(session: Session, key: str) -> dict | None:
         "description": pack.description, "enabled": enabled,
         "standards": [{"topic": t, "title": ti, "body": b} for t, ti, b in pack.standards],
         "artifacts": [{"kind": a.get("kind", "rule"), "effect": a.get("effect", "allow"),
-                       "role": a.get("role", "*"), "action": a.get("action", "*"),
+                       "applies_to": a.get("applies_to", "*"), "action": a.get("action", "*"),
                        "resource": a.get("resource", "*"), "namespace": a.get("namespace", ""),
                        "content": a.get("content", "")} for a in pack.artifacts],
     }
 
 
 def _authorize(session: Session, pack: Pack, user: User) -> None:
-    if not at_least(session, user.role, pack.role):
-        raise PolicyDenied(f"enabling the {pack.key!r} pack requires {pack.role}+")
+    """A pack seeds standards and governed artifacts, so turning one on is a
+    charter change and `approve:charter` is what signs it. It was a role-rank
+    comparison against the pack's `role` field, which made the gate depend on an
+    ordering the rest of the product had stopped treating as authority."""
+    from .authority import may_approve
+
+    if not may_approve(user, "charter"):
+        raise PolicyDenied(
+            f"enabling the {pack.key!r} pack needs approve:charter")
 
 
 def enable_pack(session: Session, key: str, user: User) -> dict:
@@ -441,7 +447,7 @@ def enable_pack(session: Session, key: str, user: User) -> dict:
     if not session.exec(select(Policy).where(Policy.pack == key)).first():  # idempotent
         for a in pack.artifacts:
             create_policy(session, a.get("effect", "allow"), user.id, kind=a.get("kind", "rule"),
-                          role=a.get("role", "*"), action=a.get("action", "*"),
+                          applies_to=a.get("applies_to", "*"), action=a.get("action", "*"),
                           resource=a.get("resource", "*"), strict=a.get("strict", False),
                           content=a.get("content", ""), namespace=a.get("namespace", ""),
                           layer=a.get("layer", "charter"), pack=key)

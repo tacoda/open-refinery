@@ -2453,10 +2453,10 @@ export interface components {
              */
             effect: string;
             /**
-             * Role
+             * Applies To
              * @default *
              */
-            role: string;
+            applies_to: string;
             /**
              * Action
              * @default *

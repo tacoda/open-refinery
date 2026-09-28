@@ -116,6 +116,20 @@ middleware: there was one, it disagreed with the per-route guards the moment
 permissions moved, and two authorization systems that disagree are worse than
 either alone.
 
+**One model, everywhere.** Until 3.0 a second one survived alongside it:
+`policies.enforce` matched a rule's `role` against the *name of the preset* a
+person was created from, and broke ties by the author's **role rank**. So
+editing somebody's permissions left the policy engine judging them by a label
+that had stopped being true, and a rule's weight depended on who wrote it.
+Policies now match `applies_to` — `*` or a permission the actor holds — and
+precedence is the layer axis alone. The same rule covers every grant of
+authority: **you cannot give away what you do not hold** (`users.grants_beyond`),
+which is why an admin cannot mint an agent that approves code.
+
+**Role rank survives as ordering, not authority.** The governance proposal chain
+uses it to decide who signs after whom (`approval_workflows`). Nothing that
+gates an action reads it.
+
 ## The governed call site
 
 There is one, and it is inside a turn. Every tool a phase reaches for goes

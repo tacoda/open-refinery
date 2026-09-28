@@ -242,3 +242,47 @@ def test_a_repositorys_per_run_ceiling_is_set_on_the_repository(ctx):
     assert repo["max_run_units"] == 0            # unlimited by default
     ok = client.put(f"/repositories/{repo['id']}", headers=h, json={"max_run_units": 50_000})
     assert ok.status_code == 200 and ok.json()["max_run_units"] == 50_000
+
+
+def test_authorize_judges_permissions_not_the_preset_label(ctx):
+    """The bug this replaces: edit somebody's permissions away from the preset
+    they were created from, and the policy engine still judged them by the name
+    on the row."""
+    conn, client, admin, admin_token, ops_token = ctx
+    from open_refinery import create_policy
+    from open_refinery.models import User
+
+    h = dev_auth(client, admin_token)
+    me = client.get("/me", headers=h).json()
+    create_policy(conn, "deny", admin.id, applies_to="approve:code",
+                  action="egress", resource="*")
+
+    blocked = client.post("/authorize", headers=h,
+                          json={"action": "egress", "resource": "api.example.com"})
+    assert blocked.status_code == 403
+
+    # take the permission away; the `role` label on the row does not change
+    user = conn.get(User, me["id"])
+    user.permissions = [p for p in user.permissions if p != "approve:code"]
+    conn.add(user); conn.commit()
+    assert user.role == "developer"
+
+    allowed = client.post("/authorize", headers=h,
+                          json={"action": "egress", "resource": "api.example.com"})
+    assert allowed.status_code == 200
+
+
+def test_a_policy_must_name_a_real_permission(ctx):
+    """A role name looks plausible and would silently never match."""
+    _, client, _, admin_token, _ = ctx
+    lead = client.post("/users", headers=auth(admin_token),
+                       json={"email": "lead@x.dev", "password": "pw", "role": "lead"}).json()
+    h = auth(lead["token"])
+    bad = client.post("/policies", headers=h,
+                      json={"effect": "deny", "applies_to": "developer", "action": "egress"})
+    assert bad.status_code == 400
+    assert "must be '*' or a permission" in bad.json()["detail"]
+
+    ok = client.post("/policies", headers=h,
+                     json={"effect": "deny", "applies_to": "run:factory", "action": "egress"})
+    assert ok.status_code == 201

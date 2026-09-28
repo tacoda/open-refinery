@@ -25,8 +25,8 @@ This is the cleanup that follows it.*
 | 5 | Rebuild Overview and Metrics on `Run` / `RunStep` | **done** |
 | 6 | Give the ladder a UI; collapse the three rules surfaces into it | **done** |
 | 7 | Collapse the navigation to ~8 views | **done** — nine, flat |
-| 8 | One authorization model — policies key off permissions, not `role_rank` | next |
-| 9 | Publish the feature list and the domain glossary | |
+| 8 | One authorization model — policies key off permissions, not `role_rank` | **done** |
+| 9 | Publish the feature list and the domain glossary | next |
 
 ---
 

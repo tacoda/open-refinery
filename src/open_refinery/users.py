@@ -68,6 +68,21 @@ def valid_role(session: Session, name: str) -> bool:
     return session.get(Role, name) is not None
 
 
+def grants_beyond(session: Session, preset: str, holder: User) -> list[str]:
+    """What this preset would grant that `holder` does not have.
+
+    The rule for handing out authority is the same everywhere: you cannot give
+    away what you do not hold. It used to be a role-*rank* comparison, which
+    said an admin could mint an agent that approves code — admin outranks
+    developer, and holds neither `approve:code` nor anything like it.
+    """
+    from .models import Role
+
+    row = session.get(Role, preset)
+    wanted = set(row.permissions or ()) if row else set()
+    return sorted(wanted - set(holder.permissions or ()))
+
+
 def role_rank(session: Session, name: str) -> int:
     role = session.get(Role, name)
     return role.rank if role else 0

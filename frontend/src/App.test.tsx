@@ -82,17 +82,17 @@ describe('Toggle switch', () => {
 })
 
 describe('ruleSentence — policy reads as a qualified statement', () => {
-  it('deny with role + action + resource + namespace', () => {
-    expect(ruleSentence({ effect: 'deny', role: 'developer', action: 'transition', resource: 'done', namespace: 'payments' }))
-      .toBe('The developer role may not transition on done in the payments namespace.')
+  it('names the permission it gates, not a role', () => {
+    expect(ruleSentence({ effect: 'deny', applies_to: 'run:factory', action: 'egress', resource: 'api.stripe.com', namespace: 'payments' }))
+      .toBe('Anyone holding run:factory may not egress on api.stripe.com in the payments namespace.')
   })
   it('allow with wildcards reads as anyone / any action / anywhere', () => {
-    expect(ruleSentence({ effect: 'allow', role: '*', action: '*', resource: '*', namespace: '' }))
+    expect(ruleSentence({ effect: 'allow', applies_to: '*', action: '*', resource: '*', namespace: '' }))
       .toBe('Anyone may perform any action anywhere.')
   })
   it('drops the "on" clause when resource is a wildcard', () => {
-    expect(ruleSentence({ effect: 'allow', role: 'platform', action: 'invoke', resource: '*', namespace: '' }))
-      .toBe('The platform role may invoke anywhere.')
+    expect(ruleSentence({ effect: 'allow', applies_to: 'see:operations', action: 'egress', resource: '*', namespace: '' }))
+      .toBe('Anyone holding see:operations may egress anywhere.')
   })
 })
 

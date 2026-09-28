@@ -150,6 +150,8 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
             "ALTER TABLE integrations DROP COLUMN autostart",
             "ALTER TABLE repositories DROP COLUMN oversight",
             "ALTER TABLE repositories DROP COLUMN max_run_units",
+            "ALTER TABLE policies DROP COLUMN applies_to",
+            "ALTER TABLE policy_versions DROP COLUMN applies_to",
             "PRAGMA user_version = 7",   # pretend this is a 1.0-era install (schema v7)
         ):
             raw.execute(stmt)
@@ -179,6 +181,8 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
         # repository now
         repo_cols = {r[1] for r in raw.execute("PRAGMA table_info(repositories)").fetchall()}
         assert {"oversight", "max_run_units"} <= repo_cols
+        # v33: a policy applies to a permission, not a role name
+        assert "applies_to" in {r[1] for r in raw.execute("PRAGMA table_info(policies)").fetchall()}
         assert raw.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
     finally:
         raw.close()

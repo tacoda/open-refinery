@@ -9,6 +9,60 @@ All notable changes to open-refinery are documented here. Format follows
 two governed call sites, two workflow engines — and the older half of each
 was what the docs, the dashboard and `doctor` still pointed at.*
 
+### Step 8 — one authorization model
+
+The product had two, and the docs only described one. `authority.py` puts
+**permissions on the person** and says a role is a preset — copied once, never
+read again. `policies.enforce` disagreed on both counts.
+
+#### Changed
+- **A policy applies to a permission, not a role name.** `Policy.applies_to` is
+  `*` or a permission in `authority.PERMISSIONS`, validated when the policy is
+  written. Before, `Policy.role` was matched against the **name of the preset**
+  a person was created from — so editing somebody's permissions left the policy
+  engine judging them by a label that had stopped being true. `Policy.role` and
+  `PolicyVersion.role` are tombstones.
+- **Precedence is the layer axis alone** — factory > harness > charter. It was a
+  lattice of *(the author's role rank, layer)*, which made a rule's weight
+  depend on who wrote it. `enforce` no longer imports `role_rank`.
+- **`enforce(session, user, …)`** takes the actor rather than a role string, and
+  reads `user.permissions` — the set every route guard already checks. The
+  `denied` audit record drops its `role` input.
+- **You cannot give away what you do not hold.** `users.grants_beyond` compares
+  a preset's permissions against the granter's, replacing the role-rank
+  comparison in `harnesses.device_approve` and `POST /harnesses`. The old rule
+  said an **admin could mint an agent that approves code** — admin outranks
+  developer and holds neither `approve:code` nor anything like it.
+- **Enabling a pack needs `approve:charter`.** A pack seeds standards and
+  governed artifacts, so turning one on is a charter change, and the standards
+  are the lead's. It was a role-rank comparison against the pack's `role`, which
+  tiered packs by an ordering nothing else treated as authority. `Pack.role`
+  stays as the catalog label for the layer a pack serves.
+- The Policies form picks a permission; `ruleSentence` reads *"Anyone holding
+  run:factory may not…"*; **What applies to me** filters on the permissions the
+  reader holds.
+
+#### Kept, deliberately
+- **Role rank survives as ordering.** The governance proposal chain uses it to
+  decide who signs after whom (`approval_workflows`), which is what an ordering
+  is for. Nothing that gates an action reads it any more.
+
+#### Schema
+- **Migration v33** adds `applies_to` to `policies` and `policy_versions`. The
+  carry-over **fails closed per effect**, because there is no single safe
+  default — broadening a deny is safe and broadening an allow is not:
+
+  | legacy row | becomes | why |
+  |---|---|---|
+  | `role = '*'` | `applies_to = '*'` | unchanged |
+  | role-scoped **deny** | `applies_to = '*'` | broader, therefore stricter |
+  | role-scoped **allow** | `applies_to = '!legacy-role'` | a permission nobody can hold, so it grants nothing until re-authored |
+
+  Nothing the product seeds was role-scoped, so this only reaches hand-authored
+  rules. `docs/LIMITATIONS.md` says so.
+
+845 tests pass.
+
 ### Step 7 — nine screens, flat
 
 #### Changed

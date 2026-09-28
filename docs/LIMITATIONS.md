@@ -24,6 +24,14 @@ by construction: dropping a column drops its data.
 
 ## The schema
 
+**A pre-3.0 role-scoped policy does not carry over cleanly.** Migration v33
+moves a policy from a role name to a permission, and there is no single safe
+default: broadening a **deny** is safe, broadening an **allow** is not. So the
+carry-over fails closed per effect — a role-scoped deny becomes everyone's, and
+a role-scoped allow is pinned to `!legacy-role`, a permission nobody can hold,
+so it grants nothing until somebody re-authors it. Nothing the product itself
+seeds was role-scoped; this only affects hand-authored rules.
+
 **Frozen at 1.0, additive only.** Every 3.0 table is new; no existing column
 changes type. That is a promise about upgrades, and the cost is that some
 shapes are inherited rather than chosen. The clearest one: `Policy.layer` and

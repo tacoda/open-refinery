@@ -1003,7 +1003,9 @@ export function Field({ label, children }: { label: string; children: any }) {
 
 // Read a rule policy back as a plain, well-qualified sentence.
 export function ruleSentence(p: any): string {
-  const who = !p.role || p.role === '*' ? 'Anyone' : `The ${p.role} role`
+  const who = !p.applies_to || p.applies_to === '*'
+    ? 'Anyone'
+    : `Anyone holding ${p.applies_to}`
   const verb = p.effect === 'deny' ? 'may not' : 'may'
   const act = !p.action || p.action === '*' ? 'perform any action' : p.action
   const on = p.resource && p.resource !== '*' ? ` on ${p.resource}` : ''
@@ -1348,7 +1350,11 @@ export function Ladder({ me }: { me: any }) {
 
 export function MyRules({ me }: { me: any }) {
   const { rows } = useList('/policies')
-  const applies = rows.filter((p: any) => p.kind === 'rule' && (p.role === '*' || p.role === me.role))
+  // What applies to me is what the permissions I hold make apply — not the
+  // name of the preset I was created from, which may have stopped being true.
+  const held = me?.permissions ?? []
+  const applies = rows.filter((p: any) => p.kind === 'rule'
+    && (!p.applies_to || p.applies_to === '*' || held.includes(p.applies_to)))
   const denies = applies.filter((p: any) => p.effect === 'deny')
   const allows = applies.filter((p: any) => p.effect === 'allow')
   const Section = ({ title, items, tone }: any) => (
@@ -1369,7 +1375,7 @@ export function MyRules({ me }: { me: any }) {
   return (
     <div className="space-y-3">
       <p className="muted">
-        The rules in effect for your role ({me.role}). Read-only — putting one on
+        The rules in effect for the permissions you hold. Read-only — putting one on
         the ladder needs <span className="mono">approve:</span>the layer it is about.
       </p>
       <Section title="What I may not do" items={denies} tone="destructive" />
@@ -1380,14 +1386,20 @@ export function MyRules({ me }: { me: any }) {
 
 function Policies() {
   const { rows, load } = useList('/policies')
-  const { rows: roles } = useList('/roles')
+  // The permission vocabulary, from the server — the same set authority.py checks.
+  const [perms, setPerms] = useState<string[]>([])
+  useEffect(() => {
+    api('/permissions')
+      .then((r) => setPerms((r.permissions ?? []).map((x: any) => x.permission)))
+      .catch(() => {})
+  }, [])
   const [kind, setKind] = useState('rule')
-  const [effect, setEffect] = useState('deny'), [role, setRole] = useState('*')
+  const [effect, setEffect] = useState('deny'), [appliesTo, setAppliesTo] = useState('*')
   const [action, setAction] = useState('transition'), [resource, setResource] = useState('*')
   const [strict, setStrict] = useState(false), [content, setContent] = useState('')
   const [layer, setLayer] = useState('charter'), [namespace, setNamespace] = useState('')
   const [note, setNote] = useState('')
-  const add = () => post('/policies', { kind, effect, role, action, resource, strict, content, layer, namespace, note })
+  const add = () => post('/policies', { kind, effect, applies_to: appliesTo, action, resource, strict, content, layer, namespace, note })
     .then(() => { setNote(''); load() }).catch(fail)
   const del = (id: string) => api(`/policies/${id}`, { method: 'DELETE' }).then(load).catch(fail)
 
@@ -1428,12 +1440,12 @@ function Policies() {
                     <SelectContent>{['deny', 'allow'].map((e) => <SelectItem key={e} value={e}>{e === 'deny' ? 'Deny' : 'Allow'}</SelectItem>)}</SelectContent>
                   </Select>
                 </Field>
-                <Field label="Who (role)">
-                  <Select value={role} onValueChange={(v) => setRole(v ?? '')}>
+                <Field label="Who (permission)">
+                  <Select value={appliesTo} onValueChange={(v) => setAppliesTo(v ?? '*')}>
                     <SelectTrigger className="field"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="*">any role</SelectItem>
-                      {roles.map((r: any) => <SelectItem key={r.name} value={r.name}>{r.name}</SelectItem>)}
+                      <SelectItem value="*">anyone</SelectItem>
+                      {perms.map((x: string) => <SelectItem key={x} value={x}>anyone holding {x}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </Field>
@@ -1933,7 +1945,8 @@ function Proposals({ me, roles, isAdmin }: any) {
 export function Packs({ me, roles }: any) {
   const { rows, load } = useList('/packs')
   const rank = (r: string) => roles.find((x: Role) => x.name === r)?.rank ?? 0
-  const canManage = (packRole: string) => rank(me.role) >= rank(packRole)
+  // A pack seeds standards, so turning one on is a charter change.
+  const canManage = (_packRole: string) => (me?.permissions ?? []).includes('approve:charter')
   const toggle = (p: any) =>
     api(`/packs/${p.key}/${p.enabled ? 'disable' : 'enable'}`, { method: 'POST' })
       .then(load).catch(fail)

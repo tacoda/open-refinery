@@ -20,9 +20,13 @@ def get_harnesses(session: Session = Depends(get_session), user: User = Depends(
 def add_harness(body: NewHarness, request: Request, session: Session = Depends(get_session),
                 user: User = Depends(current_user)):
     role = body.role or user.role
-    # an agent can't be given more authority than the person registering it
-    if role_rank(session, role) > role_rank(session, user.role):
-        raise HTTPException(status_code=403, detail="agent role cannot exceed your own")
+    # An agent cannot be given authority its registrar does not hold. Compared
+    # on permissions, not role rank: admin outranks developer and holds neither
+    # `approve:code` nor anything like it.
+    if extra := grants_beyond(session, role, user):
+        raise HTTPException(
+            status_code=403,
+            detail=f"that preset grants what you do not hold: {', '.join(extra)}")
     agent, token = register_harness(session, body.harness_kind, body.name, user.id, role)
     base = base_url(request)
     return {"harness": harness_view(agent), "token": token,  # token shown once
@@ -136,7 +140,7 @@ def authorize(body: AuthorizeReq, session: Session = Depends(get_session),
     """Pre-action gate for an out-of-process harness: verify the caller's
     identity + declared intent against policy **before** it runs a tool,
     command, or host-egress action. Denials raise 403 and are audited."""
-    enforce_policy(session, user.role, body.action, body.resource,
-                   audit=SqliteSink(session), actor_id=user.id, subject=body.resource,
+    enforce_policy(session, user, body.action, body.resource,
+                   audit=SqliteSink(session), subject=body.resource,
                    namespace=body.namespace, intent=body.intent)
     return {"allowed": True, "mode": enforcement_mode(session)}

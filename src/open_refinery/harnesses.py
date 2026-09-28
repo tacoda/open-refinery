@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from sqlmodel import Session, select
 
 from .models import DeviceGrant, User
-from .users import DuplicateUser, create_user, list_users, role_rank, rotate_token
+from .users import DuplicateUser, create_user, grants_beyond, list_users, rotate_token
 
 # Extensible catalog — start with Claude Code; add agents by appending here.
 HARNESS_CATALOG: list[dict] = [
@@ -125,8 +125,9 @@ def device_approve(session: Session, user_code: str, approver: User, role: str) 
         raise ValueError(f"no pending device request for code {user_code!r}")
     if _expired(grant):
         raise DeviceExpired("device request expired")
-    if role_rank(session, role) > role_rank(session, approver.role):
-        raise ValueError("agent role cannot exceed your own")
+    if extra := grants_beyond(session, role, approver):
+        raise ValueError(
+            f"that preset grants what you do not hold: {', '.join(extra)}")
     agent, token = register_harness(session, grant.harness_kind, grant.name, approver.id, role)
     grant.status = "approved"
     grant.agent_id = agent.id

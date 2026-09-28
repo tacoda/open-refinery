@@ -48,16 +48,16 @@ def test_full_accept_applies_the_change(monkeypatch):
     assert len(pols) == 1 and pols[0].strict and pols[0].owner_id == dev.id  # authored at proposer layer
 
 
-def test_accepted_policy_proposal_carries_role_and_namespace(monkeypatch):
+def test_accepted_policy_proposal_carries_applies_to_and_namespace(monkeypatch):
     conn, dev, lead, plat, admin = setup(monkeypatch)
     audit = SqliteSink(conn)
     set_workflow(conn, "developer", ["platform"], admin.id)
-    payload = {"effect": "deny", "role": "developer", "action": "egress",
+    payload = {"effect": "deny", "applies_to": "run:factory", "action": "egress",
                "resource": "*", "namespace": "payments", "strict": False}
     prop = propose(conn, "policy", "create", payload, "developer", dev.id)
     review(conn, prop.id, plat.id, "accept", audit)   # single-slot chain → apply
     pol = list_policies(conn)[0]
-    assert pol.role == "developer" and pol.action == "egress" and pol.namespace == "payments"
+    assert pol.applies_to == "run:factory" and pol.action == "egress" and pol.namespace == "payments"
 
 
 def test_deny_stops(monkeypatch):

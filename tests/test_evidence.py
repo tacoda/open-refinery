@@ -24,7 +24,7 @@ def setup(monkeypatch):
 
 def test_evidence_pack_maps_controls_with_status(monkeypatch):
     conn, admin = setup(monkeypatch)
-    create_policy(conn, "deny", admin.id, role="developer", action="egress", resource="*")
+    create_policy(conn, "deny", admin.id, applies_to="run:factory", action="egress", resource="*")
     SqliteSink(conn).write(Record.of(recipe="transition", actor="a", owner="a", inputs={}, output="x"))
     pack = evidence_pack(conn, "soc2")
     assert pack["framework"] == "soc2"

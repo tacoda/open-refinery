@@ -156,7 +156,7 @@ def _apply_policy_create(session: Session, prop: ChangeProposal) -> str:
     p = prop.payload
     # authored at the proposer's layer (owner drives strict-precedence rank)
     policy = create_policy(session, p.get("effect", "allow"), prop.proposed_by,
-                           role=p.get("role", "*"), action=p.get("action", "*"),
+                           applies_to=p.get("applies_to", "*"), action=p.get("action", "*"),
                            resource=p.get("resource", "*"), strict=p.get("strict"),
                            kind=p.get("kind", "rule"), content=p.get("content", ""),
                            namespace=p.get("namespace", ""))

@@ -43,11 +43,11 @@ def test_agents_are_excluded_from_people_but_listed_as_harnesses():
 def test_agent_actions_are_governed_by_its_role():
     conn, owner = setup()
     agent, _ = register_harness(conn, "claude-code", "cc", owner.id, "developer")
-    create_policy(conn, "deny", owner.id, role="developer", action="invoke", resource="*")
+    create_policy(conn, "deny", owner.id, applies_to="run:factory", action="invoke", resource="*")
     audit = SqliteSink(conn)
     # the proactive gate applies to the agent exactly as to a person of that role
     with pytest.raises(PolicyDenied):
-        enforce(conn, agent.role, "invoke", "model", audit=audit, actor_id=agent.id)
+        enforce(conn, agent, "invoke", "model", audit=audit)
 
 
 def test_rotate_and_delete():

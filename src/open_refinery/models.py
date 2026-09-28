@@ -321,7 +321,12 @@ class Policy(SQLModel, table=True):
     id: str = Field(default_factory=new_id, primary_key=True)
     kind: str = "rule"           # rule | skill | command | agent (governed harness artifact)
     effect: str                  # allow | deny (meaningful for kind=rule)
-    role: str = "*"              # role this applies to, or "*"
+    # Who it applies to: "*" for anyone, or a **permission** the actor holds
+    # (authority.PERMISSIONS). It keyed off a role name until 3.0, which meant
+    # a person whose permissions had been edited away from their preset was
+    # still judged by the preset.
+    applies_to: str = "*"
+    role: str = ""               # tombstone: the pre-3.0 role selector
     action: str = "*"            # e.g. "transition", "invoke", or "*"
     resource: str = "*"          # step name, target kind, or "*"
     strict: bool = False         # a lower layer may not override a strict rule
@@ -345,7 +350,8 @@ class PolicyVersion(SQLModel, table=True):
     # snapshot of the policy at this version
     kind: str = "rule"
     effect: str = "allow"
-    role: str = "*"
+    applies_to: str = "*"
+    role: str = ""               # tombstone, mirroring Policy
     action: str = "*"
     resource: str = "*"
     strict: bool = False

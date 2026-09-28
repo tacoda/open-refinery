@@ -55,19 +55,19 @@ def test_strict_mode_blocks_and_audits_refusal(monkeypatch):
     audit = SqliteSink(conn)
     # no allow rule → whitelist denies, and the refusal is audited
     with pytest.raises(PolicyDenied):
-        enforce(conn, "developer", "invoke", "model", audit=audit, actor_id=admin.id, subject="w1")
+        enforce(conn, admin, "invoke", "model", audit=audit, subject="w1")
     denied = [e for e in query_events(conn) if e.recipe == "denied"]
     assert len(denied) == 1 and denied[0].subject == "w1"
 
     # add an explicit allow → now permitted (no raise, no new denial)
     create_policy(conn, "allow", admin.id, action="invoke", resource="model")
-    enforce(conn, "developer", "invoke", "model", audit=audit, actor_id=admin.id)
+    enforce(conn, admin, "invoke", "model", audit=audit)
     assert len([e for e in query_events(conn) if e.recipe == "denied"]) == 1
 
 
 def test_audit_mode_allows_unlisted(monkeypatch):
     conn, admin = _conn(monkeypatch, "audit")
-    enforce(conn, "developer", "invoke", "model", audit=SqliteSink(conn), actor_id=admin.id)  # no raise
+    enforce(conn, admin, "invoke", "model", audit=SqliteSink(conn))  # no raise
 
 
 def test_egress_gate_scoped_by_namespace_records_intent(monkeypatch):
@@ -76,11 +76,11 @@ def test_egress_gate_scoped_by_namespace_records_intent(monkeypatch):
     create_policy(conn, "deny", admin.id, action="egress", resource="*", namespace="payments")
     audit = SqliteSink(conn)
     with pytest.raises(PolicyDenied):
-        enforce(conn, "developer", "egress", "evil.example.com", audit=audit,
-                actor_id=admin.id, namespace="payments", intent="exfiltrate")
+        enforce(conn, admin, "egress", "evil.example.com", audit=audit,
+                namespace="payments", intent="exfiltrate")
     denied = [e for e in query_events(conn) if e.recipe == "denied"]
     assert len(denied) == 1
     # a different namespace is not gated by the payments rule
-    enforce(conn, "developer", "egress", "evil.example.com", audit=audit,
-            actor_id=admin.id, namespace="research", intent="fetch docs")  # no raise
+    enforce(conn, admin, "egress", "evil.example.com", audit=audit,
+            namespace="research", intent="fetch docs")  # no raise
     assert len([e for e in query_events(conn) if e.recipe == "denied"]) == 1

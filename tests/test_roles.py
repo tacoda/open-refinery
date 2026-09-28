@@ -66,17 +66,26 @@ def test_at_least_fails_closed_on_an_unknown_role():
     assert at_least(conn, "senior", "developer") is False
 
 
-def test_at_least_gates_enabling_a_pack():
-    """`at_least` is role *rank*, and after 3.0 the only things that read it are
-    pack enablement and the proposal chain — not anything that ships a change.
-    Authorizing work is `authority.py` and the permissions on the person."""
+def test_role_rank_no_longer_decides_anything_that_ships(monkeypatch):
+    """After 3.0 the only thing reading role *rank* is the governance proposal
+    chain, which uses it as ordering — who signs after whom. Nothing that gates
+    an action reads it: policies match permissions, packs need approve:charter,
+    and granting a preset compares what you hold."""
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+    from open_refinery import grants_beyond
     from open_refinery.packs import enable_pack
 
     conn = connect("sqlite:///:memory:")
-    dev, _ = create_user(conn, "dev@x.dev", "pw", "developer")
-    platform, _ = create_user(conn, "platform@x.dev", "pw", "platform")
+    admin, _ = create_user(conn, "admin@x.dev", "pw", "admin")
+    lead, _ = create_user(conn, "lead@x.dev", "pw", "lead")
 
-    # `ci-cd` is a platform-level pack; a developer may not turn it on
-    with pytest.raises(PolicyDenied):
-        enable_pack(conn, "ci-cd", dev)
-    assert enable_pack(conn, "ci-cd", platform) == {"key": "ci-cd", "enabled": True}
+    # admin outranks lead and still may not touch the standards
+    with pytest.raises(PolicyDenied, match="approve:charter"):
+        enable_pack(conn, "tdd", admin)
+    enable_pack(conn, "tdd", lead)
+
+    # ...nor mint an agent that approves code, which it does not hold itself
+    assert grants_beyond(conn, "developer", admin) == [
+        "approve:code", "propose:charter", "propose:code",
+        "propose:factory", "propose:harness", "run:factory"]
+    assert grants_beyond(conn, "auditor", admin) == []   # admin holds read:audit

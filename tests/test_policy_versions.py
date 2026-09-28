@@ -17,7 +17,7 @@ def setup():
 
 def test_create_and_delete_are_versioned_with_who_and_why():
     conn, admin = setup()
-    p = create_policy(conn, "deny", admin.id, role="developer", action="egress",
+    p = create_policy(conn, "deny", admin.id, applies_to="run:factory", action="egress",
                       resource="*", note="lock down egress")
     vs = list_policy_versions(conn, policy_id=p.id)
     assert len(vs) == 1 and vs[0].change == "created"
@@ -32,7 +32,7 @@ def test_create_and_delete_are_versioned_with_who_and_why():
 
 def test_point_in_time_reconstruction():
     conn, admin = setup()
-    p = create_policy(conn, "deny", admin.id, role="developer", action="invoke", resource="*")
+    p = create_policy(conn, "deny", admin.id, applies_to="run:factory", action="invoke", resource="*")
     t_mid = now_iso()                       # snapshot: policy is live here
     delete_policy(conn, p.id, changed_by=admin.id)
 
