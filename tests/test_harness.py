@@ -8,7 +8,8 @@ only reason they can be tested at all.
 import pytest
 
 from open_refinery.pipeline import phases
-from open_refinery.pipeline.agent import INTERRUPTS, interrupts_for, _provider_of
+from open_refinery.models_port import provider_of
+from open_refinery.pipeline.agent import INTERRUPTS, interrupts_for
 from open_refinery.pipeline.middleware import Governed
 from open_refinery.store import SqliteSink, connect
 from open_refinery.users import create_user, ensure_presets
@@ -99,6 +100,20 @@ def test_a_team_can_narrow_a_grant():
     session.commit()
 
     assert not phases.resolve(session, "run").may_run
+
+
+def test_one_registry_answers_for_both_call_sites():
+    """There were two provider lists and they disagreed: /execute knew OpenAI
+    and a harness turn did not, so the same target behaved differently
+    depending on which path reached it."""
+    from open_refinery import executor
+    from open_refinery.models_port import PROVIDERS
+
+    assert provider_of("gpt-5.5").key == "openai"
+    assert provider_of("claude-opus-5").key == "anthropic"
+    # the executor no longer keeps its own
+    assert not hasattr(executor, "MODEL_BACKENDS")
+    assert len(PROVIDERS) >= 5
 
 
 def test_the_catalog_reports_what_each_phase_may_do():
@@ -194,19 +209,33 @@ def test_nested_arguments_are_scanned_not_just_the_top_level(governed):
 
 # --- the dependency boundary ------------------------------------------------
 
-def test_only_agent_py_touches_the_harness_framework():
-    """deepagents is pre-1.0 and carries pillar 2, so an upstream API change has
-    to have a one-file blast radius. Mentioning it in a comment is fine;
-    importing it is not."""
+def test_only_agent_py_imports_deepagents():
+    """deepagents is pre-1.0, moves fast, and carries pillar 2 — so an upstream
+    API change has to have a one-file blast radius. Mentioning it in a comment
+    is fine; importing it is not."""
     import pathlib
     import re
 
     root = pathlib.Path("src/open_refinery")
-    importing = re.compile(r"^\s*(?:from|import)\s+(deepagents|langchain|langgraph)",
+    importing = re.compile(r"^\s*(?:from|import)\s+(deepagents|langgraph)",
                            re.MULTILINE)
     offenders = sorted(p.name for p in root.rglob("*.py")
                        if importing.search(p.read_text()) and p.name != "agent.py")
     assert offenders == [], offenders
+
+
+def test_langchain_is_confined_to_the_two_files_that_need_it():
+    """A looser boundary, deliberately: `models_port` exists to be a model
+    abstraction, so depending on one is its job. `agent.py` adapts the tool-call
+    hook. Nothing else should know either library exists."""
+    import pathlib
+    import re
+
+    root = pathlib.Path("src/open_refinery")
+    importing = re.compile(r"^\s*(?:from|import)\s+langchain", re.MULTILINE)
+    offenders = sorted(p.name for p in root.rglob("*.py")
+                       if importing.search(p.read_text()))
+    assert offenders == ["agent.py", "models_port.py"], offenders
 
 
 def test_the_pipeline_works_without_the_harness_installed():

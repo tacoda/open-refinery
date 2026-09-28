@@ -3,6 +3,46 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [2.21.0] — 2026-09-27
+
+*Providers, models, forges and trackers — as ports. **9 → 19 providers**, and
+adding the next one is a single entry.*
+
+### Fixed
+- **Two provider lists disagreed.** `executor.py` knew Anthropic and OpenAI;
+  `pipeline/agent.py` knew only Anthropic. A target routed to OpenAI worked for
+  `/execute` and **failed inside a harness turn** — the same target, a different
+  answer depending on which path reached it. One registry now
+  (`models_port.py`), read by both, with a test asserting neither keeps its own.
+- **A gateway's suggested models did not route back to it.** OpenRouter
+  suggested `anthropic/claude-sonnet-5`, which resolved to *Anthropic* and asked
+  for the wrong key; Groq's suggestions resolved to nobody. Found by a port
+  contract test, not by a user.
+
+### Added
+- **`models_port.py`** — one model port, nine providers: Anthropic · OpenAI ·
+  Google · Groq · Mistral · DeepSeek · OpenRouter · Azure OpenAI · Ollama.
+  Routing is by longest prefix, so a provider adding `gpt-oss-` does not lose to
+  `gpt-`, and an explicit `provider/model` always beats a guess. One code path
+  via `init_chat_model`, so adding a provider is an entry rather than another
+  `if provider ==` branch — which is the branch that let the two seams drift.
+- **Two more forges**: **Gitea/Forgejo** and **Bitbucket**. Each is twenty lines
+  because the seam already asks the four questions — open a request, read its
+  state, read what people said, say something back.
+- **`trackers.py`** — the loosest seam, now a protocol. It was a dict of dicts,
+  so "does this one list issues?" was a key lookup. Adds **GitLab Issues** and
+  **Shortcut** alongside GitHub Issues, Jira and Linear, and every tracker can
+  hand over its columns for a process to adopt.
+- **The connect screen is derived from the ports**, not repeated beside them.
+  That list was written twice and drifted; now a provider added to a port shows
+  up in Connections without anybody remembering to add it.
+- **`tests/test_ports.py`** — the contract each seam keeps: every model routes,
+  every suggestion routes *back*, every forge answers all four questions, every
+  tracker satisfies the protocol, and every provider reaches the connect screen
+  saying what its credential must carry.
+
+750 tests pass.
+
 ## [2.20.0] — 2026-09-27
 
 *Phase 5 on the [road to 3.0](docs/PLAN-3.0.md): the harness. A phase now runs a

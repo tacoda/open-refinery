@@ -72,96 +72,29 @@ def stub_backend(target, credential, payload: str) -> dict:
     return {"output": f"[{target.kind}:{target.endpoint}] {payload}", "units": 1}
 
 
-DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-8"
-
-
 def _key(credential: dict) -> str | None:
-    """A target's secret, however it was connected — API key or OAuth token."""
-    return credential.get("api_key") or credential.get("token") or credential.get("access_token")
-
-
-def _provider(target, credential: dict) -> str:
-    """Which model provider a target uses — explicit credential wins, else the
-    model-id prefix on the endpoint."""
-    if credential.get("provider"):
-        return credential["provider"]
-    ep = (target.endpoint or "").lower()
-    if ep.startswith("claude") or ep.startswith("anthropic"):
-        return "anthropic"
-    if ep.startswith(("gpt", "o1", "o3", "o4")):
-        return "openai"
-    return ""
-
-
-def anthropic_backend(target, credential: dict, payload: str) -> dict:
-    """Real Anthropic Messages API call. Honors a target's output_schema via
-    structured outputs. Returns {"output": text|dict, "units": output_tokens}."""
-    try:
-        import anthropic
-    except ModuleNotFoundError as exc:  # optional dependency
-        raise RuntimeError("anthropic SDK not installed — `pip install open-refinery[providers]`") from exc
-
-    client = anthropic.Anthropic(api_key=_key(credential))
-    model = target.endpoint or DEFAULT_ANTHROPIC_MODEL
-
-    kwargs: dict = {"model": model, "max_tokens": 16000,
-                    "messages": [{"role": "user", "content": payload}]}
-    if target.output_schema:  # constrain the response to the declared shape
-        kwargs["output_config"] = {"format": {"type": "json_schema", "schema": target.output_schema}}
-
-    resp = client.messages.create(**kwargs)
-    if getattr(resp, "stop_reason", None) == "refusal":
-        raise RuntimeError("model refused the request")
-
-    text = next((b.text for b in resp.content if getattr(b, "type", None) == "text"), "")
-    if target.output_schema:
-        import json
-        output = json.loads(text)  # format guarantees valid JSON
-    else:
-        output = text
-    units = getattr(resp.usage, "output_tokens", 0) or 0
-    return {"output": output, "units": int(units)}
-
-
-def openai_backend(target, credential: dict, payload: str) -> dict:
-    """Real OpenAI Chat Completions call. Honors output_schema via a json_schema
-    response format. Returns {"output": text|dict, "units": completion_tokens}."""
-    try:
-        import openai
-    except ModuleNotFoundError as exc:  # optional dependency
-        raise RuntimeError("openai SDK not installed — `pip install open-refinery[providers]`") from exc
-
-    client = openai.OpenAI(api_key=_key(credential))
-    kwargs: dict = {"model": target.endpoint, "max_tokens": 16000,
-                    "messages": [{"role": "user", "content": payload}]}
-    if target.output_schema:
-        kwargs["response_format"] = {"type": "json_schema", "json_schema": {
-            "name": "output", "schema": target.output_schema, "strict": True}}
-
-    resp = client.chat.completions.create(**kwargs)
-    text = resp.choices[0].message.content or ""
-    if target.output_schema:
-        import json
-        output = json.loads(text)
-    else:
-        output = text
-    units = getattr(resp.usage, "completion_tokens", 0) or 0
-    return {"output": output, "units": int(units)}
-
-
-# Registered model providers, connected by API key or OAuth token. MCP/API keep
-# the stub until their transports land.
-MODEL_BACKENDS = {"anthropic": anthropic_backend, "openai": openai_backend}
+    """A target's secret, however it was connected."""
+    return credential.get("api_key") or credential.get("token")
 
 
 def model_backend(target, credential: dict, payload: str) -> dict:
-    """Dispatch a model target to its provider; fall back to the stub when there's
-    no credential or no real backend (keeps a fresh install working offline)."""
-    provider = _provider(target, credential)
-    backend = MODEL_BACKENDS.get(provider)
-    if backend is None or not _key(credential):
+    """Dispatch a model target to its provider.
+
+    Providers live in `models_port`, which the **harness** reads too — they used
+    to each keep their own list, so a target routed to OpenAI worked here and
+    failed inside a turn. Falls back to the echo stub when there is no
+    credential or no provider, which keeps a fresh install working offline.
+    """
+    from .models_port import UnknownModel, call, provider_of
+
+    provider = provider_of(target.endpoint or "")
+    if provider is None or not (_key(credential) or credential.get("base_url")):
         return stub_backend(target, credential, payload)
-    return backend(target, credential, payload)
+    try:
+        return call(target.endpoint, credential, payload,
+                    output_schema=target.output_schema or None)
+    except (UnknownModel, ImportError) as exc:
+        raise RuntimeError(f"cannot reach {target.endpoint!r}: {exc}") from None
 
 
 def _http_post(url: str, body: bytes, headers: dict) -> tuple[int, str]:

@@ -246,7 +246,99 @@ class Local:
         path.write_text(f"{body}\n---\n{MARKER}\n\n{text}\n")
 
 
-FORGES: dict[str, Forge] = {"github": GitHub(), "gitlab": GitLab(), "local": Local()}
+class Gitea:
+    """Gitea / Forgejo — GitHub's API shape, on your own host.
+
+    Which is why this is twenty lines rather than two hundred: the seam already
+    asks the four questions, so a new forge answers them and nothing else moves.
+    """
+
+    name = "gitea"
+    remote = "origin"
+
+    def _api(self, cred: dict) -> str:
+        return (cred.get("base_url") or "https://codeberg.org").rstrip("/") + "/api/v1"
+
+    def _headers(self, cred: dict) -> dict:
+        return {"Authorization": f"token {cred.get('token', '')}",
+                "Content-Type": "application/json"}
+
+    def open_pr(self, cred, repo, *, branch, base, title, body) -> PullRequest:
+        data = _request(f"{self._api(cred)}/repos/{repo}/pulls", self._headers(cred),
+                        data={"title": title, "body": body, "head": branch, "base": base},
+                        method="POST")
+        return PullRequest(number=str(data["number"]), url=data["html_url"])
+
+    def pr_state(self, cred, repo, number) -> PullRequest:
+        data = _request(f"{self._api(cred)}/repos/{repo}/pulls/{number}",
+                        self._headers(cred))
+        state = MERGED if data.get("merged") else (
+            CLOSED if data.get("state") == "closed" else OPEN)
+        return PullRequest(number=str(number), url=data["html_url"], state=state)
+
+    def comments(self, cred, repo, number) -> list[Comment]:
+        rows = _request(f"{self._api(cred)}/repos/{repo}/issues/{number}/comments",
+                        self._headers(cred))
+        return [Comment(author=(c.get("user") or {}).get("login", ""),
+                        body=c.get("body", ""), ours=MARKER in (c.get("body") or ""))
+                for c in rows]
+
+    def say(self, cred, repo, number, text) -> None:
+        _request(f"{self._api(cred)}/repos/{repo}/issues/{number}/comments",
+                 self._headers(cred), data={"body": f"{MARKER}\n\n{text}"},
+                 method="POST")
+
+
+class Bitbucket:
+    """Bitbucket Cloud. Its own shapes: `id` not `number`, and state is a word."""
+
+    name = "bitbucket"
+    remote = "origin"
+    api = "https://api.bitbucket.org/2.0"
+
+    def _headers(self, cred: dict) -> dict:
+        import base64
+        pair = f"{cred.get('email', '')}:{cred.get('token', '')}".encode()
+        return {"Authorization": f"Basic {base64.b64encode(pair).decode()}",
+                "Content-Type": "application/json"}
+
+    def open_pr(self, cred, repo, *, branch, base, title, body) -> PullRequest:
+        data = _request(f"{self.api}/repositories/{repo}/pullrequests",
+                        self._headers(cred),
+                        data={"title": title, "description": body,
+                              "source": {"branch": {"name": branch}},
+                              "destination": {"branch": {"name": base}}},
+                        method="POST")
+        return PullRequest(number=str(data["id"]),
+                           url=data["links"]["html"]["href"])
+
+    def pr_state(self, cred, repo, number) -> PullRequest:
+        data = _request(f"{self.api}/repositories/{repo}/pullrequests/{number}",
+                        self._headers(cred))
+        state = {"MERGED": MERGED, "DECLINED": CLOSED,
+                 "SUPERSEDED": CLOSED}.get(data.get("state", ""), OPEN)
+        return PullRequest(number=str(number),
+                           url=data["links"]["html"]["href"], state=state)
+
+    def comments(self, cred, repo, number) -> list[Comment]:
+        data = _request(f"{self.api}/repositories/{repo}/pullrequests/{number}/comments",
+                        self._headers(cred))
+        rows = data.get("values", []) if isinstance(data, dict) else data
+        return [Comment(author=(c.get("user") or {}).get("nickname", ""),
+                        body=(c.get("content") or {}).get("raw", ""),
+                        ours=MARKER in ((c.get("content") or {}).get("raw") or ""))
+                for c in rows]
+
+    def say(self, cred, repo, number, text) -> None:
+        _request(f"{self.api}/repositories/{repo}/pullrequests/{number}/comments",
+                 self._headers(cred),
+                 data={"content": {"raw": f"{MARKER}\n\n{text}"}}, method="POST")
+
+
+FORGES: dict[str, Forge] = {
+    "github": GitHub(), "gitlab": GitLab(), "gitea": Gitea(),
+    "bitbucket": Bitbucket(), "local": Local(),
+}
 
 
 def for_repo(git_url: str, configured: str = "") -> Forge:
@@ -262,17 +354,17 @@ def for_repo(git_url: str, configured: str = "") -> Forge:
                              f"(have {', '.join(FORGES)})")
         return driver
     url = (git_url or "").lower()
-    if "github.com" in url:
-        return FORGES["github"]
-    if "gitlab.com" in url:
-        return FORGES["gitlab"]
+    for host, key in (("github.com", "github"), ("gitlab.com", "gitlab"),
+                      ("bitbucket.org", "bitbucket"), ("codeberg.org", "gitea")):
+        if host in url:
+            return FORGES[key]
     return FORGES["local"]
 
 
 def slug(git_url: str) -> str:
     """`owner/name` from a git URL, which is what the forge APIs address."""
     url = (git_url or "").strip()
-    for host in ("github.com", "gitlab.com"):
+    for host in ("github.com", "gitlab.com", "bitbucket.org", "codeberg.org"):
         if host in url:
             tail = url.split(host, 1)[1].lstrip(":/")
             return tail[:-4] if tail.endswith(".git") else tail

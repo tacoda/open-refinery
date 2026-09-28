@@ -134,40 +134,37 @@ def charter_of(session, repo: Repository) -> list[str]:
 
 
 def model_for(session, run: Run, phase: Phase, pipeline_model: str = ""):
-    """The model this phase runs on, as a LangChain chat model.
+    """The model this phase runs on.
 
-    Routed through the **actor's own credential** — so cost attributes to the
-    person who started the run, and a run cannot quietly spend somebody else's
-    budget.
+    Routed through the **actor's own credential**, so cost attributes to the
+    person who started the run and a run cannot quietly spend somebody else's
+    budget. Which provider that is comes from `models_port`, which both this
+    and `/execute` read — they used to each keep their own list and disagree.
     """
     from .. import credentials as creds
+    from ..models_port import UnknownModel, provider_of
 
     wanted = phase.model or pipeline_model
     if not wanted:
         raise HarnessError("no model set for this phase or pipeline")
 
-    provider = _provider_of(wanted)
+    provider = provider_of(wanted)
+    if provider is None:
+        raise HarnessError(f"no provider claims the model {wanted!r}")
+
     try:
-        credential = creds.for_actor(session, run.actor_id, provider)
+        credential = creds.for_actor(session, run.actor_id, provider.key)
     except creds.NoCredential as exc:
         raise HarnessError(str(exc)) from None
 
-    key = credential.get("api_key") or credential.get("token") or ""
-    if provider == "anthropic":
-        from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=wanted, api_key=key, max_tokens=16000)
-    raise HarnessError(f"no harness backend for provider {provider!r}")
-
-
-def _provider_of(model: str) -> str:
-    name = (model or "").lower()
-    if name.startswith(("claude", "anthropic")):
-        return "anthropic"
-    if name.startswith(("gpt", "o1", "o3", "o4")):
-        return "openai"
-    if name.startswith("gemini"):
-        return "google"
-    return "anthropic"
+    from ..models_port import chat
+    try:
+        return chat(wanted, credential)
+    except UnknownModel as exc:
+        raise HarnessError(str(exc)) from None
+    except ImportError as exc:
+        raise HarnessError(
+            f"{provider.label} needs a package that is not installed: {exc}") from None
 
 
 def run_phase(session, run: Run, stage, ctx, *, audit, session_factory,

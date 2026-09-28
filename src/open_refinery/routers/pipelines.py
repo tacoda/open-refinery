@@ -336,14 +336,14 @@ def _phase_runner(session, run):
 
 def _model_of(graph, session, run) -> str:
     """Which provider this run's phases would need a key for."""
-    from ..pipeline.agent import _provider_of
+    from ..models_port import provider_of
     from ..pipeline.phases import resolve
 
     if graph is None:
         return ""
     models = {resolve(session, s.phase).model or graph.model
               for s in graph.stages.values() if s.phase}
-    providers = {_provider_of(m) for m in models if m}
+    providers = {p.key for p in (provider_of(m) for m in models if m) if p}
     return next(iter(providers), "")
 
 

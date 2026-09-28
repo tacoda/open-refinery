@@ -1,148 +1,108 @@
-import sys
-import types
+"""Model targets, through the one provider port.
+
+These used to mock the Anthropic and OpenAI SDKs directly, because the executor
+kept its own list of backends. It no longer does: `models_port` answers for both
+`/execute` and a harness turn, so what is worth testing here is the **routing
+and the fallback**, not somebody else's client.
+"""
 
 import pytest
 
-from open_refinery.executor import anthropic_backend, model_backend, openai_backend
+from open_refinery.executor import api_backend, model_backend, stub_backend
 from open_refinery.models import Target
+from open_refinery.models_port import PROVIDERS, provider_of
 
 
-def target(endpoint="claude-opus-4-8", output_schema=None):
+def target(endpoint="claude-opus-5", output_schema=None):
     return Target(name="t", kind="model", endpoint=endpoint, owner_id="o",
                   output_schema=output_schema or {})
 
 
-def fake_anthropic(monkeypatch, *, text="hi", tokens=7, stop_reason="end_turn"):
-    """Inject a stand-in `anthropic` module; return a dict capturing call kwargs."""
-    seen: dict = {}
+# --- routing ----------------------------------------------------------------
 
-    class _Block:
-        type = "text"
-
-        def __init__(self, t):
-            self.text = t
-
-    class _Resp:
-        def __init__(self):
-            self.content = [_Block(text)]
-            self.stop_reason = stop_reason
-            self.usage = types.SimpleNamespace(output_tokens=tokens)
-
-    class _Messages:
-        def create(self, **kwargs):
-            seen.update(kwargs)
-            return _Resp()
-
-    class _Client:
-        def __init__(self, api_key=None):
-            seen["api_key"] = api_key
-            self.messages = _Messages()
-
-    mod = types.ModuleType("anthropic")
-    mod.Anthropic = _Client
-    monkeypatch.setitem(sys.modules, "anthropic", mod)
-    return seen
+@pytest.mark.parametrize("model,expected", [
+    ("claude-opus-5", "anthropic"),
+    ("gpt-5.5", "openai"),
+    ("o3-mini", "openai"),
+    ("gemini-3.6-flash", "google"),
+    ("deepseek-chat", "deepseek"),
+    ("mistral-large-latest", "mistral"),
+    ("openrouter/z-ai/glm-5.2", "openrouter"),
+    ("ollama/qwen3", "ollama"),
+])
+def test_a_model_id_routes_to_its_provider(model, expected):
+    assert provider_of(model).key == expected
 
 
-def fake_openai(monkeypatch, *, text="hi", tokens=5):
-    seen: dict = {}
-
-    class _Msg:
-        def __init__(self, c):
-            self.content = c
-
-    class _Choice:
-        def __init__(self, c):
-            self.message = _Msg(c)
-
-    class _Resp:
-        def __init__(self):
-            self.choices = [_Choice(text)]
-            self.usage = types.SimpleNamespace(completion_tokens=tokens)
-
-    class _Completions:
-        def create(self, **kwargs):
-            seen.update(kwargs)
-            return _Resp()
-
-    class _Chat:
-        completions = _Completions()
-
-    class _Client:
-        def __init__(self, api_key=None):
-            seen["api_key"] = api_key
-            self.chat = _Chat()
-
-    mod = types.ModuleType("openai")
-    mod.OpenAI = _Client
-    monkeypatch.setitem(sys.modules, "openai", mod)
-    return seen
+def test_an_explicit_prefix_beats_a_guess():
+    """`openrouter/anthropic/claude-…` is OpenRouter's, not Anthropic's."""
+    assert provider_of("openrouter/anthropic/claude-sonnet-5").key == "openrouter"
 
 
-def test_openai_free_text(monkeypatch):
-    seen = fake_openai(monkeypatch, text="reply", tokens=9)
-    out = openai_backend(target(endpoint="gpt-5"), {"api_key": "sk-o"}, "hi")
-    assert out == {"output": "reply", "units": 9}
-    assert seen["model"] == "gpt-5" and "response_format" not in seen
+def test_an_unknown_model_belongs_to_nobody():
+    assert provider_of("some-model-nobody-ships") is None
 
 
-def test_openai_structured_output(monkeypatch):
-    seen = fake_openai(monkeypatch, text='{"n": 1}')
-    schema = {"type": "object", "properties": {"n": {"type": "integer"}}, "required": ["n"]}
-    out = openai_backend(target(endpoint="gpt-5", output_schema=schema), {"api_key": "sk-o"}, "hi")
-    assert out["output"] == {"n": 1}
-    assert seen["response_format"]["json_schema"]["schema"] == schema
+def test_adding_a_provider_is_one_entry():
+    """The property that makes this a port: every provider carries what the
+    connect screen and the router both need, in one place."""
+    for key, provider in PROVIDERS.items():
+        assert provider.needs, key
+        assert provider.prefixes or provider.models, key
 
 
-def test_dispatch_openai_by_endpoint(monkeypatch):
-    fake_openai(monkeypatch, text="viaopenai")
-    out = model_backend(target(endpoint="gpt-5"), {"api_key": "sk-o"}, "hi")
-    assert out["output"] == "viaopenai"
+# --- the executor's dispatch ------------------------------------------------
+
+def test_a_target_with_a_credential_calls_the_provider(monkeypatch):
+    seen = {}
+
+    def fake_call(model, credential, payload, **kw):
+        seen.update(model=model, credential=credential, payload=payload)
+        return {"output": "answered", "units": 11}
+
+    monkeypatch.setattr("open_refinery.models_port.call", fake_call)
+    out = model_backend(target(endpoint="gpt-5.5"), {"api_key": "sk-o"}, "hi")
+
+    assert out == {"output": "answered", "units": 11}
+    assert seen["model"] == "gpt-5.5" and seen["credential"]["api_key"] == "sk-o"
 
 
-def test_oauth_token_connects(monkeypatch):
-    # a target connected via OAuth stores an access_token, not an api_key
-    seen = fake_anthropic(monkeypatch, text="oauthed")
-    out = model_backend(target(), {"provider": "anthropic", "access_token": "oauth-tok"}, "hi")
-    assert out["output"] == "oauthed" and seen["api_key"] == "oauth-tok"
+def test_a_structured_target_asks_for_its_schema(monkeypatch):
+    """A persisted answer with a shape is stored with that shape."""
+    seen = {}
+
+    def fake_call(model, credential, payload, *, output_schema=None, **kw):
+        seen["schema"] = output_schema
+        return {"output": {"passed": True}, "units": 1}
+
+    monkeypatch.setattr("open_refinery.models_port.call", fake_call)
+    schema = {"type": "object", "properties": {"passed": {"type": "boolean"}}}
+    out = model_backend(target(endpoint="claude-opus-5", output_schema=schema),
+                        {"api_key": "sk"}, "hi")
+
+    assert seen["schema"] == schema and out["output"] == {"passed": True}
 
 
-def test_anthropic_free_text(monkeypatch):
-    seen = fake_anthropic(monkeypatch, text="answer", tokens=12)
-    out = anthropic_backend(target(), {"api_key": "sk-x"}, "hello")
-    assert out == {"output": "answer", "units": 12}
-    assert seen["model"] == "claude-opus-4-8" and seen["api_key"] == "sk-x"
-    assert "output_config" not in seen  # no schema → no structured request
+def test_no_credential_falls_back_to_the_stub():
+    """A fresh install works offline — that is what makes the loop inspectable
+    before anybody has paid for anything."""
+    out = model_backend(target(endpoint="claude-opus-5"), {}, "hello")
+    assert out == stub_backend(target(endpoint="claude-opus-5"), {}, "hello")
 
 
-def test_anthropic_structured_output(monkeypatch):
-    seen = fake_anthropic(monkeypatch, text='{"ok": true}')
-    schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]}
-    out = anthropic_backend(target(output_schema=schema), {"api_key": "sk-x"}, "hi")
-    assert out["output"] == {"ok": True}
-    assert seen["output_config"]["format"]["schema"] == schema
+def test_a_model_nobody_claims_falls_back_to_the_stub():
+    out = model_backend(target(endpoint="not-a-real-model"), {"api_key": "sk"}, "hi")
+    assert "not-a-real-model" in out["output"]
 
 
-def test_anthropic_refusal_raises(monkeypatch):
-    fake_anthropic(monkeypatch, stop_reason="refusal")
-    with pytest.raises(RuntimeError):
-        anthropic_backend(target(), {"api_key": "sk-x"}, "hi")
-
-
-def test_dispatch_uses_anthropic_with_credential(monkeypatch):
-    fake_anthropic(monkeypatch, text="real")
-    out = model_backend(target(), {"api_key": "sk-x"}, "hi")
-    assert out["output"] == "real"  # dispatched to the real backend
-
-
-def test_dispatch_falls_back_to_stub_without_credential(monkeypatch):
-    out = model_backend(target(), {}, "hi")           # no key → stub
-    assert out["output"].startswith("[model:claude-opus-4-8]")
-
-
-def test_dispatch_unknown_provider_stubs(monkeypatch):
-    out = model_backend(target(endpoint="mistral-large"), {"api_key": "sk-x"}, "hi")  # no backend
-    assert out["output"].startswith("[model:mistral-large]")
+def test_a_self_hosted_target_needs_no_key(monkeypatch):
+    """Ollama takes a base URL instead — so "has a credential" cannot mean
+    "has an api_key"."""
+    monkeypatch.setattr("open_refinery.models_port.call",
+                        lambda *a, **k: {"output": "local", "units": 0})
+    out = model_backend(target(endpoint="ollama/qwen3"),
+                        {"base_url": "http://localhost:11434"}, "hi")
+    assert out["output"] == "local"
 
 
 def test_api_backend_posts_and_parses(monkeypatch):

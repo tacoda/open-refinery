@@ -66,64 +66,92 @@ def _secret(name: str, label: str, placeholder: str = "") -> Field_:
     return Field_(name=name, label=label, secret=True, placeholder=placeholder)
 
 
+def _model_providers() -> dict[str, Provider]:
+    """The model family, **derived from `models_port`** rather than repeated.
+
+    This list used to be written twice — here and in the router — and the two
+    drifted. Adding a provider is one entry there, and this screen follows.
+    """
+    from .models_port import PROVIDERS as MODELS
+
+    out = {}
+    for key, m in MODELS.items():
+        fields = []
+        if not (m.key == "ollama"):            # a self-hosted host needs no key
+            fields.append(_secret("api_key", "API key"))
+        if m.needs_base_url:
+            fields.append(Field_("base_url", "Base URL", required=(m.key == "ollama"),
+                                 placeholder=m.default_base_url))
+        out[key] = Provider(key, MODEL, m.label, tuple(fields),
+                            mint_url=m.mint_url, needs=m.needs,
+                            models=tuple(m.models), shareable=m.shareable)
+    return out
+
+
+def _forge_providers() -> dict[str, Provider]:
+    """The forge family, one entry per driver in `pipeline.forge.FORGES`.
+
+    A forge token is an **identity** — it is what authors the pull request — so
+    none of these are shareable, however convenient that would be.
+    """
+    TOKEN = _secret("token", "Personal access token")
+    shapes: dict[str, tuple] = {
+        "github": ((TOKEN,),
+                   "https://github.com/settings/tokens?type=beta",
+                   "Contents: read/write · Pull requests: read/write · Metadata: read"),
+        "gitlab": ((TOKEN,),
+                   "https://gitlab.com/-/user_settings/personal_access_tokens",
+                   "scopes: api, write_repository"),
+        "gitea": ((Field_("base_url", "Host", placeholder="https://codeberg.org"), TOKEN),
+                  "", "a token with repository and issue write access"),
+        "bitbucket": ((Field_("email", "Account email"),
+                       _secret("token", "App password")),
+                      "https://bitbucket.org/account/settings/app-passwords/",
+                      "an app password with Pull requests: write"),
+        "local": ((), "", "nothing — the request is written as a file in the repository"),
+    }
+    labels = {"github": "GitHub", "gitlab": "GitLab", "gitea": "Gitea / Forgejo",
+              "bitbucket": "Bitbucket", "local": "Local (no forge)"}
+    return {key: Provider(key, FORGE, labels.get(key, key), fields,
+                          mint_url=mint, needs=needs)
+            for key, (fields, mint, needs) in shapes.items()}
+
+
+def _tracker_providers() -> dict[str, Provider]:
+    """The tracker family, one entry per driver in `trackers.TRACKERS`."""
+    TOKEN = _secret("token", "API token")
+    REPO = Field_("repo", "Project", required=False, placeholder="owner/name")
+    shapes: dict[str, tuple] = {
+        "github-issues": ((_secret("token", "Personal access token"), REPO),
+                          "https://github.com/settings/tokens?type=beta",
+                          "Issues: read/write · Metadata: read. Blank project = issues assigned to you"),
+        "gitlab-issues": ((TOKEN, REPO,
+                           Field_("base_url", "Host", required=False,
+                                  placeholder="https://gitlab.com")),
+                          "https://gitlab.com/-/user_settings/personal_access_tokens",
+                          "scopes: api. Blank project = issues assigned to you"),
+        "jira": ((Field_("site", "Site", placeholder="your-team.atlassian.net"),
+                  Field_("email", "Account email"), TOKEN,
+                  Field_("jql", "JQL", required=False,
+                         placeholder="assignee=currentUser() AND resolution=Unresolved")),
+                 "https://id.atlassian.com/manage-profile/security/api-tokens",
+                 "an API token for the account above"),
+        "linear": ((_secret("token", "API key", "lin_api_…"),),
+                   "https://linear.app/settings/api", "a personal API key"),
+        "shortcut": ((TOKEN,), "https://app.shortcut.com/settings/account/api-tokens",
+                     "a Shortcut API token"),
+    }
+    labels = {"github-issues": "GitHub Issues", "gitlab-issues": "GitLab Issues",
+              "jira": "Jira", "linear": "Linear", "shortcut": "Shortcut"}
+    return {key: Provider(key, TRACKER, labels.get(key, key), fields,
+                          mint_url=mint, needs=needs)
+            for key, (fields, mint, needs) in shapes.items()}
+
+
+# The catalog, assembled from the three ports. Nothing is listed twice, so a
+# provider added to a port shows up here without anybody remembering to.
 PROVIDERS: dict[str, Provider] = {
-    # --- models -----------------------------------------------------------
-    "anthropic": Provider(
-        "anthropic", MODEL, "Anthropic",
-        (_secret("api_key", "API key", "sk-ant-…"),),
-        mint_url="https://console.anthropic.com/settings/keys",
-        needs="a key with access to the Messages API",
-        models=("claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"),
-        shareable=True),
-    "openai": Provider(
-        "openai", MODEL, "OpenAI",
-        (_secret("api_key", "API key", "sk-…"),),
-        mint_url="https://platform.openai.com/api-keys",
-        needs="a key with access to chat completions",
-        models=("gpt-5.5", "gpt-5-mini"),
-        shareable=True),
-    "ollama": Provider(
-        "ollama", MODEL, "Ollama (self-hosted)",
-        (Field_("base_url", "Base URL", placeholder="http://localhost:11434"),),
-        needs="no key — a reachable Ollama host",
-        shareable=True),
-
-    # --- forges -----------------------------------------------------------
-    "github": Provider(
-        "github", FORGE, "GitHub",
-        (_secret("token", "Personal access token", "github_pat_…"),),
-        mint_url="https://github.com/settings/tokens?type=beta",
-        needs="Contents: read/write · Pull requests: read/write · Metadata: read"),
-    "gitlab": Provider(
-        "gitlab", FORGE, "GitLab",
-        (_secret("token", "Personal access token", "glpat-…"),),
-        mint_url="https://gitlab.com/-/user_settings/personal_access_tokens",
-        needs="scopes: api, write_repository"),
-    "local": Provider(
-        "local", FORGE, "Local (no forge)",
-        (),
-        needs="nothing — the request is written as a file in the repository"),
-
-    # --- trackers ---------------------------------------------------------
-    "github-issues": Provider(
-        "github-issues", TRACKER, "GitHub Issues",
-        (_secret("token", "Personal access token", "github_pat_…"),
-         Field_("repo", "Repository", required=False, placeholder="owner/name")),
-        mint_url="https://github.com/settings/tokens?type=beta",
-        needs="Issues: read/write · Metadata: read. Leave Repository blank for issues assigned to you"),
-    "jira": Provider(
-        "jira", TRACKER, "Jira",
-        (Field_("site", "Site", placeholder="your-team.atlassian.net"),
-         Field_("email", "Account email", placeholder="you@example.com"),
-         _secret("token", "API token")),
-        mint_url="https://id.atlassian.com/manage-profile/security/api-tokens",
-        needs="an API token for the account above"),
-    "linear": Provider(
-        "linear", TRACKER, "Linear",
-        (_secret("token", "API key", "lin_api_…"),),
-        mint_url="https://linear.app/settings/api",
-        needs="a personal API key"),
-}
+    **_model_providers(), **_forge_providers(), **_tracker_providers()}
 
 
 class UnknownProvider(ValueError):
@@ -230,14 +258,32 @@ def _local_verify(cred: dict) -> dict:
 
 
 def verifier(key: str):
-    """The function that proves a credential works, or None if unverifiable."""
-    from . import integrations
+    """The function that proves a credential works, or None if unverifiable.
+
+    Each family answers for its own: trackers from `trackers.TRACKERS`, forges
+    and source hosts from `integrations.ADAPTERS`, models from the small checks
+    below — none of which needs a list kept in step by hand.
+    """
+    from . import integrations, trackers
+
+    if key in trackers.TRACKERS:
+        return trackers.get(key).verify
+
     builtin = {"anthropic": _anthropic_verify, "openai": _openai_verify,
                "ollama": _ollama_verify, "local": _local_verify}
     if key in builtin:
         return builtin[key]
+
     adapter = integrations.ADAPTERS.get(key) or {}
-    return adapter.get("verify")
+    if adapter.get("verify"):
+        return adapter["verify"]
+
+    provider = PROVIDERS.get(key)
+    if provider and provider.family == MODEL:
+        # Any model provider we cannot cheaply ping is accepted on the shape of
+        # its fields; the first real call is where a bad key surfaces.
+        return None
+    return None
 
 
 def verify_credential(key: str, credential: dict) -> dict:
