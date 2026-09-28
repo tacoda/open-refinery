@@ -32,12 +32,11 @@ def test_every_suggested_model_routes_back_to_its_own_provider():
             assert provider_of(model).key == key, (key, model)
 
 
-def test_one_registry_serves_both_the_executor_and_the_harness():
-    """The disagreement this file exists to prevent."""
-    from open_refinery import executor
+def test_the_harness_keeps_no_provider_list_of_its_own():
+    """The disagreement this file exists to prevent: a second provider list.
+    The other one went with the pre-3.0 execution path."""
     from open_refinery.pipeline import agent
 
-    assert not hasattr(executor, "MODEL_BACKENDS")
     assert not hasattr(agent, "_provider_of")
 
 

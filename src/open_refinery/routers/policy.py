@@ -64,13 +64,6 @@ def content_scan(body: ScanRequest, _: User = Depends(current_user)):
     clean, hits = scan_content(body.text)
     return {"clean": clean, "hits": hits}
 
-@router.post("/execute")
-def run_execute(body: ExecuteRequest, session: Session = Depends(get_session),
-                user: User = Depends(current_user)):
-    return execute(session, user.id, body.process_id, body.payload, SqliteSink(session),
-                  step=body.step, work_item_id=body.work_item_id,
-                  experiment_id=body.experiment_id, arm=body.arm)
-
 # --- auth ---
 # Humans: email + password (+ optional TOTP). Machines: API tokens. Services:
 # keys and PATs entered per user (see credentials.py). No authorization-code

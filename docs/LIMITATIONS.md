@@ -42,9 +42,11 @@ shape for parallelism is more workers running more runs, not one run split into
 pieces that have to be reassembled. A run is the unit that maps to a worktree,
 a branch and a pull request; splitting it loses that correspondence.
 
-**`max_turns` is a ceiling, not a budget.** Quotas refuse before a call is
-made, and windowed rate caps bound the rate — but nothing predicts what a run
-will cost before it starts.
+**`max_turns` is a ceiling, not a budget.** Nothing bounds what a run
+spends. The quota mechanism that used to exist governed `POST /execute`, which
+the factory never called, and went with it in 3.0; a per-run budget at the tool
+seam is the replacement and is not built yet. Until it is, bound cost outside
+the product — at the provider.
 
 ## The ladder
 

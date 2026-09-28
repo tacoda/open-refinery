@@ -27,7 +27,6 @@ from .approvals import approve as approve_request
 from .approvals import list_approvals, reject as reject_request, request_approval
 from .escalations import current_overdue
 from .attestations import AttestationFailed, AttestationMissing, attest
-from .executor import ExecutionError, execute
 from .integrations import (
     connectors,
     create_integration,
@@ -115,22 +114,7 @@ from .store import (
     verify_chain,
 )
 from .concurrency import ConcurrencyExceeded
-from .ledger import traffic_graph, usage_by_actor, usage_by_team
 from .teams import create_team, delete_team, list_teams, set_user_team
-from .targets import (
-    QuotaExceeded,
-    create_quota,
-    create_route,
-    create_target,
-    delete_route,
-    delete_target,
-    ROUTING_POLICY_KEY,
-    list_quotas,
-    list_routes,
-    list_targets,
-    routing_policy,
-    set_target_credential,
-)
 from .users import (
     DEFAULT_MIN_APPROVER_ROLE,
     DuplicateUser,
@@ -415,36 +399,6 @@ class SyncRequest(BaseModel):
     autostart: bool | None = None   # None = whatever the integration is set to
 
 
-class NewTarget(BaseModel):
-    name: str
-    kind: str
-    endpoint: str
-    credential: dict[str, str] | None = None
-    output_schema: dict | None = None
-    region: str = ""
-    compliance: list[str] = []
-    unit_cost: int = 0
-
-
-class RoutingPolicyBody(BaseModel):
-    require_region: str = ""
-    require_compliance: list[str] = []
-    prefer: str = "priority"        # priority | cost
-
-
-class NewRoute(BaseModel):
-    process_id: str
-    target_id: str
-    step: str | None = None
-    priority: int = 0
-
-
-class NewQuota(BaseModel):
-    target_id: str
-    limit: int
-    window_seconds: int = 0   # 0 = lifetime cap; >0 = rolling rate window
-
-
 class NewPolicy(BaseModel):
     effect: str = "allow"
     role: str = "*"
@@ -519,15 +473,6 @@ class ScanRequest(BaseModel):
     text: str
 
 
-class ExecuteRequest(BaseModel):
-    process_id: str
-    payload: str
-    step: str | None = None
-    work_item_id: str | None = None
-    experiment_id: str | None = None   # tag this run as an experiment sample
-    arm: str | None = None             # control | treatment
-
-
 # --- app ------------------------------------------------------------------
 
 # --- role authorization matrix -------------------------------------------
@@ -569,12 +514,10 @@ _EXC_CODES = (
     (ApprovalRequired, 409),
     (AttestationMissing, 409),
     (AttestationFailed, 409),
-    (QuotaExceeded, 429),
     (ConcurrencyExceeded, 429),
     (DeviceExpired, 400),
     (PolicyDenied, 403),
     (RoleInUse, 409),
-    (ExecutionError, 502),
     (UnknownWorkItem, 404),
     (ValueError, 400),
 )

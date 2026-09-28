@@ -73,7 +73,7 @@ def device_approve_route(body: DeviceApprove, session: Session = Depends(get_ses
     grant = device_approve(session, body.user_code, user, role)
     return {"status": "approved", "harness": harness_view(session.get(User, grant.agent_id))}
 
-# --- teams, usage ledger, cost attribution ---
+# --- teams ---
 @router.get("/teams")
 def get_teams(session: Session = Depends(get_session), _: User = Depends(current_user)):
     return list_teams(session)
@@ -94,10 +94,6 @@ def assign_team(user_id: str, body: AssignTeam, session: Session = Depends(get_s
                 _: User = Depends(sees_operations)):
     u = set_user_team(session, user_id, body.team_id)
     return {"id": u.id, "team_id": u.team_id}
-
-@router.get("/usage")
-def get_usage(session: Session = Depends(get_session), _: User = Depends(current_user)):
-    return {"by_team": usage_by_team(session), "by_actor": usage_by_actor(session)}
 
 @router.post("/authorize")
 def authorize(body: AuthorizeReq, session: Session = Depends(get_session),

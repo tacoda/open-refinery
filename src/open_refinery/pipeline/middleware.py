@@ -1,19 +1,20 @@
 """Governance, applied per tool call.
 
-This is what makes the factory open-refinery rather than an agent runner. The
-platform already governed the *call site* — RBAC, quotas, the content filter,
-the audit trail — and this puts the same governance one level down, around every
-tool a turn reaches for.
+This is what makes the factory open-refinery rather than an agent runner: every
+tool a turn reaches for goes through a grant, a predicate, a filter and the audit
+trail before it runs.
 
-Four things happen before a call runs, in this order, because each is cheaper
+**No spend ceiling lives here yet.** There is no per-run budget — `max_turns` is
+a turn cap, not a cost one. That is the next thing this seam needs.
+
+Three things happen before a call runs, in this order, because each is cheaper
 than the last:
 
 1. **the grant** — rung 1, already applied when the agent was built: a tool the
    phase never got cannot be called, so there is nothing here to refuse
 2. **the ladder** — rung 3: a deterministic predicate, refusing in the rule's
    own words
-3. **the filter** — the same `scan_content` the executor uses, over arguments
-4. **quota** — refused *before* consuming, so a blocked call costs nothing
+3. **the filter** — `scan_content`, over the call's arguments
 
 And one thing happens after: the call is **audited**, subject-linked to the run,
 whatever it returned.

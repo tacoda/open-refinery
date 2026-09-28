@@ -8,13 +8,9 @@ from open_refinery import (
     delete_team,
     in_flight,
     list_teams,
-    record_usage,
     set_user_team,
     slot,
-    team_usage,
-    usage_by_team,
 )
-from open_refinery.settings import set_setting
 
 
 def setup(monkeypatch=None):
@@ -37,20 +33,6 @@ def test_team_crud_and_membership():
     from open_refinery import User
     assert conn.get(User, dev.id).team_id is None
     assert not list_teams(conn)
-
-
-def test_ledger_attributes_units_to_actor_team():
-    conn, owner = setup()
-    t = create_team(conn, "core", owner.id)
-    a, _ = create_user(conn, "a@x.dev", "pw", "developer")
-    b, _ = create_user(conn, "b@x.dev", "pw", "developer")
-    set_user_team(conn, a.id, t.id)  # a on team, b unassigned
-    record_usage(conn, a.id, "tgt-1", 10, subject="w1")
-    record_usage(conn, a.id, "tgt-1", 5, subject="w2")
-    record_usage(conn, b.id, "tgt-1", 3)
-    assert team_usage(conn, t.id) == 15
-    rollup = {r["team"]: r["units"] for r in usage_by_team(conn)}
-    assert rollup["core"] == 15 and rollup["unassigned"] == 3
 
 
 def test_concurrency_slot_caps_in_flight():

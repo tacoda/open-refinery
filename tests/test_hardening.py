@@ -14,7 +14,7 @@ def test_fresh_instance_has_no_seeded_data():
     h = {"Authorization": f"Bearer {tok}"}
     assert client.get("/repositories", headers=h).json() == []
     assert client.get("/processes", headers=h).json() == []
-    assert client.get("/targets", headers=h).json() == []
+    assert client.get("/runs", headers=h).json() == []
 
 
 def test_token_rotation_invalidates_old_token():

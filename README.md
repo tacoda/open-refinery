@@ -46,12 +46,8 @@ with `pip install` and one command; manage everything from the web dashboard.
   DB migrations, config, env, libraries, data, services, secret refs, infra,
   DNS — any surface the PR touched. The harness applies it and reports back;
   the platform governs + audits.
-- **Teams, cost attribution & concurrency caps** — group users into teams; a
-  usage ledger meters units per governed invoke and rolls up cost by team; a
-  team's live in-flight concurrency cap is enforced at the invoke seam.
-- **Routing policy inputs + traffic graph** — route resolution filters targets on
-  region / compliance tags and can prefer lowest cost; a cross-agent traffic
-  graph shows who sends how much to which target.
+- **Teams & concurrency caps** — group users into teams; a team's live
+  in-flight cap bounds how many runs it can have going at once.
 - **Connects your code hosts and issue trackers** — GitHub, GitLab (code hosts);
   GitHub Issues, Jira, Linear (issue trackers), connected by token or OAuth,
   credentials encrypted at rest. Trackers expose **workflow discovery** — the
@@ -104,10 +100,7 @@ agent bottleneck would impose.
 > **proactive enforcement** (`audit` / `strict` modes, a pre-action `/authorize`
 > gate, per-namespace whitelists); **packs** — a curated marketplace of starter
 > standards + processes; **per-layer approval workflows** that govern changes to
-> governance itself; the **executor** with real **Anthropic / OpenAI / MCP / API**
-> backends (API key or OAuth), **routing policy inputs** (region / compliance /
-> cost) and windowed quotas; **teams + usage ledger + cost attribution +
-> concurrency caps**; a cross-agent **traffic graph**; **first-class rollbacks**
+> governance itself; **teams + concurrency caps**; **first-class rollbacks**
 > (full-deployment reverse plans, apply-side reporting); **governance landscape +
 > analysis**; **repo coverage & debt-audit health** with GitHub **ingest** (on a
 > schedule); **evals & experiments**; **webhooks**; **background jobs** and a
@@ -238,10 +231,10 @@ artifact, record = factory.produce("upper", actor="ian", text="hello")
 | Auditability    | `AuditSink` (`MemorySink`, `JsonlSink`) — append-only trail  |
 | Logging         | stdlib `logging`, logger name `open_refinery`               |
 | Oversight       | Per-process autonomy levels L0–L4; gated steps need recorded approvals |
-| Observability   | `GET /metrics` — WIP, event counts, per-actor activity, lead times; `GET /traffic` — cross-agent traffic graph; per-run live logs |
+| Observability   | `GET /metrics` — WIP, event counts, per-actor activity, lead times; per-run live logs |
 | Governance      | Policy layer (`audit` / `strict` enforcement, layered strict overrides, per-namespace whitelists) + pre-action `/authorize` gate |
 | Reversibility   | First-class rollbacks — revert to a prior stage + a full-deployment reverse plan, applied by the harness and audited |
-| Cost & limits   | Teams + usage ledger + cost attribution; live concurrency caps; windowed quotas; region / compliance / cost routing inputs |
+| Cost & limits   | Live per-team concurrency caps. **No spend ceiling** — see [LIMITATIONS](docs/LIMITATIONS.md) |
 
 ## Durable audit trail
 

@@ -1,7 +1,7 @@
 # open-refinery — features, permissions, and the journey of a change
 
-*Generated against 2.16.0. The companion to [PLAN-3.0.md](PLAN-3.0.md): that one
-says where we are going, this one says what exists and who can reach it.*
+*Generated against 3.0.0-dev. The companion to [PLAN-3.0.md](PLAN-3.0.md): that
+one says where we are going, this one says what exists and who can reach it.*
 
 Two things to hold on to before the diagrams:
 
@@ -60,7 +60,7 @@ and only the layer's owner signs it.
 
 ## 2. Every feature, by the permission it needs
 
-102 routes. Grouped by what you must hold to reach them.
+142 routes. Grouped by what you must hold to reach them.
 
 `propose:*` below is shorthand for all four: `propose:code`,
 `propose:harness`, `propose:factory`, `propose:charter`.
@@ -97,8 +97,6 @@ returned to anyone at any permission.
 | Feature | Routes |
 |---|---|
 | The stage graph | `POST /processes` |
-| Where work runs | `POST|DELETE /targets` · `POST|DELETE /routes` |
-| Caps on it | `POST /quotas` |
 
 ### `approve:charter` — the standards are the lead's
 
@@ -111,8 +109,8 @@ returned to anyone at any permission.
 
 | Feature | Routes |
 |---|---|
-| Everyone's repos, work, targets, routes | the same GETs, unscoped |
-| Config | `GET|PUT|DELETE /settings` · `PUT /routing-policy` |
+| Everyone's repos, work and runs | the same GETs, unscoped |
+| Config | `GET|PUT|DELETE /settings` |
 | Delivery plumbing | `/webhooks` · `/notification-rules` · `/teams` |
 | Finish setup | `POST /onboarding/complete` |
 

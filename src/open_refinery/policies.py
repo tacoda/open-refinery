@@ -176,9 +176,8 @@ def enforce(session: Session, role: str, action: str, resource: str, *,
     """Proactively gate an action: raise `PolicyDenied` if not permitted, and
     **record the refusal in the audit log** (when an audit sink is given).
 
-    Generic over the action boundary — the same gate covers transitions, executor
-    invokes, and (enforcement v2) tool/command/host-egress checks a harness makes
-    *before acting*. `namespace` scopes to per-namespace whitelists; `intent` (the
+    Generic over the action boundary — the same gate covers transitions and the
+    tool/command/host-egress checks a harness makes *before acting*. `namespace` scopes to per-namespace whitelists; `intent` (the
     declared purpose) is recorded on the refusal for verification/audit.
 
     Honors the org enforcement mode — `audit` (default-allow) or `strict`

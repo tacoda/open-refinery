@@ -3,6 +3,66 @@
 All notable changes to open-refinery are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [Unreleased]
+
+*Road to 3.0, step 1: delete the second execution path. Subtraction only — no
+feature that ships a change was touched.*
+
+### Removed
+- **`POST /execute` and everything behind it** — `executor.py`, `targets.py`,
+  `ledger.py`, and the `Target` / `Route` / `Quota` / `LedgerEntry` models.
+
+  This was the 1.0 governed call site: resolve a route to a target, authorize,
+  consume a quota, inject the secret, filter, call a backend, meter the ledger.
+  **The factory never used it.** `pipeline/agent.model_for` resolves a model
+  from the phase (or the pipeline) through `models_port` and the *actor's own*
+  credential — never a `Target`, never a `Route`. `Route` was even keyed to
+  `process_id`, which the pipeline does not read.
+
+  Two governed call sites that disagree are worse than either alone; the same
+  argument already retired the path-matching authz middleware.
+- **The routes that hung off it**: `GET|POST|DELETE /targets`,
+  `GET|POST|DELETE /routes`, `GET|POST /quotas`, `GET|PUT /routing-policy`,
+  `GET /traffic`, `GET /usage`. 156 → 142 operations.
+- **Three dashboard views** — *Models* (targets/routes/quotas), *Traffic* and
+  *Usage*. All three read only the deleted path, so all three were structurally
+  empty for anyone actually running the factory. 23 nav entries → 20.
+- **Two Overview cards that could never move** — *Failed invokes* counted
+  `invoke-failed`, emitted only by the executor; *Rollbacks to apply* counted
+  `rollback` / `rollback-applied`, recipes that **no longer exist anywhere in
+  the codebase**.
+- **`models_port.call`** — dead once `model_backend` went. `chat` (what a turn
+  runs on) is unchanged.
+- The seeded target + route. `open-refinery seed` now makes a repo, a process
+  and two work items.
+
+### Changed
+- **`doctor` stops misdirecting setup.** `check_targets` warned *"no targets
+  configured — add a model target so work has somewhere to run"*, which was
+  never true: a target has nothing to do with where a run runs. It is replaced
+  by **`check_repositories`**, which asks the question a run actually fails on
+  first — is this repository a local checkout? `workspace.root_of` refuses
+  anything else before it creates a worktree, so this is the cheapest place to
+  say so. Still nine checks.
+- `pipeline/middleware.py` documented quota as check #4 in its own docstring
+  and never performed it. The docstring now says what the code does — three
+  checks — and states plainly that **there is no spend ceiling yet**.
+  `docs/LIMITATIONS.md` and the README say the same.
+
+### Schema
+- No migration. The schema freeze is additive-only, so `targets`, `routes`,
+  `quotas` and `ledger_entries` are **left in place** on existing installs —
+  unread and unwritten. A fresh install is stamped to the latest version and
+  never runs the historical ALTERs, so `create_all` simply stops building them.
+  `tests/test_migrations.py` now creates the two legacy tables itself when it
+  simulates a pre-3.0 install, which is what such an install really has.
+
+### Kept, deliberately
+- **`POST /authorize`** — the pre-action policy gate for an out-of-process
+  harness. It reads `policies.enforce`, not the executor, and is unaffected.
+- **`concurrency.slot`** and per-team caps — the pipeline workers use them.
+- **`/content/scan`** and the whole `policies.py` filter.
+
 ## [2.23.0] — 2026-09-28
 
 *Phase 7 on the [road to 3.0](docs/PLAN-3.0.md): the ladder. Where a rule is

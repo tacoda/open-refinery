@@ -102,17 +102,14 @@ def test_a_team_can_narrow_a_grant():
     assert not phases.resolve(session, "run").may_run
 
 
-def test_one_registry_answers_for_both_call_sites():
-    """There were two provider lists and they disagreed: /execute knew OpenAI
-    and a harness turn did not, so the same target behaved differently
-    depending on which path reached it."""
-    from open_refinery import executor
+def test_one_registry_answers_for_every_model_name():
+    """There were two provider lists and they disagreed. One of the two call
+    sites is gone in 3.0; the registry stays the single answer, because the
+    harness, the pipeline validator and the credential catalog all read it."""
     from open_refinery.models_port import PROVIDERS
 
     assert provider_of("gpt-5.5").key == "openai"
     assert provider_of("claude-opus-5").key == "anthropic"
-    # the executor no longer keeps its own
-    assert not hasattr(executor, "MODEL_BACKENDS")
     assert len(PROVIDERS) >= 5
 
 

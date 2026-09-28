@@ -3,7 +3,7 @@
 A harness (Claude Code today; LangGraph and others next) is a **service-account
 user** (`kind='agent'`) owned by a person and assigned a role. Its token
 authenticates the agent's CLI to the platform, so every call it makes — an
-`/authorize` pre-action check, a transition, an executor invoke — is attributed
+`/authorize` pre-action check, a transition, a tool call in a run — is attributed
 to it and **governed by its role under the current enforcement mode**, exactly
 like a human. Registering one is how you get "auth already set" for the binary.
 """

@@ -1,6 +1,6 @@
 """Model providers — one port, two call sites.
 
-There were two of these and they disagreed: `executor.py` knew Anthropic and
+There were two of these and they disagreed: the old executor knew Anthropic and
 OpenAI, `pipeline/agent.py` knew only Anthropic, so a target routed to OpenAI
 worked for a governed single call and failed inside a harness turn. Same target,
 different answer.
@@ -12,7 +12,7 @@ which is the property that makes this a port rather than a list.
 Two ways a model is reached, because they are genuinely different jobs:
 
 - **`chat`** — a LangChain model for a *turn* (many steps, tools, interrupts)
-- **`call`** — one governed request/response, which is what `/execute` is
+- **`chat`** — the chat model a governed turn runs on
 
 Both resolve their key from the **actor's own credential**, so cost attributes
 to the person accountable for the work.
@@ -173,30 +173,3 @@ def chat(model: str, credential: dict, *, max_tokens: int = 16000):
     if provider.needs_base_url and base:
         kwargs["base_url"] = base
     return init_chat_model(bare_model(model), **kwargs)
-
-
-def call(model: str, credential: dict, payload: str, *,
-         output_schema: dict | None = None, max_tokens: int = 16000) -> dict:
-    """One governed request/response — what `/execute` is.
-
-    Returns `{"output": text|dict, "units": int}`, the shape the executor's
-    ledger and quota accounting already read.
-    """
-    import json
-
-    chat_model = chat(model, credential, max_tokens=max_tokens)
-    if output_schema:
-        # Structured where the result is machine-consumed, per the working
-        # rules: a persisted answer with a shape is stored with that shape.
-        chat_model = chat_model.with_structured_output(output_schema)
-
-    answer = chat_model.invoke(payload)
-    if output_schema:
-        return {"output": answer if isinstance(answer, dict) else json.loads(str(answer)),
-                "units": 0}
-
-    text = getattr(answer, "content", answer)
-    if isinstance(text, list):
-        text = "".join(b.get("text", "") for b in text if isinstance(b, dict))
-    usage = getattr(answer, "usage_metadata", None) or {}
-    return {"output": str(text), "units": int(usage.get("output_tokens", 0) or 0)}

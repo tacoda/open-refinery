@@ -7,12 +7,12 @@ from open_refinery.doctor import (
     check_admin,
     check_audit_chain,
     check_database,
+    check_repositories,
     check_secret_key,
-    check_targets,
     doctor,
 )
+from open_refinery.repositories import create_repository
 from open_refinery.store import connect
-from open_refinery.targets import create_target
 from open_refinery.users import create_user, ensure_default_roles
 
 
@@ -67,22 +67,31 @@ def test_empty_audit_chain_verifies():
     assert check_audit_chain(_session()).status == OK
 
 
-def test_target_without_a_credential_warns_and_names_it():
+def test_repository_that_is_not_a_checkout_warns_and_names_it():
+    """A run makes a worktree off a local checkout; an un-cloned repo is the
+    first thing it fails on, so doctor says so before a run does."""
     session = _session()
     owner, _ = create_user(session, "a@example.com", "pw", "admin")
-    create_target(session, "bare-model", "model", "claude-opus-5", owner.id)
+    create_repository(session, "web", "git@github.com:acme/web.git", owner.id)
 
-    check = check_targets(session)
+    check = check_repositories(session)
     assert check.status == WARN
-    assert "bare-model" in check.detail
+    assert "web" in check.detail
+    assert "clone" in check.remedy
 
 
-def test_target_with_a_credential_passes():
+def test_repository_with_a_local_checkout_passes(tmp_path):
     session = _session()
     owner, _ = create_user(session, "a@example.com", "pw", "admin")
-    create_target(session, "m", "model", "claude-opus-5", owner.id,
-                  credential={"api_key": "sk-test"})
-    assert check_targets(session).status == OK
+    (tmp_path / ".git").mkdir()
+    create_repository(session, "web", str(tmp_path), owner.id)
+    assert check_repositories(session).status == OK
+
+
+def test_no_repositories_warns_with_a_remedy():
+    check = check_repositories(_session())
+    assert check.status == WARN
+    assert "add a repository" in check.remedy
 
 
 def test_report_fails_when_any_check_fails():

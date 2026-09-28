@@ -109,8 +109,9 @@ def test_factory_configuration_needs_approve_factory(ctx, who, expected):
 def test_admin_cannot_configure_the_factory(ctx):
     """The account that grants access does not shape what ships."""
     _, client, hdr, _ = ctx
-    r = client.post("/targets", headers=hdr("admin"),
-                    json={"name": "t", "kind": "model", "endpoint": "claude-sonnet-5"})
+    r = client.post("/pipelines", headers=hdr("admin"),
+                    json={"name": "flow", "first": "a",
+                          "stages": {"a": {"kind": "action", "action": "prepare"}}})
     assert r.status_code == 403
 
 

@@ -6,6 +6,31 @@ from open_refinery import connect, run_migrations
 from open_refinery.migrations import MIGRATIONS
 
 
+# `targets` and `quotas` carried the pre-3.0 execution path. The models are gone,
+# so `create_all` no longer builds them — but MIGRATIONS v4/v6/v14 still ALTER
+# them, because an install that predates 3.0 still *has* them. These tests
+# simulate that install, so they build the tables the way that install has them.
+LEGACY_TABLES = (
+    """CREATE TABLE IF NOT EXISTS targets (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL,
+        endpoint TEXT NOT NULL, owner_id TEXT NOT NULL, secret TEXT NOT NULL DEFAULT '',
+        output_schema TEXT NOT NULL DEFAULT '{}', region TEXT NOT NULL DEFAULT '',
+        compliance TEXT NOT NULL DEFAULT '[]', unit_cost INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT '')""",
+    """CREATE TABLE IF NOT EXISTS quotas (
+        id TEXT PRIMARY KEY, target_id TEXT NOT NULL, "limit" INTEGER NOT NULL,
+        used INTEGER NOT NULL DEFAULT 0, window_seconds INTEGER NOT NULL DEFAULT 0,
+        window_started_at TEXT NOT NULL DEFAULT '', owner_id TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT '')""",
+)
+
+
+def _add_legacy_tables(raw) -> None:
+    for stmt in LEGACY_TABLES:
+        raw.execute(stmt)
+    raw.commit()
+
+
 def test_fresh_db_is_stamped_to_latest():
     session = connect("sqlite:///:memory:")
     version = session.exec(text("PRAGMA user_version")).one()[0]
@@ -48,6 +73,7 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
 
     raw = engine_for(url).raw_connection()
     try:
+        _add_legacy_tables(raw)          # a 1.0 install has these; 3.0 no longer builds them
         for stmt in (
             "DROP INDEX IF EXISTS ix_policies_pack",  # references policies.pack
             "ALTER TABLE policies DROP COLUMN namespace",
@@ -141,6 +167,7 @@ def test_migrate_down_then_up_round_trips(tmp_path):
     engine_for(url)  # latest (v11)
     raw = sqlite3.connect(tmp_path / "rt.db")
     try:
+        _add_legacy_tables(raw)          # DOWNGRADES v6/v14 still ALTER them
         def pol_cols():
             return {r[1] for r in raw.execute("PRAGMA table_info(policies)").fetchall()}
 

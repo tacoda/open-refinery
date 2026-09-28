@@ -3,7 +3,7 @@
 open-refinery is a self-hosted server that runs a **software factory**. Work
 arrives as a ticket, goes through a stage graph, and comes out as a pull request
 that a person merges. Everything it does on the way is authorized, owned,
-quota'd, filtered and audited.
+filtered and audited.
 
 Four things make up the product, and every module belongs to one of them:
 
@@ -118,16 +118,26 @@ either alone.
 
 ## The governed call site
 
-When a stage reaches a target, `execute()` runs the outbound pipeline:
+There is one, and it is inside a turn. Every tool a phase reaches for goes
+through `Governed.check` before it runs:
 
 ```
-resolve route → authorize → consume quota → inject the secret (never surfaced)
-  → content-filter in → call the backend → filter out → validate the schema
-  → audit → meter the usage
+the grant (rung 1, at build time) → the ladder (rung 3) → the content filter
+  → the call → audit, subject-linked to the run
 ```
 
-Failover moves to the next candidate route when a backend fails; a policy denial
-aborts without failover. — `executor.py`, `targets.py`, `policies.py`
+A refusal is handed back to the model as a tool result, not raised: an exception
+ends the turn, and a refusal the model can read is one it can work around.
+— `pipeline/middleware.py`, `ladder.py`, `policies.py`
+
+**There is no spend ceiling here yet.** `max_turns` caps turns, not cost. Until
+a per-run budget lands, nothing predicts or bounds what a run will spend.
+
+Until 3.0 a *second* call site existed — `POST /execute`, resolving a `Route` to
+a `Target`, consuming a `Quota` and metering a ledger. The factory never used
+it: a run resolves its model from the phase and the actor's own credential. It
+was deleted rather than wired up, because two governed call sites that disagree
+are worse than either alone.
 
 ## Audit
 
@@ -179,7 +189,6 @@ through the core. Seams are `typing.Protocol`s.
 | `pipeline/forge.FORGES` | github · gitlab · gitea · bitbucket · local |
 | `trackers.TRACKERS` | github-issues · gitlab-issues · jira · linear · shortcut |
 | `intake.PARSERS` | github-issues · gitlab-issues · jira · linear |
-| `executor.EXECUTORS` | model · mcp · api |
 | `audit.AuditSink` | memory · jsonl · sqlite |
 | `ladder.PREDICATES` | no-secrets · no-force-push · no-secrets-in-diff · no-migration-without-downgrade |
 

@@ -64,21 +64,6 @@ class Team(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
-class LedgerEntry(SQLModel, table=True):
-    """One usage record per governed invoke — the queryable usage ledger (the
-    audit event digests units away, so cost attribution needs its own row)."""
-    __tablename__ = "ledger_entries"
-    id: str = Field(default_factory=new_id, primary_key=True)
-    # plain indexed columns (no FKs): an append-only historical log must survive
-    # deletion of the team/target it references.
-    team_id: str | None = Field(default=None, index=True)
-    actor_id: str = Field(index=True)
-    target_id: str = Field(index=True)
-    units: int = 0
-    kind: str = "invoke"
-    subject: str | None = None          # e.g. work item id
-    created_at: str = Field(default_factory=now_iso)
-
 
 class Role(SQLModel, table=True):
     """A **preset** — a named bundle of permissions to start a person from.
@@ -359,44 +344,7 @@ class Integration(SQLModel, table=True):
     autostart: bool = False
 
 
-class Target(SQLModel, table=True):
-    __tablename__ = "targets"
-    id: str = Field(default_factory=new_id, primary_key=True)
-    name: str
-    kind: str          # model | mcp | api
-    endpoint: str      # model id, MCP server URL, or API base URL
-    owner_id: str = Field(foreign_key="users.id", index=True)
-    secret: str = ""   # encrypted JSON credential; "" when none
-    output_schema: dict = Field(default_factory=dict, sa_column=Column(JSON))  # {} = free text
-    # routing policy inputs — resolution can require a region / compliance tags
-    # and prefer lower cost (units) across candidates.
-    region: str = ""                    # e.g. us | eu | … (blank = unspecified)
-    compliance: list = Field(default_factory=list, sa_column=Column(JSON))  # e.g. ["hipaa","soc2"]
-    unit_cost: int = 0                  # cost per unit (proxy; lower preferred)
-    created_at: str = Field(default_factory=now_iso)
 
-
-class Route(SQLModel, table=True):
-    __tablename__ = "routes"
-    id: str = Field(default_factory=new_id, primary_key=True)
-    process_id: str = Field(foreign_key="processes.id", index=True)
-    step: str | None = None            # None = any step in the process
-    target_id: str = Field(foreign_key="targets.id")
-    priority: int = 0                  # higher wins
-    owner_id: str = Field(foreign_key="users.id", index=True)
-    created_at: str = Field(default_factory=now_iso)
-
-
-class Quota(SQLModel, table=True):
-    __tablename__ = "quotas"
-    id: str = Field(default_factory=new_id, primary_key=True)
-    target_id: str = Field(foreign_key="targets.id", index=True)
-    limit: int                          # max units per window (or lifetime if window_seconds=0)
-    used: int = 0                       # units consumed in the current window
-    window_seconds: int = 0             # rolling window length; 0 = lifetime cap
-    window_started_at: str = ""         # start of the current window (ISO); "" until first use
-    owner_id: str = Field(foreign_key="users.id", index=True)
-    created_at: str = Field(default_factory=now_iso)
 
 
 class Policy(SQLModel, table=True):

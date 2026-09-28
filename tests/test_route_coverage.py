@@ -76,11 +76,8 @@ REQUIRED = {
     "work items": "/work-items",
     "move a work item": "/work-items/{item_id}/transition",
     "approvals": "/approvals",
-    "run a governed call": "/execute",
+    "runs": "/runs",
     # operations
-    "targets": "/targets",
-    "routes": "/routes",
-    "quotas": "/quotas",
     "settings": "/settings",
     "policies": "/policies",
     # getting started
@@ -105,6 +102,10 @@ def test_no_route_survives_a_deleted_module(paths):
     "/scim/v2/Users", "/recert/campaigns", "/systems", "/invitations",
     "/work-items/{item_id}/rollback", "/governance", "/health/areas",
     "/auth/github/login", "/auth/sso/login", "/integrations/{kind}/oauth/start",
+    # 3.0: the pre-3.0 execution path. The factory never routed through it —
+    # a run resolves its model from the phase and the actor's credential.
+    "/execute", "/targets", "/routes", "/quotas", "/routing-policy",
+    "/traffic", "/usage",
 ])
 def test_removed_features_leave_no_dead_routes(paths, gone):
     """A route that lingers after its feature is removed is worse than no

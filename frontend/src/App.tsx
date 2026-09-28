@@ -16,7 +16,7 @@ import {
 import { LogoMark } from './Brand'
 import {
   LayoutDashboard, ListChecks, CheckSquare, GitBranch, Workflow, Shield, GitPullRequest,
-  Package, Boxes, Plug, Target, Users as UsersIcon, BarChart3, Coins, Network, Activity,
+  Package, Boxes, Plug, Users as UsersIcon, BarChart3, Activity,
   FlaskConical, ScrollText, Settings as SettingsIcon, PanelLeftClose,
   PanelLeft, LogOut, Eye, Bot, Lock, ClipboardCheck,
 } from 'lucide-react'
@@ -27,13 +27,12 @@ const VIEW_ICON: Record<string, any> = {
   connections: Plug, repos: GitBranch, users: UsersIcon, settings: SettingsIcon,
   // Build
   pipelines: Workflow, processes: ListChecks, packs: Package, policies: Shield,
-  targets: Target,
   // Run
   work: ListChecks, runs: Activity, approvals: CheckSquare,
   proposals: GitPullRequest, harnesses: Bot,
   // Watch
   overview: LayoutDashboard, events: ScrollText, evidence: ClipboardCheck,
-  usage: Coins, traffic: Network, experiments: FlaskConical, teams: Boxes,
+  experiments: FlaskConical, teams: Boxes,
   metrics: BarChart3, myrules: Eye,
 }
 const GROUP_ICON: Record<string, any> = {
@@ -41,9 +40,9 @@ const GROUP_ICON: Record<string, any> = {
 }
 
 type View = 'overview' | 'connections' | 'repos' | 'users'
-  | 'pipelines' | 'processes' | 'packs' | 'policies' | 'targets'
+  | 'pipelines' | 'processes' | 'packs' | 'policies'
   | 'work' | 'runs' | 'approvals' | 'proposals' | 'harnesses'
-  | 'events' | 'usage' | 'metrics' | 'evidence' | 'traffic' | 'experiments'
+  | 'events' | 'metrics' | 'evidence' | 'experiments'
   | 'teams' | 'settings' | 'myrules'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
@@ -65,7 +64,6 @@ const NAV: { group: string; tabs: NavTab[] }[] = [
     { value: 'pipelines', label: 'Workflows', always: true },       // read open; edit gated
     { value: 'processes', label: 'Processes', always: true },
     { value: 'packs', label: 'Standards', always: true },
-    { value: 'targets', label: 'Models', needs: ['approve:factory', 'see:operations'] },
     { value: 'policies', label: 'Policies', needs: ['approve:charter', 'see:operations'] } ] },
   { group: 'Run', tabs: [
     { value: 'work', label: 'Work', always: true },
@@ -77,8 +75,6 @@ const NAV: { group: string; tabs: NavTab[] }[] = [
     { value: 'overview', label: 'Overview', always: true },
     { value: 'events', label: 'Audit log', needs: ['read:audit'] },
     { value: 'evidence', label: 'Evidence', needs: ['read:audit'] },
-    { value: 'usage', label: 'Usage', needs: ['see:operations'] },
-    { value: 'traffic', label: 'Traffic', needs: ['see:operations'] },
     { value: 'experiments', label: 'Experiments', needs: ['see:operations'] },
     { value: 'teams', label: 'Teams', needs: ['see:operations'] },
     { value: 'metrics', label: 'Metrics', always: true },
@@ -313,7 +309,6 @@ export default function App() {
               <TabsContent value="pipelines"><Pipelines me={me} /></TabsContent>
               <TabsContent value="processes"><Processes /></TabsContent>
               <TabsContent value="packs"><Packs me={me} roles={roles} /></TabsContent>
-              {can('targets') && <TabsContent value="targets"><Targets /></TabsContent>}
               {can('policies') && <TabsContent value="policies"><Policies /></TabsContent>}
               {/* Run */}
               <TabsContent value="work"><Work /></TabsContent>
@@ -325,8 +320,6 @@ export default function App() {
               <TabsContent value="overview"><Overview goto={goto} can={can} /></TabsContent>
               {can('events') && <TabsContent value="events"><Events isAdmin={canAudit} /></TabsContent>}
               {can('evidence') && <TabsContent value="evidence"><Evidence me={me} /></TabsContent>}
-              {can('usage') && <TabsContent value="usage"><Usage /></TabsContent>}
-              {can('traffic') && <TabsContent value="traffic"><Traffic /></TabsContent>}
               {can('experiments') && <TabsContent value="experiments"><Experiments /></TabsContent>}
               {can('teams') && <TabsContent value="teams"><Teams /></TabsContent>}
               <TabsContent value="metrics"><Metrics /></TabsContent>
@@ -1165,7 +1158,7 @@ export function ruleSentence(p: any): string {
   return `${who} ${verb} ${act}${on}${where}.`
 }
 
-const POLICY_ACTIONS = ['transition', 'invoke', 'rollback', 'tool', 'command', 'egress', '*']
+const POLICY_ACTIONS = ['transition', 'tool', 'command', 'egress', '*']
 const LAYER_HINT: Record<string, string> = {
   factory: 'factory · org-wide service', harness: 'harness · agent tooling', charter: 'charter · repo/project',
 }
@@ -1412,7 +1405,7 @@ function Settings() {
   )
 }
 
-const ALERT_RECIPES = ['', 'denied', 'policy-change', 'approval-overdue', 'anomaly', 'invoke-failed', 'rollback', 'approval', 'rollback-applied']
+const ALERT_RECIPES = ['', 'denied', 'policy-change', 'approval-overdue', 'approval', 'run-held', 'run-error', 'pr-opened']
 
 function Notifications() {
   const { rows, load } = useList('/notification-rules')
@@ -2309,235 +2302,6 @@ function Teams() {
   )
 }
 
-function Usage() {
-  const [data, setData] = useState<any>(null)
-  useEffect(() => { api('/usage').then(setData).catch(fail) }, [])
-  const teams = data?.by_team ?? []
-  return (
-    <section className="page">
-      <h2 className="page-title">Usage &amp; cost attribution</h2>
-      <p className="muted">Units metered per governed invoke, attributed to the actor's team.</p>
-      <Card>
-        <CardContent>
-          <Table>
-            <TableHeader><TableRow><TableHead>Team</TableHead><TableHead>Units</TableHead></TableRow></TableHeader>
-            <TableBody>
-              <EmptyRow show={!teams.length} cols={2}>No usage recorded yet.</EmptyRow>
-              {teams.map((r: any) => (
-                <TableRow key={r.team_id ?? 'unassigned'}>
-                  <TableCell>{r.team}</TableCell>
-                  <TableCell className="mono">{r.units}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </section>
-  )
-}
-
-function RoutingPolicyEditor() {
-  const [region, setRegion] = useState(''), [comp, setComp] = useState(''), [prefer, setPrefer] = useState('priority')
-  useEffect(() => {
-    api('/routing-policy').then((p) => {
-      setRegion(p.require_region ?? ''); setComp((p.require_compliance ?? []).join(', '))
-      setPrefer(p.prefer ?? 'priority')
-    }).catch(() => {})
-  }, [])
-  const save = () => api('/routing-policy', { method: 'PUT', body: JSON.stringify({
-    require_region: region, require_compliance: comp.split(',').map((s) => s.trim()).filter(Boolean), prefer,
-  }) }).then(() => toast.success('routing policy saved')).catch(fail)
-  return (
-    <div className="field-form" style={{ marginTop: '0.6rem' }}>
-      <Field label="Require region"><Input className="field" placeholder="blank = any" value={region} onChange={(e) => setRegion(e.target.value)} /></Field>
-      <Field label="Require compliance"><Input className="field" placeholder="hipaa, soc2 (csv)" value={comp} onChange={(e) => setComp(e.target.value)} /></Field>
-      <Field label="Prefer">
-        <Select value={prefer} onValueChange={(v) => setPrefer(v ?? 'priority')}>
-          <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-          <SelectContent>{['priority', 'cost'].map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-        </Select>
-      </Field>
-      <Button variant="secondary" size="sm" onClick={save}>Save routing policy</Button>
-    </div>
-  )
-}
-
-function Traffic() {
-  const [g, setG] = useState<any>(null)
-  useEffect(() => { api('/traffic').then(setG).catch(fail) }, [])
-  const label = (id: string) => g?.nodes.find((n: any) => n.id === id)?.label ?? id
-  const teamOf = (id: string) => g?.nodes.find((n: any) => n.id === id)?.team ?? ''
-  const edges = g?.edges ?? []
-  return (
-    <section className="page">
-      <h2 className="page-title">Traffic</h2>
-      <p className="muted">Cross-agent traffic from the usage ledger — who sends how much to which target.</p>
-      <Card>
-        <CardContent>
-          <Table>
-            <TableHeader><TableRow><TableHead>Actor</TableHead><TableHead>Team</TableHead><TableHead>Target</TableHead><TableHead>Calls</TableHead><TableHead>Units</TableHead></TableRow></TableHeader>
-            <TableBody>
-              <EmptyRow show={!edges.length} cols={5}>No traffic yet.</EmptyRow>
-              {edges.map((e: any, i: number) => (
-                <TableRow key={i}>
-                  <TableCell>{label(e.source)}</TableCell>
-                  <TableCell className="mono">{teamOf(e.source)}</TableCell>
-                  <TableCell>{label(e.target)}</TableCell>
-                  <TableCell className="mono">{e.count}</TableCell>
-                  <TableCell className="mono">{e.units}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </section>
-  )
-}
-
-function Targets() {
-  const { rows: targets, load: loadT } = useList('/targets')
-  const { rows: routes, load: loadR } = useList('/routes')
-  const { rows: quotas, load: loadQ } = useList('/quotas')
-  const [procs, setProcs] = useState<any[]>([])
-  useEffect(() => {
-    api('/processes').then(setProcs).catch(() => {})
-  }, [])
-
-  const [name, setName] = useState(''), [kind, setKind] = useState('model')
-  const [endpoint, setEndpoint] = useState(''), [token, setToken] = useState('')
-  const [region, setRegion] = useState(''), [compliance, setCompliance] = useState(''), [cost, setCost] = useState('0')
-  const addTarget = () => post('/targets', {
-    name, kind, endpoint, credential: token ? { token } : null,
-    region, compliance: compliance.split(',').map((s) => s.trim()).filter(Boolean), unit_cost: Number(cost) || 0,
-  }).then(() => { setName(''); setEndpoint(''); setToken(''); setRegion(''); setCompliance(''); setCost('0'); loadT() }).catch(fail)
-  const delTarget = (id: string) => api(`/targets/${id}`, { method: 'DELETE' })
-    .then(() => { loadT(); loadR(); loadQ() }).catch(fail)
-
-  const [rProc, setRProc] = useState(''), [rTarget, setRTarget] = useState('')
-  const [rStep, setRStep] = useState(''), [rPrio, setRPrio] = useState('0')
-  const addRoute = () => post('/routes', {
-    process_id: rProc, target_id: rTarget, step: rStep || null, priority: Number(rPrio) || 0,
-  }).then(() => { setRStep(''); loadR() }).catch(fail)
-
-  const [qTarget, setQTarget] = useState(''), [qLimit, setQLimit] = useState('')
-  const [qWindow, setQWindow] = useState('')
-  const addQuota = () => post('/quotas', {
-    target_id: qTarget, limit: Number(qLimit) || 0, window_seconds: Number(qWindow) || 0,
-  }).then(() => { setQLimit(''); setQWindow(''); loadQ() }).catch(fail)
-
-  const targetName = (id: string) => targets.find((t) => t.id === id)?.name ?? id.slice(0, 8)
-  const procName = (id: string) => procs.find((p) => p.id === id)?.name ?? id.slice(0, 8)
-
-  return (
-    <section className="page">
-      <h2 className="page-title">Targets</h2>
-      <Card>
-        <CardHeader><CardTitle>Add a target</CardTitle></CardHeader>
-        <CardContent>
-          <div className="field-form">
-            <Field label="Name"><Input className="field" placeholder="e.g. opus" value={name} onChange={(e) => setName(e.target.value)} /></Field>
-            <Field label="Kind">
-              <Select value={kind} onValueChange={(v) => setKind(v ?? '')}>
-                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-                <SelectContent>{['model', 'mcp', 'api'].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
-              </Select>
-            </Field>
-            <Field label="Endpoint / model id"><Input className="field" placeholder="claude-opus-4-8 / URL" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} /></Field>
-            <Field label="Token (optional)"><Input className="field" placeholder="API key" type="password" value={token} onChange={(e) => setToken(e.target.value)} /></Field>
-            <Field label="Region"><Input className="field" placeholder="e.g. eu (optional)" value={region} onChange={(e) => setRegion(e.target.value)} /></Field>
-            <Field label="Compliance tags"><Input className="field" placeholder="hipaa, soc2 (csv)" value={compliance} onChange={(e) => setCompliance(e.target.value)} /></Field>
-            <Field label="Unit cost"><Input className="field" type="number" min="0" placeholder="0" value={cost} onChange={(e) => setCost(e.target.value)} /></Field>
-            <Button onClick={addTarget} disabled={!name}>Add target</Button>
-          </div>
-          <RoutingPolicyEditor />
-          <Table>
-            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Endpoint</TableHead><TableHead>Region</TableHead><TableHead>Compliance</TableHead><TableHead>Cost</TableHead><TableHead /></TableRow></TableHeader>
-            <TableBody><EmptyRow show={!targets.length} cols={9}>No targets yet — add a model, MCP, or API target.</EmptyRow>{targets.map((t) => (
-              <TableRow key={t.id}>
-                <TableCell>{t.name}</TableCell>
-                <TableCell><Badge variant="secondary">{t.kind}</Badge></TableCell>
-                <TableCell className="mono">{t.endpoint}</TableCell>
-                <TableCell className="mono">{t.region || '—'}</TableCell>
-                <TableCell className="mono">{(t.compliance ?? []).join(', ') || '—'}</TableCell>
-                <TableCell className="mono">{t.unit_cost || 0}</TableCell>
-                <TableCell>
-                  <span style={{ display: 'flex', gap: '0.3rem' }}>
-                    <Button variant="outline" size="sm" onClick={() => delTarget(t.id)}>Delete</Button>
-                  </span>
-                </TableCell>
-              </TableRow>
-            ))}</TableBody>
-          </Table>
-          <p className="muted">Connect a target by API key (token above) or OAuth (buttons per configured provider).</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>Routes</CardTitle></CardHeader>
-        <CardContent>
-          <p className="muted">Point a process (optionally a specific step) at a target; higher priority wins, with failover to the next.</p>
-          <div className="field-form">
-            <Field label="Process">
-              <Select value={rProc} onValueChange={(v) => setRProc(v ?? '')}>
-                <SelectTrigger className="field"><SelectValue placeholder="process…" /></SelectTrigger>
-                <SelectContent>{procs.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </Field>
-            <Field label="Target">
-              <Select value={rTarget} onValueChange={(v) => setRTarget(v ?? '')}>
-                <SelectTrigger className="field"><SelectValue placeholder="target…" /></SelectTrigger>
-                <SelectContent>{targets.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </Field>
-            <Field label="Step"><Input className="field" placeholder="blank = any step" value={rStep} onChange={(e) => setRStep(e.target.value)} /></Field>
-            <Field label="Priority"><Input className="field" type="number" placeholder="0" value={rPrio} onChange={(e) => setRPrio(e.target.value)} /></Field>
-            <Button onClick={addRoute} disabled={!rProc || !rTarget}>Add route</Button>
-          </div>
-          <Table>
-            <TableHeader><TableRow><TableHead>Process</TableHead><TableHead>Step</TableHead><TableHead>Target</TableHead><TableHead>Priority</TableHead></TableRow></TableHeader>
-            <TableBody><EmptyRow show={!routes.length} cols={9}>No routes yet.</EmptyRow>{routes.map((r) => (
-              <TableRow key={r.id}>
-                <TableCell>{procName(r.process_id)}</TableCell>
-                <TableCell>{r.step || <span className="muted">any</span>}</TableCell>
-                <TableCell>{targetName(r.target_id)}</TableCell>
-                <TableCell>{r.priority}</TableCell>
-              </TableRow>
-            ))}</TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>Quotas</CardTitle></CardHeader>
-        <CardContent>
-          <div className="field-form">
-            <Field label="Target">
-              <Select value={qTarget} onValueChange={(v) => setQTarget(v ?? '')}>
-                <SelectTrigger className="field"><SelectValue placeholder="target…" /></SelectTrigger>
-                <SelectContent>{targets.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </Field>
-            <Field label="Limit (units)"><Input className="field" type="number" placeholder="e.g. 1000" value={qLimit} onChange={(e) => setQLimit(e.target.value)} /></Field>
-            <Field label="Window (seconds)"><Input className="field" type="number" placeholder="0 = lifetime" value={qWindow} onChange={(e) => setQWindow(e.target.value)} /></Field>
-            <Button onClick={addQuota} disabled={!qTarget || !qLimit}>Add quota</Button>
-          </div>
-          <Table>
-            <TableHeader><TableRow><TableHead>Target</TableHead><TableHead>Used / Limit</TableHead></TableRow></TableHeader>
-            <TableBody><EmptyRow show={!quotas.length} cols={9}>No quotas set.</EmptyRow>{quotas.map((q) => (
-              <TableRow key={q.id}>
-                <TableCell>{targetName(q.target_id)}</TableCell>
-                <TableCell className="mono">{q.used} / {q.limit}</TableCell>
-              </TableRow>
-            ))}</TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </section>
-  )
-}
-
 // Visibility-first home: highlight the few actionable things, drill in for detail.
 function MfaCard() {
   const [ok, setOk] = useState(true), [enabled, setEnabled] = useState(false)
@@ -2595,8 +2359,6 @@ export function Overview({ goto, can = () => true }: { goto: (v: any) => void; c
   }, [])
   const count = (recipe: string) => events.filter((e) => e.recipe === recipe).length
   const denials = count('denied')
-  const failures = count('invoke-failed')
-  const pendingApply = Math.max(0, count('rollback') - count('rollback-applied'))
   const byStage = items.reduce((m: Record<string, number>, w) => {
     m[w.current_stage] = (m[w.current_stage] ?? 0) + 1; return m
   }, {})
@@ -2605,8 +2367,6 @@ export function Overview({ goto, can = () => true }: { goto: (v: any) => void; c
     { label: 'Approvals awaiting', n: pending, go: 'approvals', attn: pending > 0, Icon: CheckSquare },
     { label: 'Work in progress', n: items.length, go: 'work', attn: false, Icon: ListChecks },
     { label: 'Policy denials', n: denials, go: 'events', attn: denials > 0, Icon: Shield },
-    { label: 'Failed invokes', n: failures, go: 'events', attn: failures > 0, Icon: Activity },
-    { label: 'Rollbacks to apply', n: pendingApply, go: 'work', attn: pendingApply > 0, Icon: GitBranch },
     { label: 'Things to look at', n: findings.length, go: 'events', attn: findings.length > 0, Icon: Activity },
   ]
   return (

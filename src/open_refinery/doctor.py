@@ -121,20 +121,30 @@ def check_credentials(session) -> Check:
     return Check("connections", OK, f"{len(integs)} — {kinds}")
 
 
-def check_targets(session) -> Check:
+def check_repositories(session) -> Check:
+    """A run needs a local checkout — `workspace.root_of` refuses anything else
+    before creating a worktree, so an un-cloned repository is the first thing a
+    real run fails on. Cheaper to say so here."""
     if session is None:
-        return Check("targets", WARN, "skipped — no database")
-    from .targets import list_targets
-    targets = list_targets(session)
-    if not targets:
-        return Check("targets", WARN, "no targets configured",
-                     "add a model target so work has somewhere to run.")
-    unset = [t.name for t in targets if not t.secret]
-    if unset:
-        return Check("targets", WARN,
-                     f"{len(targets)} configured; no credential on: {', '.join(unset)}",
-                     "add an API key to each, or they fall back to the echo stub.")
-    return Check("targets", OK, f"{len(targets)} configured, all with credentials")
+        return Check("repositories", WARN, "skipped — no database")
+    from .pipeline.workspace import WorkspaceError, root_of
+    from .repositories import list_repositories
+    repos = list_repositories(session)
+    if not repos:
+        return Check("repositories", WARN, "none registered",
+                     "add a repository, or import one from a connected code host.")
+    missing = []
+    for r in repos:
+        try:
+            root_of(r.git_url)
+        except WorkspaceError:
+            missing.append(r.name)
+    if missing:
+        return Check("repositories", WARN,
+                     f"{len(repos)} registered; not a local checkout: {', '.join(missing)}",
+                     "clone each one and point its git_url at the checkout — a run "
+                     "cannot make a worktree without it.")
+    return Check("repositories", OK, f"{len(repos)} registered, all cloned")
 
 
 def check_audit_chain(session) -> Check:
@@ -180,7 +190,7 @@ def doctor(session=None, *, environ: dict | None = None,
         check_audit_chain(session),
         check_git(),
         check_providers(),
-        check_targets(session),
+        check_repositories(session),
         check_credentials(session),
         check_dashboard(),
     ])

@@ -18,7 +18,6 @@ from .processes import create_process
 from .repositories import create_repository
 from .settings import set_setting
 from .store import SqliteSink
-from .targets import create_route, create_target
 from .users import count_users, create_user
 from .work_items import create_work_item, transition
 
@@ -54,15 +53,6 @@ def seed(conn: sqlite3.Connection) -> dict:
     transition(conn, login.id, "in-progress", dev.id, audit)
     create_work_item(conn, web.id, kanban.id, "Rate-limit the public API", dev.id)
 
-    # A model target with **no credential**, routed to the kanban process. The
-    # executor falls back to its echo stub when a target has no key, so
-    # `POST /execute` works on a fresh clone with no network and no API key —
-    # which is what makes the loop testable before anyone has connected
-    # anything. Add a real key in Settings → Connections to make it live.
-    model = create_target(conn, "claude (stub until a key is added)", "model",
-                          "claude-sonnet-5", platform.id, unit_cost=1)
-    create_route(conn, kanban.id, model.id, platform.id, priority=10)
-
     # seeded orgs are already configured — skip the first-run wizard
     set_setting(conn, "org.onboarded", "true", admin.id)
 
@@ -74,5 +64,4 @@ def seed(conn: sqlite3.Connection) -> dict:
         },
         "repositories": [web],
         "processes": [kanban],
-        "targets": [model],
     }

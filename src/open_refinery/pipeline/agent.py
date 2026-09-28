@@ -9,7 +9,7 @@ What a turn is handed, and where each part comes from:
 
 | | from |
 |---|---|
-| model, turn cap, thinking | the phase (`phases.py`), routed through a `Target` |
+| model, turn cap, thinking | the phase (`phases.py`), on the actor's credential |
 | tool grant | the phase, minus what the ladder withholds — rung 1 |
 | the repository's own rules | `ingest.charter()` as `memory=` |
 | the filesystem | rooted at the run's worktree, so it cannot write outside |
@@ -143,8 +143,8 @@ def model_for(session, run: Run, phase: Phase, pipeline_model: str = ""):
 
     Routed through the **actor's own credential**, so cost attributes to the
     person who started the run and a run cannot quietly spend somebody else's
-    budget. Which provider that is comes from `models_port`, which both this
-    and `/execute` read — they used to each keep their own list and disagree.
+    budget. Which provider that is comes from `models_port` — the one list of
+    providers, so a model name resolves the same way everywhere.
     """
     from .. import credentials as creds
     from ..models_port import UnknownModel, provider_of
