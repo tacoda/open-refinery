@@ -33,14 +33,15 @@ def test_sync_creates_work_items_and_dedupes(monkeypatch):
     monkeypatch.setitem(integrations.ADAPTERS["linear"], "list_issues", lambda c: issues)
     audit = SqliteSink(conn)
 
-    assert sync_tracker(conn, integ.id, repo.id, proc.id, ian.id, audit) == {"created": 2, "skipped": 0}
+    assert sync_tracker(conn, integ.id, repo.id, proc.id, ian.id, audit) == {
+        "created": 2, "skipped": 0, "runs": []}
     items = list_work_items(conn)
     assert len(items) == 2 and all(i.external_ref.startswith("linear:") for i in items)
     assert find_by_external_ref(conn, "linear:ENG-1").title == "Fix bug"
     assert any(e.recipe == "sync" for e in query_events(conn))
 
     # re-syncing the same issues creates nothing new
-    assert sync_tracker(conn, integ.id, repo.id, proc.id, ian.id, audit) == {"created": 0, "skipped": 2}
+    assert sync_tracker(conn, integ.id, repo.id, proc.id, ian.id, audit) == {"created": 0, "skipped": 2, "runs": []}
     assert len(list_work_items(conn)) == 2
 
 

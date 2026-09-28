@@ -1,5 +1,5 @@
 /**
- * The workflow canvas — design mode.
+ * The workflow canvas — design mode and live mode.
  *
  * The canvas IS the builder, not a picture of one: what you draw is what gets
  * saved, and saving writes a new pipeline version rather than editing in place,
@@ -8,6 +8,12 @@
  * Edges are typed and drawn differently on purpose. `rework` is reachable only
  * through an outcome edge, so a layout that draws `next` alone reports it
  * unreachable — which is the bug the edge types exist to prevent.
+ *
+ * **Live mode is the same canvas**, at the same node positions, with runs on
+ * it. Deliberately not a second drawing: an operator watching work move should
+ * be looking at the graph they designed, not a diagram that claims to be it.
+ * Passing `runs` turns editing off — you cannot drag a stage while runs are
+ * standing on it, because the layout you would save is the one they are using.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
@@ -79,13 +85,44 @@ function edgesOf(s: Stage): { to: string; kind: string }[] {
   return out
 }
 
-export function Canvas({ graph, onChange, onSelect, selected }: {
+/** One run, as the live channel reports it. */
+export type LiveRun = {
+  id: string
+  stage: string
+  from?: string
+  held?: boolean
+  outcome?: string
+  reason?: string
+  revisions?: number
+  at?: string
+}
+
+export function Canvas({ graph, onChange, onSelect, selected, runs, onApprove }: {
   graph: Graph
-  onChange: (g: Graph) => void
+  onChange?: (g: Graph) => void
   onSelect: (name: string | null) => void
   selected: string | null
+  runs?: LiveRun[]                       // present = live mode
+  onApprove?: (runId: string) => void
 }) {
   const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({})
+  const isLive = runs !== undefined
+
+  // Where each run is standing. A run that finished is on its terminal node,
+  // which is why `landed` and `closed` are drawn at all.
+  const atStage = useMemo(() => {
+    const out: Record<string, LiveRun[]> = {}
+    for (const r of runs ?? []) (out[r.outcome || r.stage] ||= []).push(r)
+    return out
+  }, [runs])
+
+  // An edge a run has just crossed, so the move is visible rather than a
+  // number quietly changing.
+  const crossed = useMemo(() => {
+    const out = new Set<string>()
+    for (const r of runs ?? []) if (r.from && r.from !== r.stage) out.add(`${r.from}->${r.stage}`)
+    return out
+  }, [runs])
 
   useEffect(() => {
     setPositions(layout(graph.stages, graph.layout))
@@ -95,12 +132,18 @@ export function Canvas({ graph, onChange, onSelect, selected }: {
     const stageNodes = Object.entries(graph.stages).map(([name, s]) => ({
       id: name,
       position: positions[name] ?? { x: 0, y: 0 },
-      data: { label: <StageNode name={name} stage={s} model={s.model || graph.model} /> },
+      data: {
+        label: <StageNode name={name} stage={s} model={s.model || graph.model}
+                 runs={isLive ? (atStage[name] ?? []) : undefined} onApprove={onApprove} />,
+      },
+      draggable: !isLive,
       className: [
         'canvas-node',
         name === graph.first ? 'is-first' : '',
         name === selected ? 'is-selected' : '',
         s.approve ? 'is-gated' : '',
+        isLive && atStage[name]?.length ? 'is-busy' : '',
+        isLive && atStage[name]?.some((r) => r.held) ? 'is-held' : '',
       ].filter(Boolean).join(' '),
     }))
     const terminals = TERMINALS.filter((t) =>
@@ -108,11 +151,19 @@ export function Canvas({ graph, onChange, onSelect, selected }: {
       .map((t) => ({
         id: t,
         position: positions[t] ?? { x: 0, y: 0 },
-        data: { label: <span className="canvas-terminal">{t}</span> },
-        className: 'canvas-node is-terminal',
+        data: {
+          label: (
+            <span className="canvas-terminal">
+              {t}{isLive && atStage[t]?.length ? ` · ${atStage[t].length}` : ''}
+            </span>
+          ),
+        },
+        draggable: !isLive,
+        className: ['canvas-node is-terminal',
+                    isLive && atStage[t]?.length ? 'is-busy' : ''].filter(Boolean).join(' '),
       }))
     return [...stageNodes, ...terminals] as Node[]
-  }, [graph, positions, selected])
+  }, [graph, positions, selected, atStage, isLive, onApprove])
 
   const edges: Edge[] = useMemo(() =>
     Object.entries(graph.stages).flatMap(([from, s]) =>
@@ -121,11 +172,12 @@ export function Canvas({ graph, onChange, onSelect, selected }: {
         source: from,
         target: e.to,
         label: e.kind === 'next' ? undefined : e.kind,
-        animated: e.kind === 'refusal',
+        animated: crossed.has(`${from}->${e.to}`) || (!isLive && e.kind === 'refusal'),
         style: EDGE_STYLE[e.kind],
-      }))), [graph])
+      }))), [graph, crossed, isLive])
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
+    if (isLive || !onChange) return   // live mode watches; it does not edit
     // Positions are persisted with the pipeline, so a graph opens how it was
     // left rather than being re-laid-out every time.
     const moved = applyNodeChanges(changes, nodes)
@@ -135,7 +187,7 @@ export function Canvas({ graph, onChange, onSelect, selected }: {
     if (changes.some((c: any) => c.type === 'position' && c.dragging === false)) {
       onChange({ ...graph, layout: next })
     }
-  }, [nodes, graph, onChange])
+  }, [nodes, graph, onChange, isLive])
 
   return (
     <div className="canvas">
@@ -156,18 +208,39 @@ export function Canvas({ graph, onChange, onSelect, selected }: {
   )
 }
 
-function StageNode({ name, stage, model }: { name: string; stage: Stage; model?: string }) {
+function StageNode({ name, stage, model, runs, onApprove }: {
+  name: string; stage: Stage; model?: string
+  runs?: LiveRun[]; onApprove?: (id: string) => void
+}) {
   const kind = stage.phase ? `phase · ${stage.phase}` : `action · ${stage.action}`
+  const held = (runs ?? []).filter((r) => r.held)
   return (
     <div className="canvas-node-body">
-      <span className="canvas-node-name">{name}</span>
+      <span className="canvas-node-name">
+        {name}
+        {runs?.length ? <span className="canvas-node-count">{runs.length}</span> : null}
+      </span>
       <span className="canvas-node-kind">{kind}</span>
       <div className="canvas-node-tags">
-        {model && stage.phase && <Badge variant="outline">{model}</Badge>}
-        {stage.approve && <Badge>gate</Badge>}
-        {stage.contract && <Badge variant="secondary">{stage.contract}</Badge>}
-        {stage.optional && <Badge variant="outline">optional</Badge>}
-        {stage.opt_in && <Badge variant="outline">opt-in</Badge>}
+        {/* Design mode explains the stage; live mode says what is happening on
+            it. Both at once is noise on a node this size. */}
+        {runs === undefined ? (<>
+          {model && stage.phase && <Badge variant="outline">{model}</Badge>}
+          {stage.approve && <Badge>gate</Badge>}
+          {stage.contract && <Badge variant="secondary">{stage.contract}</Badge>}
+          {stage.optional && <Badge variant="outline">optional</Badge>}
+          {stage.opt_in && <Badge variant="outline">opt-in</Badge>}
+        </>) : (<>
+          {held.length > 0 && <Badge>waiting on you</Badge>}
+          {/* A hold is cleared where you notice it. Walking to another screen
+              to approve is how a run sits overnight. */}
+          {onApprove && held.map((r) => (
+            <Button key={r.id} size="sm" variant="outline" className="canvas-approve"
+              onClick={(e) => { e.stopPropagation(); onApprove(r.id) }}>
+              approve {r.id.slice(0, 6)}
+            </Button>
+          ))}
+        </>)}
       </div>
     </div>
   )

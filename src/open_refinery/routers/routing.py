@@ -49,7 +49,7 @@ def integration_workflow(integ_id: str, session: Session = Depends(get_session),
 def sync_integration(integ_id: str, body: SyncRequest, session: Session = Depends(get_session),
                      user: User = Depends(may_run)):
     return sync_tracker(session, integ_id, body.repo_id, body.process_id,
-                        user.id, SqliteSink(session))
+                        user.id, SqliteSink(session), autostart=body.autostart)
 
 # --- targets, routing, quotas (Platform layer) ---
 @router.post("/targets", status_code=201)

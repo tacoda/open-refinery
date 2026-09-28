@@ -99,6 +99,24 @@ def ensure_default(session: Session, owner_id: str) -> Pipeline:
 
 # --- runs -------------------------------------------------------------------
 
+def announce(run: Run, *, was: str = "") -> None:
+    """Tell anybody watching that this run moved.
+
+    The canvas draws the same graph in design mode and live mode, so a live
+    event carries the stage names the graph already uses and nothing else — the
+    browser looks up the node it already has rather than being sent a layout.
+
+    Best-effort by construction: `HUB.publish` is a no-op with no event loop
+    bound, which is every test and every CLI invocation.
+    """
+    from ..live import HUB
+    HUB.publish({"type": "run", "id": run.id, "pipeline": run.pipeline_id,
+                 "work_item": run.work_item_id, "repo": run.repo_id,
+                 "stage": run.stage, "from": was or run.stage, "reason": run.reason,
+                 "held": run.held, "outcome": run.outcome, "revisions": run.revisions,
+                 "at": run.updated_at})
+
+
 def start_run(session: Session, work_item_id: str, pipeline: Pipeline, repo_id: str,
               actor_id: str, *, spec: str = "", opt_in=(), skip=()) -> Run:
     """Begin a run at the pipeline's first stage."""
@@ -110,6 +128,7 @@ def start_run(session: Session, work_item_id: str, pipeline: Pipeline, repo_id: 
     session.add(run)
     session.commit()
     session.refresh(run)
+    announce(run)
     return run
 
 
@@ -147,6 +166,7 @@ def run_state(run: Run) -> dict:
 def apply_move(session: Session, run: Run, move: Move, *,
                produced: dict[str, str] | None = None) -> Run:
     """Write a `Move` back to the run. The only place a run's stage changes."""
+    was = run.stage
     if produced:
         doc = doclib.read(run.document)
         for name, body in produced.items():
@@ -164,6 +184,7 @@ def apply_move(session: Session, run: Run, move: Move, *,
     session.add(run)
     session.commit()
     session.refresh(run)
+    announce(run, was=was)
     return run
 
 
@@ -198,4 +219,5 @@ def approve_run(session: Session, run_id: str, approver_id: str) -> Run:
     session.add(run)
     session.commit()
     session.refresh(run)
+    announce(run)
     return run

@@ -160,15 +160,22 @@ def transition(session: Session, item_id: str, to: str, actor_id: str, audit: Au
 
 
 def sync_tracker(session: Session, integ_id: str, repo_id: str, process_id: str,
-                 actor_id: str, audit: AuditSink) -> dict:
-    """Import a tracker integration's issues as work items, deduped by external ref."""
+                 actor_id: str, audit: AuditSink, *, autostart: bool | None = None) -> dict:
+    """Import a tracker integration's issues as work items, deduped by external ref.
+
+    `autostart` starts a run for each newly imported issue. It defaults to the
+    integration's own setting, so a sync behaves the same way its webhooks do —
+    one place to decide whether tickets from this tracker run by themselves.
+    """
     integ = get_integration(session, integ_id)
     if integ is None:
         raise ValueError(f"unknown integration: {integ_id!r}")
     if integ.kind not in TRACKER_KINDS:
         raise ValueError(f"{integ.kind} is not a work-item tracker")
+    if autostart is None:
+        autostart = integ.autostart
 
-    created, skipped = 0, 0
+    created, skipped, runs = 0, 0, []
     for issue in list_issues(session, integ_id):
         ref = f"{integ.kind}:{issue['key']}"
         if find_by_external_ref(session, ref):
@@ -181,4 +188,31 @@ def sync_tracker(session: Session, integ_id: str, repo_id: str, process_id: str,
             inputs={"integration": integ_id, "key": issue["key"]}, output=ref, subject=item.id,
         ))
         created += 1
-    return {"created": created, "skipped": skipped}
+        if autostart:
+            run_id = _autostart(session, item, issue, integ, actor_id, audit)
+            if run_id:
+                runs.append(run_id)
+    return {"created": created, "skipped": skipped, "runs": runs}
+
+
+def _autostart(session: Session, item, issue: dict, integ, actor_id: str,
+               audit: AuditSink) -> str | None:
+    """Start a run for a freshly imported issue.
+
+    The issue's text is the spec — quoted, never interpolated into a prompt.
+    Whoever filed the ticket wrote it, and on a public tracker that is anybody.
+    """
+    from .pipeline import store as ps
+
+    try:
+        pipeline = ps.latest_pipeline(session, integ.intake_pipeline or "ship-a-ticket")
+    except ps.UnknownPipeline:
+        return None
+    body = issue.get("body") or ""
+    spec = f"{issue['title']}\n\n{body}" if body else issue["title"]
+    run = ps.start_run(session, item.id, pipeline, item.repo_id, actor_id, spec=spec)
+    audit.write(Record.of(
+        recipe="run-started", actor=actor_id, owner=actor_id,
+        inputs={"from": "sync", "pipeline": pipeline.name, "work_item": item.id},
+        output=run.stage, subject=run.id))
+    return run.id

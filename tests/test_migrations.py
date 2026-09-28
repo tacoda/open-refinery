@@ -97,6 +97,11 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
             "ALTER TABLE repositories DROP COLUMN test_cmd",
             "ALTER TABLE users DROP COLUMN permissions",
             "ALTER TABLE roles DROP COLUMN permissions",
+            "ALTER TABLE integrations DROP COLUMN webhook_secret",
+            "ALTER TABLE integrations DROP COLUMN intake_repo_id",
+            "ALTER TABLE integrations DROP COLUMN intake_process_id",
+            "ALTER TABLE integrations DROP COLUMN intake_pipeline",
+            "ALTER TABLE integrations DROP COLUMN autostart",
             "PRAGMA user_version = 7",   # pretend this is a 1.0-era install (schema v7)
         ):
             raw.execute(stmt)
@@ -120,6 +125,8 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='roles'").fetchone()
         usr = {r[1] for r in raw.execute("PRAGMA table_info(users)").fetchall()}
         assert "permissions" in usr
+        integ = {r[1] for r in raw.execute("PRAGMA table_info(integrations)").fetchall()}
+        assert {"webhook_secret", "autostart"} <= integ
         assert raw.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
     finally:
         raw.close()

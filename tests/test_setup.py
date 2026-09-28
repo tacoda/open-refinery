@@ -26,3 +26,19 @@ def test_setup_creates_admin_then_locks():
 
     # the returned token works
     assert c.get("/me", headers={"Authorization": f"Bearer {body['token']}"}).status_code == 200
+
+
+def test_a_fresh_install_has_a_workflow_to_run():
+    """"Defaults to build from" has to mean the defaults are there.
+
+    Without this, an install had no pipeline at all: `POST /runs` failed on
+    `ship-a-ticket`, a name nobody had typed, and autostart silently did
+    nothing.
+    """
+    c = client()
+    token = c.post("/setup", json={"email": "boss@x.dev", "password": "pw"}).json()["token"]
+    auth = {"Authorization": f"Bearer {token}"}
+
+    pipelines = c.get("/pipelines", headers=auth).json()
+    assert [p["name"] for p in pipelines] == ["ship-a-ticket"]
+    assert pipelines[0]["stages"], "the default workflow has stages"

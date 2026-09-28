@@ -123,8 +123,14 @@ def create(checkout: str | Path, run_id: str, *, base: str = "main") -> Path:
 
     Idempotent: a worker retrying after a crash finds the worktree already
     there and uses it rather than failing.
+
+    **Checks the checkout before creating anything.** A repository's `git_url`
+    is a string somebody typed; this used to `mkdir -p` it and let git supply
+    the complaint, which meant a repo pointing at `git@github.com:acme/web.git`
+    silently created a directory by that name relative to wherever the server
+    was running — and a `git_url` of `../..` would have created one outside it.
     """
-    checkout = Path(checkout)
+    checkout = root_of(str(checkout))
     branch = branch_name(run_id)
     path = worktree_path(checkout, run_id)
 

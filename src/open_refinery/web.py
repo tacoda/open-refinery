@@ -401,6 +401,7 @@ class NewIntegration(BaseModel):
 class SyncRequest(BaseModel):
     repo_id: str
     process_id: str
+    autostart: bool | None = None   # None = whatever the integration is set to
 
 
 class NewTarget(BaseModel):
@@ -575,10 +576,10 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
 
 def _include_routers(app: FastAPI) -> None:
-    from .routers import (core, credentials, harness, ladder, ops, org, pipelines,
-                          policy, proposals, roles, routing, workitem)
+    from .routers import (core, credentials, harness, intake, ladder, ops, org,
+                          pipelines, policy, proposals, roles, routing, workitem)
     for mod in (core, ops, org, harness, workitem, routing, policy,
-                credentials, roles, proposals, pipelines, ladder):
+                credentials, roles, proposals, pipelines, ladder, intake):
         app.include_router(mod.router)
 
 

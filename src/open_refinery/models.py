@@ -349,6 +349,15 @@ class Integration(SQLModel, table=True):
     status_detail: str = ""                # why it is failing, for the UI
     shared: bool = False                   # org-wide fallback (shareable providers only)
 
+    # Intake: where this tracker's tickets land, and whether they start a run
+    # the moment they are filed. The secret signs inbound deliveries and is
+    # shown once, like every other secret here.
+    webhook_secret: str = ""
+    intake_repo_id: str | None = None
+    intake_process_id: str | None = None
+    intake_pipeline: str = ""              # "" = the newest ship-a-ticket
+    autostart: bool = False
+
 
 class Target(SQLModel, table=True):
     __tablename__ = "targets"

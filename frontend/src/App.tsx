@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { api, post, download, getToken, setToken, clearToken } from './api'
-import { Canvas, Inspector, type Graph } from './Canvas'
+import { Canvas, Inspector, type Graph, type LiveRun } from './Canvas'
 import { getTheme, applyTheme, watchSystem, type Theme } from './theme'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -190,6 +190,10 @@ export default function App() {
           toast(m.status === 'done' ? `Job ${m.kind} finished` : `Job ${m.kind} ${m.status}`)
         }
         if (m.type === 'log') window.dispatchEvent(new CustomEvent('oref-log', { detail: m }))
+        // A run moved. Broadcast rather than lift into state: the live canvas
+        // is the only thing that wants every move, and re-rendering the whole
+        // app on each one is how a busy factory makes the UI unusable.
+        if (m.type === 'run') window.dispatchEvent(new CustomEvent('oref-run', { detail: m }))
       }
     } catch { setLive(false) }
     return () => ws?.close()
@@ -1070,26 +1074,77 @@ const FAMILY_LABEL: Record<string, string> = {
   model: 'Models', forge: 'Code hosts', tracker: 'Trackers',
 }
 
+/**
+ * Intake — where this tracker's tickets land, and whether they run by
+ * themselves.
+ *
+ * Three doors, one destination: pull them in now (Sync), let the tracker push
+ * them the moment they are filed (the webhook URL), or type one by hand on the
+ * Work screen. Autostart applies to all of them, so a ticket behaves the same
+ * way however it arrived.
+ */
 function SyncPanel({ integ }: any) {
   const [repos, setRepos] = useState<any[]>([]), [procs, setProcs] = useState<any[]>([])
   const [repo, setRepo] = useState(''), [proc, setProc] = useState('')
+  const [cfg, setCfg] = useState<any>(null)
+  const [secret, setSecret] = useState('')
+
   useEffect(() => {
     api('/repositories').then(setRepos).catch(() => {})
     api('/processes').then(setProcs).catch(() => {})
-  }, [])
+    api(`/integrations/${integ.id}/intake`).then((c) => {
+      setCfg(c); setRepo(c.repo_id ?? ''); setProc(c.process_id ?? '')
+    }).catch(() => {})
+  }, [integ.id])
+
+  const put = (body: any) =>
+    api(`/integrations/${integ.id}/intake`, { method: 'PUT', body: JSON.stringify(body) })
+      .then((c) => { setCfg(c); if (c.secret) setSecret(c.secret); return c })
+
+  const save = () => put({ repo_id: repo, process_id: proc })
+    .then(() => toast.success('Intake saved')).catch(fail)
+  const toggleAuto = () => put({ repo_id: repo, process_id: proc, autostart: !cfg?.autostart })
+    .then((c) => toast.success(c.autostart ? 'Tickets will start a run' : 'Tickets will wait for a person'))
+    .catch(fail)
+  const rotate = () => put({ rotate_secret: true })
+    .then(() => toast.success('New secret — copy it now, it is not shown again')).catch(fail)
   const sync = () => post(`/integrations/${integ.id}/sync`, { repo_id: repo, process_id: proc })
-    .then((r) => toast.success(`Synced: ${r.created} new, ${r.skipped} skipped`)).catch(fail)
+    .then((r) => toast.success(
+      `Synced: ${r.created} new, ${r.skipped} skipped${r.runs?.length ? `, ${r.runs.length} started` : ''}`))
+    .catch(fail)
+
   return (
-    <div className="work-actions">
-      <Select value={repo} onValueChange={(v) => setRepo(v ?? '')}>
-        <SelectTrigger className="field"><SelectValue placeholder="into repo…" /></SelectTrigger>
-        <SelectContent>{repos.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
-      </Select>
-      <Select value={proc} onValueChange={(v) => setProc(v ?? '')}>
-        <SelectTrigger className="field"><SelectValue placeholder="using process…" /></SelectTrigger>
-        <SelectContent>{procs.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-      </Select>
-      <Button size="sm" onClick={sync}>Sync issues</Button>
+    <div className="intake-panel">
+      <div className="work-actions">
+        <Select value={repo} onValueChange={(v) => setRepo(v ?? '')}>
+          <SelectTrigger className="field"><SelectValue placeholder="into repo…" /></SelectTrigger>
+          <SelectContent>{repos.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
+        </Select>
+        <Select value={proc} onValueChange={(v) => setProc(v ?? '')}>
+          <SelectTrigger className="field"><SelectValue placeholder="using process…" /></SelectTrigger>
+          <SelectContent>{procs.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+        </Select>
+        <Button size="sm" onClick={sync} disabled={!repo || !proc}>Sync issues</Button>
+        <Button size="sm" variant="outline" onClick={save} disabled={!repo || !proc}>Save intake</Button>
+        <Button size="sm" variant={cfg?.autostart ? 'default' : 'outline'} onClick={toggleAuto}
+          disabled={!repo || !proc}>
+          {cfg?.autostart ? 'Autostart on' : 'Autostart off'}
+        </Button>
+      </div>
+      {cfg && (
+        <p className="muted">
+          Webhook: <code className="mono">{cfg.url}</code>{' '}
+          <Button size="sm" variant="ghost" onClick={rotate}>
+            {cfg.has_secret ? 'Rotate secret' : 'Create secret'}
+          </Button>
+          {!cfg.has_secret && ' — a delivery without a secret is refused.'}
+        </p>
+      )}
+      {secret && (
+        <p className="muted">
+          Signing secret (shown once): <code className="mono">{secret}</code>
+        </p>
+      )}
     </div>
   )
 }
@@ -2030,11 +2085,37 @@ function Pipelines({ me }: any) {
 // harness lands (Phase 5) these are the six the default pipelines use.
 const PHASES = ['refine', 'plan', 'run', 'prove', 'review', 'security', 'improve']
 
+/**
+ * Runs as they happen.
+ *
+ * Merges what the server has with what the live channel says since. The list
+ * is the truth on load; a websocket event updates the run it names and adds one
+ * that is new, so a run started by a webhook appears without a refresh.
+ */
+function useLiveRuns(rows: any[]): LiveRun[] {
+  const [moves, setMoves] = useState<Record<string, LiveRun>>({})
+
+  useEffect(() => {
+    const on = (e: any) => setMoves((m) => ({ ...m, [e.detail.id]: e.detail }))
+    window.addEventListener('oref-run', on)
+    return () => window.removeEventListener('oref-run', on)
+  }, [])
+
+  return useMemo(() => {
+    const byId: Record<string, LiveRun> = {}
+    for (const r of rows) byId[r.id] = { ...r }
+    for (const [id, m] of Object.entries(moves)) byId[id] = { ...(byId[id] ?? {}), ...m }
+    return Object.values(byId)
+  }, [rows, moves])
+}
+
 function Runs({ me }: any) {
   const { rows, load } = useList('/runs')
   const { rows: items } = useList('/work-items')
   const [item, setItem] = useState('')
+  const [live, setLive] = useState(false)
   const canRun = (me?.permissions ?? []).includes('run:factory')
+  const runs = useLiveRuns(rows)
 
   const start = () => post('/runs', { work_item_id: item })
     .then(() => { toast.success('Run started'); load() }).catch(fail)
@@ -2046,6 +2127,15 @@ function Runs({ me }: any) {
       <h2 className="page-title">Runs</h2>
       <p className="muted">Work going through the factory. A run advances on the server, one stage
         at a time, and survives a restart.</p>
+      <div className="canvas-bar">
+        <Button size="sm" variant={live ? 'default' : 'outline'} onClick={() => setLive(!live)}>
+          {live ? 'List' : 'Live canvas'}
+        </Button>
+        <span className="muted">
+          {live ? 'The workflow you designed, with runs standing on it.' : ''}
+        </span>
+      </div>
+      {live && <LiveCanvas runs={runs} onApprove={approve} />}
       {canRun && (
         <div className="field-form">
           <Field label="Work item">
@@ -2059,14 +2149,14 @@ function Runs({ me }: any) {
           <Button onClick={start} disabled={!item}>Run</Button>
         </div>
       )}
-      <Card><CardContent>
+      {!live && <Card><CardContent>
         <Table>
           <TableHeader><TableRow>
             <TableHead>Run</TableHead><TableHead>Stage</TableHead><TableHead>Revisions</TableHead>
             <TableHead>Pull request</TableHead><TableHead /></TableRow></TableHeader>
           <TableBody>
-            <EmptyRow show={!rows.length} cols={5}>Nothing running yet.</EmptyRow>
-            {rows.map((r: any) => (
+            <EmptyRow show={!runs.length} cols={5}>Nothing running yet.</EmptyRow>
+            {runs.map((r: any) => (
               <TableRow key={r.id}>
                 <TableCell className="mono">{r.id.slice(0, 8)}</TableCell>
                 <TableCell>
@@ -2085,8 +2175,63 @@ function Runs({ me }: any) {
             ))}
           </TableBody>
         </Table>
-      </CardContent></Card>
+      </CardContent></Card>}
     </section>
+  )
+}
+
+/** The same graph as design mode, with the runs on it. */
+function LiveCanvas({ runs, onApprove }: { runs: LiveRun[]; onApprove: (id: string) => void }) {
+  const { rows: pipelines } = useList('/pipelines')
+  const [name, setName] = useState('')
+  const [graph, setGraph] = useState<Graph | null>(null)
+
+  // Default to whichever workflow has runs on it — that is what somebody
+  // opening this screen came to look at.
+  const busiest = useMemo(() => {
+    const count: Record<string, number> = {}
+    for (const r of runs as any[]) if (r.pipeline_id) count[r.pipeline_id] = (count[r.pipeline_id] ?? 0) + 1
+    const top = Object.entries(count).sort((a, b) => b[1] - a[1])[0]?.[0]
+    return pipelines.find((p: any) => p.id === top)?.name ?? pipelines[0]?.name ?? ''
+  }, [runs, pipelines])
+
+  const shown = name || busiest
+  const pipeline = useMemo(() =>
+    pipelines.find((p: any) => p.name === shown), [pipelines, shown])
+
+  useEffect(() => {
+    if (!pipeline) return setGraph(null)
+    api(`/pipelines/${pipeline.id}`).then(setGraph).catch(() => setGraph(null))
+  }, [pipeline?.id])
+
+  // Only this workflow's runs, or a run from another graph lands on a stage
+  // that happens to share a name.
+  const mine = useMemo(() =>
+    (runs as any[]).filter((r) => !pipeline || r.pipeline_id === pipeline.id ||
+      pipelines.some((p: any) => p.id === r.pipeline_id && p.name === shown)),
+    [runs, pipeline, pipelines, shown])
+
+  const active = mine.filter((r: any) => !r.outcome).length
+  const held = mine.filter((r: any) => r.held).length
+
+  if (!graph) return <p className="muted">No workflow to watch yet.</p>
+  return (
+    <>
+      <div className="canvas-bar">
+        <Select value={shown} onValueChange={(v) => setName(v ?? '')}>
+          <SelectTrigger className="field"><SelectValue placeholder="workflow" /></SelectTrigger>
+          <SelectContent>
+            {pipelines.map((p: any) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Badge variant="outline">{active} running</Badge>
+        {held > 0 && <Badge>{held} waiting on a person</Badge>}
+      </div>
+      <div className="canvas-layout">
+        <Canvas graph={graph} runs={mine} onApprove={onApprove}
+          onSelect={() => {}} selected={null} />
+      </div>
+    </>
   )
 }
 

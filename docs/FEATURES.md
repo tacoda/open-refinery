@@ -86,8 +86,11 @@ returned to anyone at any permission.
 |---|---|
 | Create work | `POST /work-items` |
 | Pull tickets in from a tracker | `POST /integrations/{id}/sync` |
+| Let a tracker push them in | `PUT /integrations/{id}/intake` (sets the webhook + autostart) |
 | Move work along | `POST /work-items/{id}/transition` |
-| *(Phase 4+)* Trigger a run | `POST /runs` |
+| Trigger a run | `POST /runs` |
+| Watch runs move | `GET /runs` · the live canvas over `/ws` |
+| Clear a hold | `POST /runs/{id}/approve` |
 
 ### `approve:factory` — the factory is platform's
 
@@ -243,15 +246,36 @@ flowchart LR
   S --> W[first admin<br/>signs up]
   W --> U[admin adds people<br/>preset, then edit]
   U --> C[each person connects<br/>their own keys]
-  C --> P[platform picks a<br/>workflow template]
-  P --> T[connect a tracker,<br/>sync a ticket]
+  C --> P[platform picks a<br/>workflow template<br/>ship-a-ticket is already there]
+  P --> T[connect a tracker,<br/>point intake at a repo]
   T --> R([Run])
 
   D{{open-refinery doctor<br/>says what is missing<br/>at every step}} -.-> S & C & P
 ```
 
 `doctor` is the thread through all of it: nine checks, each carrying a remedy
-rather than only a diagnosis.
+rather than only a diagnosis. Signing up seeds `ship-a-ticket`, so there is a
+workflow to run before anybody has drawn one.
+
+Work reaches the factory three ways, and behaves the same however it arrived:
+
+```mermaid
+flowchart LR
+  subgraph In[Intake]
+    H[tracker webhook<br/>POST /intake/id<br/>HMAC-signed] --> WI[work item]
+    Y[sync<br/>POST /integrations/id/sync] --> WI
+    M[by hand<br/>POST /work-items] --> WI
+  end
+  WI -->|autostart on| RUN([run])
+  WI -->|autostart off| Q[waits for a person]
+  Q -->|POST /runs| RUN
+  RUN --> WK[a worker claims it<br/>and advances one stage]
+  WK --> CV[the live canvas]
+```
+
+The webhook is the one route with no bearer token — the caller is a tracker,
+not a person — so the signature is the credential, and an integration with no
+secret accepts nothing.
 
 ### 4.2 The default pipeline — `ship-a-ticket`
 
@@ -328,13 +352,16 @@ flowchart LR
     CRED[credentials<br/>per user]:::done
     IMP[improve lane]:::done
     OPS[doctor · config · init]:::done
+    GRAPH[stage graph<br/>+ canvas]:::done
+    WORK[worktree + forge<br/>+ delivery gate]:::done
+    HARN[the harness<br/>deepagents · phases]:::done
+    QUEUE[workers<br/>claim · resume · caps]:::done
+    LADDER[the ladder<br/>rungs 0·1·3·4]:::done
+    IN[intake<br/>webhook · sync · by hand]:::done
   end
   subgraph next["Remaining"]
-    GRAPH[stage graph<br/>+ canvas]:::todo
-    WORK[worktree + forge]:::todo
-    HARN[the harness]:::todo
-    QUEUE[workers]:::todo
-    LADDER[the ladder]:::todo
+    PACKS[default pipeline packs]:::todo
+    DOCS[ADOPTING · LIMITATIONS]:::todo
   end
 
   classDef done fill:#dcfce7,stroke:#166534,color:#14532d
@@ -343,10 +370,11 @@ flowchart LR
 
 | Pillar | State |
 |---|---|
-| **1 · A software factory** | Work items move between stages, governed. **Nothing produces a diff yet.** |
-| **2 · A harness** | Identity and one governed model call. The turn loop is Phase 5. |
-| **3 · A queue of workers** | A thread runner and a cadence sweep. The reconciler is Phase 6. |
-| **4 · Business features** | **Ahead.** Keyed audit chain, evidence packs, the improve lane, observation. |
+| **1 · A software factory** | **Working end to end.** A ticket arrives by webhook, sync or hand; a run goes through the stage graph; the delivery gate opens a pull request; a comment on it becomes rework. |
+| **2 · A harness** | **Working.** deepagents behind `pipeline/agent.py`, seven phases, tool grants as rung 1, `GovernanceMiddleware` as rung 3, oversight → interrupt → approval. |
+| **3 · A queue of workers** | **Working.** N workers claim a run with a conditional update, advance it one stage, release it; stale claims are taken over; team caps bound concurrency; a crash resumes. |
+| **4 · Business features** | **Working.** Keyed audit chain, evidence packs, the improve lane, proposals, observation, the live canvas. |
 
-The honest summary: **pillar 4 is done and pillars 1–3 are most of the
-remaining work.** Sequencing is in [PLAN-3.0.md §6](PLAN-3.0.md).
+What is left before 3.0.0 is the improve lane's own pipeline, the default
+workflow packs a team starts from, and the adoption docs. Sequencing is in
+[PLAN-3.0.md §6](PLAN-3.0.md).

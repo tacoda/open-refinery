@@ -66,6 +66,10 @@ REQUIRED = {
     "what happens next": "/runs/{run_id}/next",
     "approve a held stage": "/runs/{run_id}/approve",
     "advance a run": "/runs/{run_id}/advance",
+    # pillar 1 — intake: how work gets in
+    "a tracker's webhook": "/intake/{integration_id}",
+    "where a tracker's tickets land": "/integrations/{integ_id}/intake",
+    "sync a tracker": "/integrations/{integ_id}/sync",
     # the work
     "repositories": "/repositories",
     "processes": "/processes",

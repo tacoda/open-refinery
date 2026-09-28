@@ -237,3 +237,23 @@ def test_teardown_releases_the_worktree_but_keeps_the_branch(repo, ctx):
 
 def test_an_unknown_action_is_an_error(ctx):
     assert perform("make_coffee", _run(), ctx).outcome == ERROR
+
+
+# --- a checkout that is not a checkout ---------------------------------------
+
+def test_prepare_refuses_a_git_url_that_is_not_a_local_checkout(tmp_path, monkeypatch):
+    """A repo's `git_url` is a string somebody typed. `prepare` used to `mkdir
+    -p` it before asking whether it was a checkout at all, so a repo pointing at
+    `git@github.com:acme/web.git` created a directory by that name — relative to
+    wherever the server happened to be running.
+
+    `root_of` existed to catch exactly this and nothing called it.
+    """
+    from open_refinery.pipeline import workspace as ws
+
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ws.WorkspaceError, match="not a git checkout"):
+        ws.create("git@github.com:acme/web-app.git", "run-1")
+
+    assert not (tmp_path / "git@github.com:acme").exists(), \
+        "refusing must not leave a directory behind"

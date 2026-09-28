@@ -37,9 +37,20 @@ def setup_status(session: Session = Depends(get_session)):
 
 @router.post("/setup", status_code=201)
 def setup(body: Setup, session: Session = Depends(get_session)):
+    """The first admin, and the defaults they build from.
+
+    A fresh install seeds `ship-a-ticket` here, because a workflow needs an
+    owner and this is the first moment there is one. Without it, an install has
+    no pipeline at all and the first `POST /runs` fails on a name nobody typed —
+    "defaults to build from" is only true if they are actually there.
+    """
+    from ..pipeline import store as ps
+
     if count_users(session) > 0:
         raise HTTPException(status_code=409, detail="already set up")
     user, token = create_user(session, body.email, body.password, "admin")
+    ps.ensure_default(session, user.id)
+    session.refresh(user)   # seeding committed, which expired the row we return
     return {"user": user, "token": token}
 
 @router.get("/me")

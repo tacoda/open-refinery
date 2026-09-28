@@ -1962,6 +1962,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/phases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Phases
+         * @description Every phase and what it may do.
+         *
+         *     Open to anyone signed in: the tool grant is rung 1 of the ladder, and a
+         *     constraint nobody can read is one nobody can rely on.
+         */
+        get: operations["get_phases_phases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/phases/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Phase
+         * @description Change what a turn is allowed to be — the harness, which is the lead's.
+         *
+         *     Only what is set here overrides the built-in, so changing a turn cap does
+         *     not silently clear the prompt.
+         */
+        put: operations["set_phase_phases__name__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pipelines/actions": {
         parameters: {
             query?: never;
@@ -2007,6 +2053,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pipelines/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Templates
+         * @description The defaults to build from — each saying what it **gives up**, because a
+         *     template chosen without knowing that is a decision nobody made.
+         */
+        get: operations["get_templates_pipelines_templates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pipelines/templates/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Default Template
+         * @description `ship-a-ticket` — the one a team gets before configuring anything.
+         */
+        get: operations["get_default_template_pipelines_templates_default_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pipelines/templates/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Template */
+        get: operations["get_template_pipelines_templates__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pipelines/{pipeline_id}": {
         parameters: {
             query?: never;
@@ -2037,26 +2141,6 @@ export interface paths {
          *     in a pull request, without any state living outside the database.
          */
         get: operations["export_pipeline_pipelines__pipeline_id__export_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/pipelines/templates/default": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Default Template
-         * @description `ship-a-ticket` — the defaults to build from.
-         */
-        get: operations["get_default_template_pipelines_templates_default_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2148,6 +2232,153 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/runs/{run_id}/advance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Advance Run
+         * @description Move a run forward — one stage, or until it stops.
+         *
+         *     Phase 6 replaces this with a pool of workers claiming runs on a tick. Until
+         *     then it is here so a run can be driven by hand, which is also how you watch
+         *     a pipeline behave before trusting it to a worker.
+         */
+        post: operations["advance_run_runs__run_id__advance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ladder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ladder
+         * @description Both ladders, the rungs and what each can see, and the net grant.
+         *
+         *     Open to anyone signed in — the whole value of writing a rule down is that
+         *     the people it constrains can read it.
+         */
+        get: operations["get_ladder_ladder_get"];
+        put?: never;
+        /**
+         * Add Rule
+         * @description Put a rule on the ladder. Needs `approve:<layer>` for its layer.
+         */
+        post: operations["add_rule_ladder_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ladder/{rule_id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Move
+         * @description What moving this rule would mean, before anybody does it.
+         *
+         *     Pure, so the question "what would it take to make this real?" can be asked
+         *     freely.
+         */
+        get: operations["preview_move_ladder__rule_id__move_get"];
+        put?: never;
+        /**
+         * Move Rule
+         * @description Carry a rule at a different rung.
+         *
+         *     A **demotion** needs a second signer, named in the request and distinct from
+         *     the caller. One person removing enforcement on their own is the thing an
+         *     auditor asks about, and "we trusted them" is not the answer they want.
+         */
+        post: operations["move_rule_ladder__rule_id__move_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ladder/{rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Disable Rule
+         * @description Turn a rule off. Disabling is a demotion in everything but name, so it
+         *     is refused for anything mechanical — move it to rung 0 instead, which leaves
+         *     a record of who weakened it and why.
+         */
+        delete: operations["disable_rule_ladder__rule_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/intake/{integration_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Receive
+         * @description Accept a tracker's webhook delivery.
+         *
+         *     Unauthenticated by bearer *on purpose* — the signature is the credential.
+         *     A bad signature is a 401 and nothing else: the reply says no more than that,
+         *     because a caller who can distinguish "wrong secret" from "unknown
+         *     integration" can enumerate integrations.
+         */
+        post: operations["receive_intake__integration_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/integrations/{integ_id}/intake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Intake */
+        get: operations["get_intake_integrations__integ_id__intake_get"];
+        /** Set Intake */
+        put: operations["set_intake_integrations__integ_id__intake_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2232,6 +2463,31 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** IntakeConfig */
+        IntakeConfig: {
+            /**
+             * Repo Id
+             * @default
+             */
+            repo_id: string;
+            /**
+             * Process Id
+             * @default
+             */
+            process_id: string;
+            /**
+             * Pipeline
+             * @default
+             */
+            pipeline: string;
+            /** Autostart */
+            autostart?: boolean | null;
+            /**
+             * Rotate Secret
+             * @default false
+             */
+            rotate_secret: boolean;
+        };
         /** LogLine */
         LogLine: {
             /** Line */
@@ -2260,6 +2516,24 @@ export interface components {
             changes?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * MoveRule
+         * @description Carry a rule at a different rung. A demotion needs a second signer.
+         */
+        MoveRule: {
+            /** To */
+            to: number;
+            /**
+             * Predicate
+             * @default
+             */
+            predicate: string;
+            /**
+             * Second Signer
+             * @default
+             */
+            second_signer: string;
         };
         /** NewAuditor */
         NewAuditor: {
@@ -2471,6 +2745,44 @@ export interface components {
             priority: number;
         };
         /**
+         * NewRule
+         * @description A rule, and the rung that carries it.
+         */
+        NewRule: {
+            /** Text */
+            text: string;
+            /**
+             * Layer
+             * @default code
+             */
+            layer: string;
+            /**
+             * Rung
+             * @default 0
+             */
+            rung: number;
+            /**
+             * Side
+             * @default constraint
+             */
+            side: string;
+            /**
+             * Predicate
+             * @default
+             */
+            predicate: string;
+            /**
+             * Withholds
+             * @default []
+             */
+            withholds: string[];
+            /**
+             * Scope
+             * @default *
+             */
+            scope: string;
+        };
+        /**
          * NewRun
          * @description Put a work item through a pipeline. Name it or take the newest
          *     `ship-a-ticket`.
@@ -2594,6 +2906,24 @@ export interface components {
              * @default
              */
             preset: string;
+        };
+        /**
+         * PhaseBody
+         * @description A team's override of one phase. Omitted fields keep the built-in.
+         */
+        PhaseBody: {
+            /** Prompt */
+            prompt?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Thinking */
+            thinking?: string | null;
+            /** Max Turns */
+            max_turns?: number | null;
+            /** Tools */
+            tools?: string[] | null;
+            /** Subagents */
+            subagents?: boolean | null;
         };
         /**
          * PipelineBody
@@ -2738,6 +3068,8 @@ export interface components {
             repo_id: string;
             /** Process Id */
             process_id: string;
+            /** Autostart */
+            autostart?: boolean | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -7098,6 +7430,74 @@ export interface operations {
             };
         };
     };
+    get_phases_phases_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_phase_phases__name__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PhaseBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_actions_pipelines_actions_get: {
         parameters: {
             query?: never;
@@ -7164,6 +7564,101 @@ export interface operations {
             };
         };
     };
+    get_templates_pipelines_templates_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_default_template_pipelines_templates_default_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_template_pipelines_templates__name__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_pipeline_pipelines__pipeline_id__get: {
         parameters: {
             query?: never;
@@ -7206,37 +7701,6 @@ export interface operations {
             path: {
                 pipeline_id: string;
             };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_default_template_pipelines_templates_default_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7408,6 +7872,317 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    advance_run_runs__run_id__advance_post: {
+        parameters: {
+            query?: {
+                all_the_way?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ladder_ladder_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_rule_ladder_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewRule"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_move_ladder__rule_id__move_get: {
+        parameters: {
+            query: {
+                to: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    move_rule_ladder__rule_id__move_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveRule"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disable_rule_ladder__rule_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    receive_intake__integration_id__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-hub-signature-256"?: string;
+                "x-gitlab-token"?: string;
+                "x-signature"?: string;
+            };
+            path: {
+                integration_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_intake_integrations__integ_id__intake_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                integ_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_intake_integrations__integ_id__intake_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                integ_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntakeConfig"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

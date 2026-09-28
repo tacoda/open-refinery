@@ -792,19 +792,44 @@ FORGES = {"github": ..., "gitlab": ..., "local": ...}
 It needs no account and no token, it is the shortest path to seeing the factory
 work end to end, and it is the proof the seam is a seam rather than a rename.
 
-### 3.8 Intake — tickets in
+### 3.8 Intake — tickets in  *(shipped 2.24.0)*
 
 Three ways, all landing on the same `create_work_item` → `POST /runs`:
 
-1. **Sync** — `sync_tracker()` exists; it gains an `autostart` flag.
-2. **Inbound webhooks** — `POST /intake/{integration_id}` with a per-integration
-   HMAC secret, for Jira / Linear / GitHub Issues. (`webhooks.py` is outbound
-   today; this is the other direction.)
+1. **Sync** — `sync_tracker(..., autostart=)`, defaulting to the integration's
+   own setting so a sync behaves the way that tracker's webhooks do.
+2. **Inbound webhooks** — `POST /intake/{integration_id}`, one parser per
+   tracker (GitHub Issues, GitLab Issues, Jira, Linear) in `intake.PARSERS`.
+   (`webhooks.py` is outbound; this is the other direction.)
 3. **Manual** — a Run button, or `POST /runs`.
+
+Autostart is per integration, so it reads the same however the ticket arrived.
+
+**The ticket is untrusted data.** Its title and body are written by whoever
+filed it, which on a public tracker is anybody at all, so they reach a phase as
+a quoted spec and never as instructions; rung 3 governs every call they
+provoke.
+
+**The webhook is the one route with no bearer token** — the caller is a tracker,
+not a person. It authenticates by HMAC over the exact bytes delivered, compared
+with `compare_digest`, which is why the handler takes the raw body and parses it
+afterwards: re-serializing a parsed body changes the bytes. An integration with
+no secret accepts nothing rather than accepting everything, and a bad signature
+returns 401 and no more, because a reply that distinguishes "wrong secret" from
+"unknown integration" is an enumeration oracle.
+
+Deliveries are deduped by external ref — every tracker re-delivers — and only
+opening events count as new work, so editing a title does not file a second
+ticket.
 
 **Rework** closes the loop: `watch_pull_request` polls the PR; a human comment
 that is not the factory's own moves the run to `rework`, which re-prepares the
 workspace and re-runs with the comment as the brief.
+
+**A fresh install seeds `ship-a-ticket`** at `POST /setup`. It did not before,
+so an install had no pipeline at all: the first `POST /runs` failed on a name
+nobody had typed, and autostart quietly did nothing. "Defaults to build from"
+is only true when they are there.
 
 ### 3.9 Durability
 
@@ -951,9 +976,10 @@ change ships its migration and its `DOWNGRADES` reverse.
 | 3 | 2.18.0 | **Canvas, design mode.** Build a workflow by drawing it; templates; validation inline | 1 |
 | 4 | 2.19.0 | **Workspace + forge.** Worktree + claim, github/gitlab/local drivers, the delivery gate. A run reaches a real pull request with a stub phase | 1 |
 | 5 | 2.20.0 | **The harness.** deepagents, phases, tool grants, `GovernanceMiddleware`, oversight → interrupts → approvals | 2 |
-| 6 | 2.21.0 | **Workers.** The reconciler: N workers claiming runs, one stage each, bounded by the concurrency cap. Crash-resume | 3 |
-| 7 | 2.22.0 | **The ladder** (absorbing the policy rule engine as rung 3) + promotion/demotion, where the factory implements its own approved improvements | 4 |
-| 8 | 2.23.0 | **Intake + canvas live mode.** Tracker webhooks, autostart, rework-from-comment, runs flowing across the graph | 1, 3 |
+| — | 2.21.0 | **Providers, forges and trackers as ports** (9 → 19). An interlude: the connector lists became registries before the factory was built on top of them | — |
+| 6 | 2.22.0 | **Workers.** The reconciler: N workers claiming runs, one stage each, bounded by the concurrency cap. Crash-resume | 3 |
+| 7 | 2.23.0 | **The ladder** (absorbing the policy rule engine as rung 3) + promotion/demotion, where the factory implements its own approved improvements | 4 |
+| 8 | 2.24.0 | **Intake + canvas live mode.** Tracker webhooks, autostart, rework-from-comment, runs flowing across the graph | 1, 3 |
 | 9 | **3.0.0** | The improve lane, default pipeline packs, docs, the acceptance test (§7), release | 4 |
 
 **Phase 4 is the first release that does something the product cannot do
@@ -1148,20 +1174,28 @@ inspector for the selected node.
   canvas totals an estimate for one run, from `unit_cost` and `max_turns`. A
   target that spends money should say so before you press Run (§9.2).
 
-### 11.2 Live mode — the factory floor
+### 11.2 Live mode — the factory floor  *(shipped 2.24.0)*
 
 The same layout, the same node positions, runs flowing across it:
 
-- a **token per run** sitting on the stage it occupies, so where the work is
-  piling up is a glance rather than a query
-- **held for approval** marked on the node, click to approve or reject inline —
-  a plan gate (§10.3) is a node you can clear from here
-- refusals, revision counts, elapsed time, spend per run
-- worker saturation and quota headroom along the bottom
+- a **count per stage** of the runs standing on it, so where work is piling up
+  is a glance rather than a query
+- **held for approval** marked on the node, with an approve button on the node
+  itself — a hold is cleared where you notice it, because walking to another
+  screen is how a run sits overnight
+- the edge a run has just crossed animates, so a move is visible rather than a
+  number quietly changing
+- **editing is off** while runs are on it: you cannot drag a stage whose layout
+  the runs are using
 
-It feeds from `live.py`'s HUB over WebSocket, which already exists and already
-publishes. The Runs list stays — a canvas is bad at "show me everything that
-failed last Tuesday", and a table is bad at "where is everything right now".
+It feeds from `live.py`'s HUB over WebSocket. `pipeline/store.apply_move` is the
+only place a run's stage changes, so `announce()` sits there and every path —
+a worker tick, a manual advance, an approval — publishes without knowing it. An
+event carries stage names and nothing about layout; the browser already has the
+nodes.
+
+The Runs list stays — a canvas is bad at "show me everything that failed last
+Tuesday", and a table is bad at "where is everything right now".
 
 ### 11.3 Roles and areas, visible on the canvas
 

@@ -304,10 +304,24 @@
 
 .canvas-node-body { display: flex; flex-direction: column; gap: .15rem;
                     padding: .5rem .6rem; text-align: left; }
-.canvas-node-name { font-weight: 600; font-size: .85rem; }
+.canvas-node-name { font-weight: 600; font-size: .85rem;
+  display: flex; align-items: center; gap: .35rem; justify-content: space-between; }
 .canvas-node-kind { font-size: .7rem; opacity: .65; }
 .canvas-node-tags { display: flex; gap: .2rem; flex-wrap: wrap; margin-top: .15rem; }
 .canvas-node-tags > * { font-size: .62rem; padding: 0 .3rem; }
+
+/* Live mode. State is carried by the border, so the node reads the same as it
+   does in design mode — a stage with work on it, not a different drawing. */
+.canvas-node.is-busy { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 18%, transparent); }
+.canvas-node.is-held { border-color: #d97706; box-shadow: 0 0 0 2px color-mix(in srgb, #d97706 22%, transparent); }
+.canvas-node-count { font-size: .62rem; font-weight: 600; line-height: 1;
+  min-width: 1.1rem; text-align: center; padding: .15rem .25rem; border-radius: .6rem;
+  background: var(--primary); color: var(--primary-foreground); }
+.canvas-approve { height: 1.2rem; font-size: .62rem; padding: 0 .35rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__edge-path { animation: none !important; }
+}
 .canvas-terminal { display: block; padding: .5rem .6rem; font-size: .8rem; opacity: .8; }
 
 /* The inspector: a stage's config is clicking its node. */
@@ -331,3 +345,7 @@
 /* React Flow draws its own controls; keep them on our surface. */
 .react-flow__controls-button { background: var(--card); border-color: var(--border); }
 .react-flow__minimap { background: var(--card); }
+
+/* Intake — the sync/webhook panel on a tracker connection. */
+.intake-panel { display: flex; flex-direction: column; gap: .4rem; }
+.intake-panel code.mono { font-size: .72rem; word-break: break-all; }

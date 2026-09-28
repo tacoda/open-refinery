@@ -159,6 +159,13 @@ MIGRATIONS: list[str] = [
     # tables are created by `create_all`; this entry is the version bump so an
     # existing install records that it has them.
     "SELECT 1;",
+    # v30 (2.24.0): intake — where a tracker's tickets land, whether they start
+    # a run the moment they are filed, and the secret that signs its webhooks.
+    "ALTER TABLE integrations ADD COLUMN webhook_secret TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE integrations ADD COLUMN intake_repo_id TEXT;"
+    "ALTER TABLE integrations ADD COLUMN intake_process_id TEXT;"
+    "ALTER TABLE integrations ADD COLUMN intake_pipeline TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE integrations ADD COLUMN autostart INTEGER NOT NULL DEFAULT 0;",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -231,6 +238,11 @@ DOWNGRADES: list[str] = [
     "DROP TABLE IF EXISTS run_steps;"
     "DROP TABLE IF EXISTS runs;"
     "DROP TABLE IF EXISTS pipelines;",                                                   # v29
+    "ALTER TABLE integrations DROP COLUMN webhook_secret;"
+    "ALTER TABLE integrations DROP COLUMN intake_repo_id;"
+    "ALTER TABLE integrations DROP COLUMN intake_process_id;"
+    "ALTER TABLE integrations DROP COLUMN intake_pipeline;"
+    "ALTER TABLE integrations DROP COLUMN autostart;",                                   # v30
 ]
 
 
