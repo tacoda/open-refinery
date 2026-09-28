@@ -52,15 +52,6 @@ def remove_webhook(webhook_id: str, session: Session = Depends(get_session),
     delete_webhook(session, webhook_id)
     return {"status": "deleted"}
 
-# --- debt audits & health ---
-@router.post("/audits/run", status_code=201)
-def run_audits(area: str = "all", background: bool = False,
-               session: Session = Depends(get_session), user: User = Depends(current_user)):
-    if background:  # run off the request path; poll /jobs/{id}
-        return enqueue(session, session.get_bind(), f"audit:{area}",
-                       lambda s: {"audits": [a.id for a in run_audit(s, area, user.id)]})
-    return run_audit(session, area, user.id)
-
 # --- background jobs ---
 @router.get("/jobs")
 def get_jobs(session: Session = Depends(get_session), _: User = Depends(current_user)):

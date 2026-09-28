@@ -112,6 +112,10 @@ def test_no_route_survives_a_deleted_module(paths):
     "/work-items/{item_id}/attest", "/work-items/{item_id}/request-approval",
     "/approvals/overdue", "/approvals/{request_id}/approve",
     "/approvals/{request_id}/reject",
+    # 3.0: `POST /audits/run` called a `run_audit` that does not exist anywhere,
+    # so it answered 500 to every request. No test covered it, which is how it
+    # survived. The improve lane is what reads the record for findings now.
+    "/audits/run",
 ])
 def test_removed_features_leave_no_dead_routes(paths, gone):
     """A route that lingers after its feature is removed is worse than no

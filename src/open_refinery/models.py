@@ -363,17 +363,6 @@ class PolicyVersion(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
-class Invitation(SQLModel, table=True):
-    __tablename__ = "invitations"
-    id: str = Field(default_factory=new_id, primary_key=True)
-    email: str = Field(index=True)
-    role: str
-    token_hash: str = Field(unique=True, index=True)
-    invited_by: str = Field(foreign_key="users.id")
-    expires_at: str
-    status: str = Field(default="pending")  # pending | accepted | revoked
-    created_at: str = Field(default_factory=now_iso)
-
 
 class Setting(SQLModel, table=True):
     __tablename__ = "settings"
@@ -607,56 +596,5 @@ class Job(SQLModel, table=True):
     updated_at: str = Field(default_factory=now_iso)
 
 
-class Audit(SQLModel, table=True):
-    """A recorded debt-audit run for one area — health score + findings + insights."""
-    __tablename__ = "audits"
-    id: str = Field(default_factory=new_id, primary_key=True)
-    area: str                         # factory | harness | charter
-    score: int                        # 0–100 health
-    findings: list = Field(default_factory=list, sa_column=Column(JSON))
-    insights: list = Field(default_factory=list, sa_column=Column(JSON))
-    ran_by: str = Field(foreign_key="users.id", index=True)
-    created_at: str = Field(default_factory=now_iso, index=True)
 
 
-class Claim(SQLModel, table=True):
-    """A stated behavior on a repo surface (charter/harness/code), and whether an
-    instruction and a gate actually back it. A claim with neither is an
-    *imitation surface* — reads as governed, isn't."""
-    __tablename__ = "claims"
-    id: str = Field(default_factory=new_id, primary_key=True)
-    repo_id: str = Field(foreign_key="repositories.id", index=True)
-    surface: str                      # charter | harness | code
-    text: str
-    has_instruction: bool = False     # a backing instruction exists (rule/skill/command/agent)
-    has_gate: bool = False            # a gate/check enforces it
-    owner_id: str = Field(foreign_key="users.id", index=True)
-    created_at: str = Field(default_factory=now_iso)
-
-
-
-class RecertCampaign(SQLModel, table=True):
-    """An access-recertification campaign: reviewers re-attest every active user's
-    access/role by the due date. New table — no migration (create_all handles it)."""
-    __tablename__ = "recert_campaigns"
-    id: str = Field(default_factory=new_id, primary_key=True)
-    name: str
-    created_by: str = Field(foreign_key="users.id", index=True)
-    created_at: str = Field(default_factory=now_iso)
-    due_at: str = ""
-    status: str = Field(default="open", index=True)  # open | closed
-
-
-class RecertItem(SQLModel, table=True):
-    """One user under review in a campaign. email/role are snapshotted so the
-    record shows what was certified even if the account later changes."""
-    __tablename__ = "recert_items"
-    id: str = Field(default_factory=new_id, primary_key=True)
-    campaign_id: str = Field(foreign_key="recert_campaigns.id", index=True)
-    user_id: str = Field(foreign_key="users.id", index=True)
-    email: str
-    role: str
-    decision: str = Field(default="pending", index=True)  # pending | certified | revoked
-    decided_by: str = ""
-    decided_at: str = ""
-    note: str = ""

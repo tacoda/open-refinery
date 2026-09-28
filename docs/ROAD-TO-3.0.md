@@ -26,7 +26,7 @@ This is the cleanup that follows it.*
 | 6 | Give the ladder a UI; collapse the three rules surfaces into it | **done** |
 | 7 | Collapse the navigation to ~8 views | **done** — nine, flat |
 | 8 | One authorization model — policies key off permissions, not `role_rank` | **done** |
-| 9 | Publish the feature list and the domain glossary | next |
+| 9 | Publish the feature list and the domain glossary | **done** |
 
 ---
 
@@ -68,10 +68,10 @@ views cover everything the product does.
 person and the docs say role rank is ordering only — but `policies.enforce`
 matches a stale `role` string and resolves precedence with `role_rank`.
 
-**9 · say what it is.** A feature list and a domain glossary: every capability
-the product has, and every term it uses, each defined once. The product's own
-vocabulary has drifted — *process* and *pipeline* meant the same thing until
-step 2, *quota* and *budget* until step 3, and *stage*, *step*, *phase* and
-*rung* are four different ideas that read alike. This is the step that makes the
-set of features legible to somebody who did not build it, and the vocabulary
-legible to an agent working in the repo.
+**9 · say what it is.** [FEATURES.md](FEATURES.md) §0 is the feature list;
+[GLOSSARY.md](GLOSSARY.md) is the vocabulary, each term defined once. Writing
+them down is also an audit: it found `POST /audits/run` answering **500** to
+every request — it called a `run_audit` that exists nowhere, and no test covered
+it — plus five tables no code reads (`audits`, `claims`, `recert_campaigns`,
+`recert_items`, `invitations`). A feature list that includes a 500 is not a
+feature list, so they went.

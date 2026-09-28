@@ -38,7 +38,6 @@ from .integrations import (
 from .email import EmailSender, LinuxMailSender, MemorySender, send_email, set_sender
 from .models import (
     Budget,
-    Invitation,
     Policy,
     Setting,
     Team,
@@ -317,7 +316,6 @@ __all__ = [
     "review",
     "resubmit",
     "list_proposals",
-    "Invitation",
     "EmailSender",
     "LinuxMailSender",
     "MemorySender",

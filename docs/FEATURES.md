@@ -1,15 +1,84 @@
-# open-refinery — features, permissions, and the journey of a change
+# open-refinery — the feature list
 
-*Generated against 3.0.0-dev. The companion to [PLAN-3.0.md](PLAN-3.0.md): that
-one says where we are going, this one says what exists and who can reach it.*
+*What exists, and who can reach it. Companion to
+[GLOSSARY.md](GLOSSARY.md), which says what the words mean, and to
+[LIMITATIONS.md](LIMITATIONS.md), which says what the product does not do.*
 
-Two things to hold on to before the diagrams:
+Two things to hold on to before the list:
 
 - **Authorization is a set of permissions on a person.** Roles are *presets* —
   starting points copied onto a user at creation, never read again. Where a
   preset name appears below it is shorthand for "whoever holds that set".
 - **A layer is what a change is *about***: `code` · `harness` · `factory` ·
   `charter`. Almost every gate in the system keys off one.
+
+---
+
+## 0. Every feature
+
+Four things the product does, and everything it ships to do them. 137
+operations across 112 paths; the tables in §2 map each to the permission it
+needs.
+
+### 0.1 Ship a change
+
+| Feature | What it does |
+|---|---|
+| **Intake** | A ticket arrives three ways and behaves the same however it did: a tracker **webhook** (HMAC-signed; the signature *is* the credential, and an integration with no secret accepts nothing), a **sync** that pulls a tracker's issues, or **by hand**. `autostart` decides whether it runs by itself. |
+| **Work items** | The ticket. No state machine of its own — its stage is derived from its runs. |
+| **Pipelines** | The stage graph, versioned; a run pins the version it started under, so an edit cannot reach work in flight. Four templates: `ship-a-ticket` · `quick-fix` · `docs-only` · `strict`. Validate before saving; export as a document; edit on a canvas. |
+| **Runs** | One run, one worktree, one branch, one pull request. Start, watch, preview what the machine would do next, advance one stage, clear a hold. |
+| **Workers** | N workers claim a run with a conditional update, advance it one stage, release it. A stale claim is taken over; a crash resumes, because the `Run` row *is* the state. Team concurrency caps bound how many are in flight. |
+| **The harness** | Seven phases — `refine` · `plan` · `run` · `prove` · `review` · `security` · `improve` — each with its own prompt, model, turn cap and **tool grant**. Deciding and building are separate turns on different models. |
+| **Contracts** | `PROVEN:` / `VERDICT:` parsing over a phase's answer. **Unparseable is never a pass.** |
+| **Worktrees** | A git worktree per run, rooted so a turn cannot write outside it. Refuses a repository that is not a local checkout before creating anything. |
+| **Forges** | GitHub · GitLab · Gitea · Bitbucket · `local`. Opens the pull request, watches it, and turns a reviewer's comment into rework. **Nothing merges itself.** |
+| **Delivery gate** | Rung 4: a predicate over the finished diff, before the commit. |
+| **Oversight** | A per-repository dial — `manual` → `dark` — that becomes the set of tool calls a turn interrupts on. |
+
+### 0.2 Govern it
+
+| Feature | What it does |
+|---|---|
+| **Permissions** | Twelve, on the person: `approve:<layer>` · `propose:<layer>` over four layers, plus `run:factory`, `manage:users`, `read:audit`, `see:operations`. `propose:*` is wide; `approve:*` is narrow. |
+| **Presets** | Named permission bundles to start a person from — copied once, never read again. Editable; `builtin` ones cannot be deleted. |
+| **The ladder** | Six rungs and what each can *see*. The product carries 0, 1, 3 and 4; rung 2 is the target repo's commit hook and rung 5 is its CI. Four predicates ship. **Promotion and demotion are not symmetric** — a demotion needs a second signer and the factory never performs one. |
+| **Policies** | Allow/deny artifacts keyed to a **permission**, with `strict` locking, per-namespace scope, an org `audit`/`strict` enforcement mode, full version history and point-in-time reconstruction. |
+| **Packs & standards** | Thirty-one bundles of written guidance and governed artifacts, enabled as a unit. Enabling one is a charter change. |
+| **Proposals** | Anyone may put a change forward; only the layer's owner signs it, through an ordered chain with a distinct signer per slot. |
+| **Content filter** | Secrets refused at every tool call; personal data redacted where text **leaves** — the pull-request body — with a Luhn check so a constant is not a card number. |
+| **Budgets** | A shared ceiling over a rolling window at `org`/`team`/`repo` scope, plus `max_run_units` per repository for a single run. Metered off what the provider reported. |
+| **Pre-action gate** | `POST /authorize` lets an out-of-process harness check identity and declared intent against policy *before* it acts. |
+| **Teams** | Grouping, plus the concurrency cap and team-scoped budgets. |
+
+### 0.3 Prove it
+
+| Feature | What it does |
+|---|---|
+| **Audit chain** | Append-only, hash-chained and **keyed** — each link an HMAC under a subkey of `SECRET_KEY`, so forging an event and recomputing the chain does not work without the key. Verify, export (JSON/CSV), purge with a signed **checkpoint** explaining the gap. |
+| **Auditor grants** | A time-boxed, read-only token that reads the trail and evidence and mutates nothing. |
+| **Evidence packs** | The trail mapped onto `soc2` · `iso27001` · `hipaa` · `gdpr`, control by control. |
+| **Metrics** | Delivery — runs, landed/closed/failed, `landed_pct` over *finished* runs, time to a pull request and to an outcome — plus per-stage health, worst first, and work by stage. |
+| **Spend** | What each run cost, and what is used against every ceiling. |
+| **Improve lane** | One read over the record for what went wrong. **Evidence or it is dropped**, and nothing is applied — a finding becomes a proposal. |
+| **Webhooks & notifications** | HMAC-signed event delivery to an endpoint; Slack / webhook / email alerts on a matching recipe. |
+| **Live channel** | A WebSocket that publishes every stage change, plus per-run log tailing. |
+
+### 0.4 Run the place
+
+| Feature | What it does |
+|---|---|
+| **Setup** | `open-refinery init` writes the env and the database; the first sign-up becomes the owner and seeds `ship-a-ticket`; a six-step wizard ends by **starting a run**. |
+| **`doctor`** | Nine checks, each carrying a remedy rather than only a diagnosis — including whether a repository is actually a local checkout, which is the first thing a real run fails on. |
+| **`config`** | Every effective setting and where it came from. |
+| **Migrations** | Versioned, automatic on `serve`, explicit via `open-refinery migrate --to N` in either direction. Every entry has a reverse. |
+| **Credentials** | One person's key per service, encrypted at rest, verifiable, rotatable. A secret is never returned to anyone at any permission. |
+| **Agents** | An external harness registers by OAuth **device flow** — it shows a code, a person approves it — and gets a token it can rotate. It cannot be granted authority its registrar does not hold. |
+| **MFA** | TOTP enrolment, confirmation and disable for local accounts. |
+| **Settings** | Config lives in the database, encrypted and UI-managed, so **only `SECRET_KEY` is required in the environment**. |
+| **Jobs & scheduler** | Long work off the request path, and scheduled repository re-reads. |
+| **API docs** | Self-hosted Swagger UI at `/api-docs`, assets bundled at build. |
+| **Dashboard** | Nine screens; a developer sees seven. |
 
 ---
 
@@ -60,7 +129,7 @@ and only the layer's owner signs it.
 
 ## 2. Every feature, by the permission it needs
 
-138 routes. Grouped by what you must hold to reach them.
+137 routes. Grouped by what you must hold to reach them.
 
 `propose:*` below is shorthand for all four: `propose:code`,
 `propose:harness`, `propose:factory`, `propose:charter`.
@@ -352,37 +421,17 @@ thing the rule is about.
 
 ## 5. The four pillars, and what exists today
 
-```mermaid
-flowchart LR
-  subgraph now["Shipped"]
-    AUD[audit chain<br/>keyed, verifiable]:::done
-    PERM[permissions<br/>on the person]:::done
-    CRED[credentials<br/>per user]:::done
-    IMP[improve lane]:::done
-    OPS[doctor · config · init]:::done
-    GRAPH[stage graph<br/>+ canvas]:::done
-    WORK[worktree + forge<br/>+ delivery gate]:::done
-    HARN[the harness<br/>deepagents · phases]:::done
-    QUEUE[workers<br/>claim · resume · caps]:::done
-    LADDER[the ladder<br/>rungs 0·1·3·4]:::done
-    IN[intake<br/>webhook · sync · by hand]:::done
-  end
-  subgraph next["Remaining"]
-    PACKS[default pipeline packs]:::todo
-    DOCS[ADOPTING · LIMITATIONS]:::todo
-  end
-
-  classDef done fill:#dcfce7,stroke:#166534,color:#14532d
-  classDef todo fill:#f1f5f9,stroke:#475569,color:#1e293b
-```
-
 | Pillar | State |
 |---|---|
-| **1 · A software factory** | **Working end to end.** A ticket arrives by webhook, sync or hand; a run goes through the stage graph; the delivery gate opens a pull request; a comment on it becomes rework. |
-| **2 · A harness** | **Working.** deepagents behind `pipeline/agent.py`, seven phases, tool grants as rung 1, `GovernanceMiddleware` as rung 3, oversight → interrupt → approval. |
+| **1 · A software factory** | **Working end to end.** A ticket arrives by webhook, sync or hand; a run goes through the stage graph; the delivery gate opens a pull request; a comment on it becomes rework. Exercised by `tests/test_acceptance.py` against a real git repository with the `local` forge — no accounts, no network, no keys. |
+| **2 · A harness** | **Working.** deepagents behind `pipeline/agent.py`, seven phases, tool grants as rung 1, `Governed` as rung 3, oversight → interrupt → hold. |
 | **3 · A queue of workers** | **Working.** N workers claim a run with a conditional update, advance it one stage, release it; stale claims are taken over; team caps bound concurrency; a crash resumes. |
-| **4 · Business features** | **Working.** Keyed audit chain, evidence packs, the improve lane, proposals, observation, the live canvas. |
+| **4 · Business features** | **Working.** Keyed audit chain, evidence packs, the improve lane, proposals, budgets, delivery metrics, the live canvas. |
 
-What is left before 3.0.0 is the improve lane's own pipeline, the default
-workflow packs a team starts from, and the adoption docs. Sequencing is in
-[PLAN-3.0.md §6](PLAN-3.0.md).
+**What 3.0 changed is mostly what it removed.** 2.25.0 shipped a complete
+feature set carrying two of several things — two governed call sites, two
+workflow engines, two authorization models — and in each pair the older half was
+what the docs, the dashboard and `doctor` pointed at. See
+[ROAD-TO-3.0.md](ROAD-TO-3.0.md) for the nine steps and
+[GLOSSARY.md](GLOSSARY.md#words-we-do-not-use-any-more) for the words that went
+with them.

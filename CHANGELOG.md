@@ -9,6 +9,38 @@ All notable changes to open-refinery are documented here. Format follows
 two governed call sites, two workflow engines — and the older half of each
 was what the docs, the dashboard and `doctor` still pointed at.*
 
+### Step 9 — say what it is
+
+#### Added
+- **`docs/GLOSSARY.md`** — every term the product uses, defined once. It leads
+  with the four that read alike and are not: a **stage** is a node in a
+  pipeline's graph, a **step** is one recorded *attempt* at one, a **phase** is
+  the harness configuration a stage may invoke, and a **rung** is where a rule
+  is *carried*. It closes with the words that are gone — *process*, *target*,
+  *quota*, *attestation*, *transition*, *rollback*, `Policy.role` — so a stale
+  reference is recognisable rather than mysterious.
+- **`docs/FEATURES.md` §0 — the feature list.** Four things the product does and
+  everything it ships to do them, in one place.
+
+#### Removed
+Writing the list down was an audit, and it found things that are not features:
+
+- **`POST /audits/run` answered 500 to every request.** It called a `run_audit`
+  that exists nowhere in the codebase. No test covered it, which is how it
+  survived — and `test_route_coverage`'s own docstring is the argument against
+  it: *"a route that lingers after its feature is removed is worse than no
+  route: it accepts a request and does something unexpected."*
+- **Five tables no code reads** — `audits`, `claims`, `recert_campaigns`,
+  `recert_items`, `invitations`. Leftovers from features removed earlier. The
+  tables stay on existing installs, per the additive-only freeze; `create_all`
+  simply stops building them.
+
+#### Changed
+- `FEATURES.md` §5 described a product that had not had the last nine steps
+  applied to it. It now says what actually changed: 3.0 is mostly subtraction.
+
+846 tests pass.
+
 ### Step 8 — one authorization model
 
 The product had two, and the docs only described one. `authority.py` puts
