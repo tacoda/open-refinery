@@ -47,7 +47,11 @@ from .approval_workflows import (
     review,
     set_workflow,
 )
-from .improve import proposals as improve_proposals, score as improve_score
+from .improve import (
+    proposals as improve_proposals,
+    propose_finding as improve_propose,
+    score as improve_score,
+)
 from .experiments import (
     analyze_experiment,
     conclude_experiment,
@@ -396,6 +400,13 @@ class RotateCredential(BaseModel):
 class NewIntegration(BaseModel):
     kind: str
     credential: dict[str, str]  # {token} for github/gitlab/linear; {site,email,token} for jira
+
+
+class ImproveProposal(BaseModel):
+    kind: str          # the finding's kind
+    detail: str        # its exact detail line — the server re-derives the evidence
+    repo_id: str
+    process_id: str
 
 
 class SyncRequest(BaseModel):

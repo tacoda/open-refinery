@@ -81,7 +81,24 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Setup */
+        /**
+         * Setup
+         * @description The first account, and the defaults it builds from.
+         *
+         *     **The first account holds everything**, because it is the owner of the
+         *     installation rather than an admin somebody appointed. The `admin` preset is
+         *     deliberately narrow — add people, read the trail — and on a fresh install
+         *     that is a dead end: there is nobody else, and nobody may change their own
+         *     permissions (separation of duties, correctly). The owner would have had to
+         *     invent a second person to be granted anything by. So the first account gets
+         *     the full set and delegates from there, which is the direction authority is
+         *     supposed to flow.
+         *
+         *     A fresh install also seeds `ship-a-ticket` here, because a workflow needs an
+         *     owner and this is the first moment there is one. Without it, an install has
+         *     no pipeline at all and the first `POST /runs` fails on a name nobody typed —
+         *     "defaults to build from" is only true if they are actually there.
+         */
         post: operations["setup_setup_post"];
         delete?: never;
         options?: never;
@@ -339,6 +356,30 @@ export interface paths {
         get: operations["get_improve_proposals_improve_proposals_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/improve/propose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Raise Improve Proposal
+         * @description Put a finding forward as work.
+         *
+         *     It becomes an ordinary `ChangeProposal`, and accepting it creates a work
+         *     item rather than making a change — the lane that proposes improvements does
+         *     not get to be the one thing that skips the gate.
+         */
+        post: operations["raise_improve_proposal_improve_propose_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2463,6 +2504,17 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** ImproveProposal */
+        ImproveProposal: {
+            /** Kind */
+            kind: string;
+            /** Detail */
+            detail: string;
+            /** Repo Id */
+            repo_id: string;
+            /** Process Id */
+            process_id: string;
+        };
         /** IntakeConfig */
         IntakeConfig: {
             /**
@@ -3743,6 +3795,41 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    raise_improve_proposal_improve_propose_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImproveProposal"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -2989,37 +2989,87 @@ function Metrics() {
         ))}
       </div>
 
-      {improve && (
-        <Card>
-          <CardHeader><CardTitle>Things to look at ({improve.total})</CardTitle></CardHeader>
-          <CardContent>
-            <div className="toolbar">
-              <Badge variant={improve.score >= 90 ? 'outline' : 'destructive'}>
-                health {improve.score}
-              </Badge>
-              {!improve.total && <span className="muted">nothing to report</span>}
-            </div>
-            {improve.total > 0 && (
-              <Table>
-                <TableHeader><TableRow>
-                  <TableHead>What</TableHead><TableHead>Severity</TableHead>
-                  <TableHead>Detail</TableHead><TableHead>Suggestion</TableHead>
-                </TableRow></TableHeader>
-                <TableBody>{improve.findings.map((f: any, i: number) => (
-                  <TableRow key={i}>
-                    <TableCell><Badge variant={f.severity === 'high' ? 'destructive' : 'secondary'}>{f.kind}</Badge></TableCell>
-                    <TableCell className="mono">{f.severity}</TableCell>
-                    <TableCell>{f.detail}</TableCell>
-                    <TableCell className="muted">{f.suggestion}</TableCell>
-                  </TableRow>
-                ))}</TableBody>
-              </Table>
-            )}
-            <p className="muted">Every finding names the events it came from — one that cannot be
-              traced is dropped rather than repaired.</p>
-          </CardContent>
-        </Card>
-      )}
+      {improve && <ImproveLane improve={improve} />}
     </section>
+  )
+}
+
+/**
+ * The improve lane — what went wrong, and what would have prevented it.
+ *
+ * Findings are read-only until somebody acts on one, and acting means
+ * *proposing*, never applying. What acceptance buys is a work item, which then
+ * goes through the same stage graph and the same review as anything a person
+ * filed — the lane that proposes improvements does not get to skip the gate
+ * everything else goes through.
+ */
+function ImproveLane({ improve }: { improve: any }) {
+  const { rows: repos } = useList('/repositories')
+  const { rows: procs } = useList('/processes')
+  const [repo, setRepo] = useState('')
+  const [proc, setProc] = useState('')
+  const [raised, setRaised] = useState<Record<string, boolean>>({})
+
+  const propose = (f: any) =>
+    post('/improve/propose', { kind: f.kind, detail: f.detail, repo_id: repo, process_id: proc })
+      .then(() => {
+        setRaised((r) => ({ ...r, [f.detail]: true }))
+        toast.success('Proposed — it needs a signature before it becomes work')
+      }).catch(fail)
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Things to look at ({improve.total})</CardTitle></CardHeader>
+      <CardContent>
+        <div className="toolbar">
+          <Badge variant={improve.score >= 90 ? 'outline' : 'destructive'}>
+            health {improve.score}
+          </Badge>
+          {!improve.total && <span className="muted">nothing to report</span>}
+        </div>
+        {improve.total > 0 && (<>
+          <div className="work-actions">
+            <Select value={repo} onValueChange={(v) => setRepo(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue placeholder="fix it in…" /></SelectTrigger>
+              <SelectContent>
+                {repos.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={proc} onValueChange={(v) => setProc(v ?? '')}>
+              <SelectTrigger className="field"><SelectValue placeholder="using process…" /></SelectTrigger>
+              <SelectContent>
+                {procs.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>What</TableHead><TableHead>Severity</TableHead>
+              <TableHead>Detail</TableHead><TableHead>Suggestion</TableHead>
+              <TableHead>Evidence</TableHead><TableHead />
+            </TableRow></TableHeader>
+            <TableBody>{improve.findings.map((f: any, i: number) => (
+              <TableRow key={i}>
+                <TableCell><Badge variant={f.severity === 'high' ? 'destructive' : 'secondary'}>{f.kind}</Badge></TableCell>
+                <TableCell className="mono">{f.severity}</TableCell>
+                <TableCell>{f.detail}</TableCell>
+                <TableCell className="muted">{f.suggestion}</TableCell>
+                <TableCell className="muted mono">{(f.evidence ?? []).length}</TableCell>
+                <TableCell>
+                  {raised[f.detail]
+                    ? <Badge variant="outline">proposed</Badge>
+                    : <Button size="sm" variant="outline" disabled={!repo || !proc || !f.suggestion}
+                        onClick={() => propose(f)}>Propose as work</Button>}
+                </TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+        </>)}
+        <p className="muted">Every finding names the events it came from — one that cannot be
+          traced is dropped rather than repaired. Proposing does not change anything: it puts
+          the finding in front of a person, and accepting it creates a work item that goes
+          through the same pipeline as any other change.</p>
+      </CardContent>
+    </Card>
   )
 }

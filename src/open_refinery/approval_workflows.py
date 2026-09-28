@@ -71,6 +71,9 @@ def propose(session: Session, target_kind: str, action: str, payload: dict, laye
         raise ValueError(f"unknown proposer: {proposer_id!r}")
     if not valid_role(session, layer):
         raise ValueError(f"unknown layer role: {layer!r}")
+    precheck = _PRECHECKS.get((target_kind, action))
+    if precheck:
+        precheck(session, payload, proposer)
     prop = ChangeProposal(target_kind=target_kind, action=action, payload=payload,
                           layer=layer, proposed_by=proposer_id,
                           chain=_resolve_chain(session, layer, proposer))
@@ -166,9 +169,75 @@ def _apply_suggestion(session: Session, prop: ChangeProposal) -> str:
     return ""
 
 
-# ponytail: add (kind, action) pairs as more change types become applicable.
+def _apply_work_create(session: Session, prop: ChangeProposal) -> str:
+    """An accepted proposal becomes **work**, not a change.
+
+    This is the rule the improve lane is built on: the lane that proposes
+    changes does not also get to make them. What acceptance buys is a work item
+    — which then goes through the stage graph, the contracts, the delivery gate
+    and the same review as anything else a person filed.
+
+    Accepting is therefore cheap to get wrong and expensive to abuse, which is
+    the right way round.
+    """
+    from .work_items import create_work_item
+
+    p = prop.payload
+    for key in ("repo_id", "process_id", "title"):
+        if not p.get(key):
+            raise ValueError(f"a work proposal needs {key!r}")
+    item = create_work_item(session, p["repo_id"], p["process_id"], p["title"],
+                            prop.proposed_by)
+    return item.id
+
+
+def _apply_ladder_move(session: Session, prop: ChangeProposal) -> str:
+    """Move a rule to a different rung — **the one change applied directly.**
+
+    A rung move changes where a rule is enforced, not what the codebase says, so
+    there is no diff for a pipeline to produce. `ladder.move` keeps the
+    asymmetry that matters: a promotion adds enforcement, a demotion removes it,
+    and the demotion is the one this chain had to sign for.
+    """
+    from .ladder import move
+
+    p = prop.payload
+    rule_id, to = p.get("rule_id"), p.get("to")
+    if not rule_id or to is None:
+        raise ValueError("a ladder proposal needs 'rule_id' and 'to'")
+    signer = prop.decisions[-1]["user_id"] if prop.decisions else prop.proposed_by
+    rule = move(session, rule_id, int(to), approver_id=signer,
+                predicate_name=p.get("predicate", ""))
+    return rule.id
+
+
+def _precheck_ladder_move(session: Session, payload: dict, proposer: User) -> None:
+    """**The factory never proposes its own demotion.**
+
+    A promotion adds enforcement and the factory may ask for one. A demotion
+    removes it, and a system that can propose weakening its own guardrails only
+    needs a tired approver to get there. Refused at propose time so the
+    proposer sees it, rather than after a chain of people has signed.
+    """
+    from .ladder import plan_move
+
+    if proposer.kind != "agent":
+        return
+    planned = plan_move(session, payload.get("rule_id", ""), int(payload.get("to", 0)))
+    if planned.direction == "demotion":
+        raise PolicyDenied(
+            "an agent may not propose a demotion — removing enforcement is a "
+            "person's decision (PLAN-3.0 §4.1)")
+
+
 _APPLIERS = {("policy", "create"): _apply_policy_create,
-             ("suggestion", "adopt"): _apply_suggestion}
+             ("suggestion", "adopt"): _apply_suggestion,
+             ("work", "create"): _apply_work_create,
+             ("ladder", "move"): _apply_ladder_move}
+
+# Refusals that belong at propose time, where the proposer is the one who reads
+# them. Keyed the same way as the appliers.
+_PRECHECKS = {("ladder", "move"): _precheck_ladder_move}
 
 
 def _apply(session: Session, prop: ChangeProposal) -> str:

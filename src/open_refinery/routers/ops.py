@@ -1,5 +1,7 @@
 from fastapi import APIRouter
 
+from .. import authority
+
 from ..deps import *  # noqa: F401,F403
 from ..web import *  # noqa: F401,F403
 
@@ -86,3 +88,20 @@ def get_improve_proposals(session: Session = Depends(get_session),
     """Findings as proposals. **Nothing here is applied** — each goes in front of
     a person, carrying the events it came from."""
     return improve_proposals(session)
+
+@router.post("/improve/propose", status_code=201)
+def raise_improve_proposal(body: ImproveProposal, session: Session = Depends(get_session),
+                           user: User = Depends(current_user)):
+    """Put a finding forward as work.
+
+    It becomes an ordinary `ChangeProposal`, and accepting it creates a work
+    item rather than making a change — the lane that proposes improvements does
+    not get to be the one thing that skips the gate.
+    """
+    if not authority.may_propose(user, "factory"):
+        raise HTTPException(status_code=403, detail="you do not hold propose:factory")
+    try:
+        return improve_propose(session, body.kind, body.detail, repo_id=body.repo_id,
+                               process_id=body.process_id, proposer_id=user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None

@@ -980,32 +980,55 @@ change ships its migration and its `DOWNGRADES` reverse.
 | 6 | 2.22.0 | **Workers.** The reconciler: N workers claiming runs, one stage each, bounded by the concurrency cap. Crash-resume | 3 |
 | 7 | 2.23.0 | **The ladder** (absorbing the policy rule engine as rung 3) + promotion/demotion, where the factory implements its own approved improvements | 4 |
 | 8 | 2.24.0 | **Intake + canvas live mode.** Tracker webhooks, autostart, rework-from-comment, runs flowing across the graph | 1, 3 |
-| 9 | **3.0.0** | The improve lane, default pipeline packs, docs, the acceptance test (§7), release | 4 |
+| 9 | 2.25.0 | **The improve lane proper, docs, the acceptance test (§7).** The lane reads the runs as well as the rules; an accepted proposal becomes *work*; ADOPTING and LIMITATIONS; §7 as a test | 4 |
+| — | **3.0.0** | **Held for review.** Everything above has shipped; the release waits on an in-depth read of the whole application | — |
 
 **Phase 4 is the first release that does something the product cannot do
 today.** Everything before it is groundwork, and R/P come first deliberately:
 removing 1,700 lines and settling who may do what is much cheaper before the
 factory is built on top than after.
 
-## 7. The 3.0 acceptance test
+## 7. The 3.0 acceptance test  *(shipped 2.25.0 — `tests/test_acceptance.py`)*
 
 One scripted path, run end to end against a scratch repository with the `local`
-forge, so it needs no accounts:
+forge, so it needs **no accounts, no network and no keys**. That constraint is
+the point: an acceptance test that needs somebody's API key is one nobody runs,
+and a claim that the product works end to end has to be checkable by anybody who
+clones the repo.
 
 ```
-pip install open-refinery
-open-refinery init && open-refinery serve
-→ sign up (first admin)
-→ paste an Anthropic key and a GitHub PAT; both verify and name the account
-→ pick the "ship-a-ticket" template, set the model, save
-→ connect GitHub Issues; sync; a ticket arrives as a work item
-→ Run
-→ plan · run · prove · review · commit · publish
-→ a pull request, with the run document as its body, citing audit record ids
-→ nothing merged itself
+sign up (the first account owns the installation, and seeds ship-a-ticket)
+→ add a developer; permissions, not a role
+→ a repository pointed at a real checkout, on the `local` forge
+→ a webhook arrives — unsigned is refused 401, signed becomes a work item
+→ autostart starts a run
+→ prepare · plan  ── holds at the plan gate ──  the author may NOT clear it
+→ somebody else signs
+→ run · prove · review · commit · publish
+→ a pull request, with the run document as its body
+→ nothing merged itself; the work is on a branch a person reviews
+→ the audit chain verifies, and the export is signed over every event
 ```
 
-When that runs from a clean machine without a detour, it is 3.0.
+The one substitution is the phase runner: a stand-in that writes a file where
+the harness would write one, and answers each contract in the form that contract
+demands — so what runs is the real parser and the real downgrade rules. Intake,
+the graph, the worktree, the branch, the delivery gate, the forge and the audit
+chain are all the real thing.
+
+What it does not prove: that a model produces good code. It proves the factory
+**around** the model is wired, and that the things which must not happen do not.
+
+Two defects it found on first run, both fixed:
+
+- **the first account could not do anything.** The `admin` preset is narrow by
+  design — add people, read the trail — and on a fresh install that is a dead
+  end: there is nobody else, and nobody may change their own permissions
+  (separation of duties, correctly). The owner would have had to invent a second
+  person to be granted anything by. The first account now holds the full set and
+  delegates from there, which is the direction authority is supposed to flow.
+- **`docs/ARCHITECTURE.md` documented nine modules that no longer exist** and an
+  API removed in 2.15.0. Rewritten against the code.
 
 ## 8. Risks
 
@@ -1045,9 +1068,36 @@ four), and RBAC/quotas/content-filtering, which ghola has no equivalent of.
 
 ### 9.2 Should land in 3.0
 
+**Shipped in 2.25.0.** The lane now reads two things: the **rules**
+(contradictions, injection-shaped text, denial spikes) and the **runs** — stages
+that keep erroring across jobs, revisions burned to no end, holds nobody clears.
+The second half is what makes "self-improving" mean anything: a stage that fails
+on every repo is a fact about the workflow, and it was already sitting in
+`run_steps` waiting to be counted.
+
+Both rules are enforced rather than described:
+
+- **evidence or it is dropped** — and the evidence comes from the *server*.
+  `POST /improve/propose` names a finding and the server re-derives it, because
+  taking the evidence from the request would let anyone attach a plausible list
+  of ids to an invented problem, which is the one thing the rule exists to
+  prevent. A finding that is no longer there is refused.
+- **nothing is applied** — accepting a proposal creates a **work item**
+  (`("work", "create")`), which goes through the same graph, contracts and gate
+  as anything a person filed.
+
+The single exception is a **ladder move**, which changes where a rule is
+enforced and so has no diff for a pipeline to produce. Even there the asymmetry
+holds, and it is checked at *propose* time so the proposer sees the refusal
+rather than a chain of people signing something that then fails: **an agent may
+not propose its own demotion.** A promotion adds enforcement and the factory may
+ask for one; a system that can propose weakening its own guardrails only needs a
+tired approver to get there.
+
+
 | Gap | ghola | Plan |
 |---|---|---|
-| **The improve lane** | reads its own audit log and job records, proposes changes, **drops any proposal it cannot trace to evidence**, applies nothing — an accepted proposal becomes a spec that goes through the same pipeline | Listed in Phase 8 but too thinly for what it is. open-refinery has the raw material already — `postmortem.py`, `debt.py`, `analysis.py`, `anomalies.py`, and a far better evidence base than ghola's files. The two rules worth porting exactly: **evidence or the proposal is dropped** (a lane that always finds three things is one nobody believes by the third time), and **nothing is applied** — a proposal becomes a work item and goes through the same gate as any other work. The one exception, as in ghola, is a ladder move, and a move that *reduces* enforcement needs approval. |
+| **The improve lane** *(shipped 2.25.0)* | reads its own audit log and job records, proposes changes, **drops any proposal it cannot trace to evidence**, applies nothing — an accepted proposal becomes a spec that goes through the same pipeline | Listed in Phase 8 but too thinly for what it is. open-refinery has the raw material already — `postmortem.py`, `debt.py`, `analysis.py`, `anomalies.py`, and a far better evidence base than ghola's files. The two rules worth porting exactly: **evidence or the proposal is dropped** (a lane that always finds three things is one nobody believes by the third time), and **nothing is applied** — a proposal becomes a work item and goes through the same gate as any other work. The one exception, as in ghola, is a ladder move, and a move that *reduces* enforcement needs approval. |
 | **Prompt evals** | `evals/*.json`, `settings/evals.yaml`, `make eval`, and a doc that says read this *before you edit a prompt* | `experiments.py` does A/B with control/treatment and significance — the machinery exists but is aimed at process changes, not prompts. Phase prompts are the highest-leverage, least-tested thing in the factory. Point the existing experiment machinery at phase prompts and ship two starter evals, as ghola does. |
 | **Cost is marked before it is spent** | `make help` puts a `$` against every target that sends a paid turn | A small idea that repays constantly. The Run button, the CLI and the pipeline builder should all say what a run will cost before it starts — targets already carry `unit_cost` and phases carry `max_turns`, so an estimate is arithmetic we already have the inputs for. |
 

@@ -5,6 +5,12 @@ slice: `debt` scored areas, `analysis` found contradictions, `anomalies` watched
 behaviour, `postmortem` explained one item. They shared a shape and disagreed
 about vocabulary.
 
+It reads two things: the **rules** (contradictions, injection text, denial
+spikes) and the **runs** (stages that keep failing, revisions burned to no end,
+holds nobody clears). The second half is what makes "self-improving" mean
+anything — a stage that fails on every repo is a fact about the workflow, and it
+is already sitting in `run_steps` waiting to be counted.
+
 Two rules, both borrowed from ghola and both load-bearing:
 
 - **Evidence or it is dropped.** Every finding names the events it came from. A
@@ -31,6 +37,7 @@ from .models import Event, Policy, User
 # What a finding costs the score it appears in. Ordered by how much a human
 # would care, not by how easy it is to detect.
 WEIGHT = {"prompt_injection": 20, "contradiction": 15, "denial_spike": 12,
+          "stage_failure": 15, "stalled_hold": 12, "revision_churn": 10,
           "dead_rule": 8, "over_norm": 8, "mass_change": 10, "redundant": 3}
 
 _INJECTION = [re.compile(p, re.I) for p in (
@@ -132,7 +139,99 @@ def over_norm(session: Session, *, factor: int = 3) -> list[Finding]:
             for actor, n in counts.items() if n > average * factor]
 
 
-DETECTORS = (contradictions, injections, denial_spikes, over_norm)
+# --- the factory watching itself -------------------------------------------
+# The detectors above read the *rules*. These read the **runs** — what the
+# factory actually did. That is the half that makes "self-improving" mean
+# something: a stage that fails on every repo is a fact about the workflow, and
+# it is sitting in `run_steps` waiting to be counted.
+
+
+def stage_failures(session: Session, *, threshold: int = 3) -> list[Finding]:
+    """The same stage erroring across several runs.
+
+    One run failing is a bad ticket. The same stage failing on three is the
+    workflow, and the difference is worth saying out loud — a team debugging
+    ticket by ticket will not notice the pattern that a count makes obvious.
+    """
+    from .models import RunStep
+
+    bad = [s for s in session.exec(select(RunStep)) if s.outcome == "error"]
+    per_stage: dict[str, list] = {}
+    for step in bad:
+        per_stage.setdefault(step.stage, []).append(step)
+
+    out = []
+    for stage, steps in per_stage.items():
+        runs = {s.run_id for s in steps}
+        if len(runs) < threshold:
+            continue
+        out.append(Finding(
+            "stage_failure",
+            f"stage {stage!r} errored in {len(runs)} runs: {steps[-1].why[:120]}",
+            severity="high" if len(runs) >= threshold * 2 else "medium",
+            evidence=tuple(s.id for s in steps[:10]),
+            suggestion=f"fix what {stage} depends on, or make the stage optional — "
+                       "a stage that always fails is a gate nobody chose"))
+    return out
+
+
+def revision_churn(session: Session, *, threshold: int = 2) -> list[Finding]:
+    """Runs that used up their revisions and still failed.
+
+    The contract was never met, so the model was asked the same thing until the
+    budget ran out. Usually the contract is unreachable, not the model unable.
+    """
+    from .models import Run
+
+    burned = [r for r in session.exec(select(Run))
+              if r.outcome == "failed" and r.revisions >= threshold]
+    if not burned:
+        return []
+    return [Finding(
+        "revision_churn",
+        f"{len(burned)} runs exhausted their revisions and failed",
+        severity="medium", evidence=tuple(r.id for r in burned[:10]),
+        suggestion="check the stage contract is reachable before raising "
+                   "max_revisions — paying for more attempts at an impossible "
+                   "check is the expensive way to fail")]
+
+
+def stalled_holds(session: Session, *, days: int = 2) -> list[Finding]:
+    """Runs held for a person who never came.
+
+    A gate nobody clears is not oversight, it is a queue. Naming it is the only
+    way the org finds out the approver moved team.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from .models import Run
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    stuck = []
+    for run in session.exec(select(Run)):
+        if not run.held or run.outcome:
+            continue
+        try:
+            when = datetime.fromisoformat(run.updated_at)
+        except ValueError:
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        if when < cutoff:
+            stuck.append(run)
+
+    if not stuck:
+        return []
+    return [Finding(
+        "stalled_hold",
+        f"{len(stuck)} runs have been waiting on a person for over {days} days",
+        severity="high", evidence=tuple(r.id for r in stuck[:10]),
+        suggestion="find out who owns that gate, or lower the stage's oversight "
+                   "— a hold nobody clears is a queue wearing a gate's name")]
+
+
+DETECTORS = (contradictions, injections, denial_spikes, over_norm,
+             stage_failures, revision_churn, stalled_holds)
 
 
 # --- the lane --------------------------------------------------------------
@@ -169,3 +268,32 @@ def proposals(session: Session) -> list[dict]:
     return [{"title": f.detail, "kind": f.kind, "severity": f.severity,
              "suggestion": f.suggestion, "evidence": list(f.evidence)}
             for f in findings(session) if f.suggestion]
+
+
+def propose_finding(session: Session, kind: str, detail: str, *, repo_id: str,
+                    process_id: str, proposer_id: str):
+    """Turn one finding into a proposal that goes through the ordinary gate.
+
+    The caller names the finding; **the server supplies the evidence.** Taking
+    the evidence from the request would let anyone attach a plausible list of
+    ids to an invented problem, which is the one thing "evidence or it is
+    dropped" is meant to prevent. A finding that is no longer there is refused,
+    because a proposal outliving its evidence is exactly the stale request a
+    reviewer cannot check.
+    """
+    from .approval_workflows import propose
+
+    match = next((f for f in findings(session)
+                  if f.kind == kind and f.detail == detail), None)
+    if match is None:
+        raise LookupError(
+            f"no current finding {kind!r} matching that detail — it may have "
+            "been fixed already, or the evidence may have aged out")
+
+    return propose(session, "work", "create", {
+        "repo_id": repo_id, "process_id": process_id,
+        "title": match.detail,
+        "spec": f"{match.detail}\n\n{match.suggestion}",
+        "finding": match.kind,
+        "evidence": list(match.evidence),
+    }, "platform", proposer_id)

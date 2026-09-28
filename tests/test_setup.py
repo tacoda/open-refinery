@@ -42,3 +42,39 @@ def test_a_fresh_install_has_a_workflow_to_run():
     pipelines = c.get("/pipelines", headers=auth).json()
     assert [p["name"] for p in pipelines] == ["ship-a-ticket"]
     assert pipelines[0]["stages"], "the default workflow has stages"
+
+
+def test_the_first_account_can_actually_do_something(client_=None):
+    """The `admin` preset is narrow on purpose — add people, read the trail. On
+    a fresh install that is a dead end: there is nobody else, and nobody may
+    change their own permissions. The owner of the installation holds
+    everything and delegates from there.
+    """
+    from open_refinery.authority import PERMISSIONS
+
+    c = client()
+    boss = c.post("/setup", json={"email": "boss@x.dev", "password": "pw"}).json()
+    auth = {"Authorization": f"Bearer {boss['token']}"}
+
+    assert set(boss["user"]["permissions"]) == set(PERMISSIONS)
+
+    # the thing that was impossible before: standing up the machinery
+    made = c.post("/processes", headers=auth,
+                  json={"name": "flow", "archetype": "board", "stages": ["todo", "done"]})
+    assert made.status_code == 201, made.json()
+
+    # and the next admin is still narrow — this is the owner, not the preset
+    other = c.post("/users", headers=auth,
+                   json={"email": "admin2@x.dev", "password": "pw", "role": "admin"}).json()
+    assert set(other["user"]["permissions"]) == {"manage:users", "read:audit"}
+
+
+def test_nobody_may_change_their_own_permissions(monkeypatch):
+    """Including the owner. Separation of duties does not have an exception for
+    the person who finds it inconvenient."""
+    c = client()
+    boss = c.post("/setup", json={"email": "boss@x.dev", "password": "pw"}).json()
+    auth = {"Authorization": f"Bearer {boss['token']}"}
+    r = c.put(f"/users/{boss['user']['id']}/permissions", headers=auth,
+              json={"permissions": ["read:audit"]})
+    assert r.status_code == 403 and "your own" in r.json()["detail"]

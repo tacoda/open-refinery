@@ -37,18 +37,29 @@ def setup_status(session: Session = Depends(get_session)):
 
 @router.post("/setup", status_code=201)
 def setup(body: Setup, session: Session = Depends(get_session)):
-    """The first admin, and the defaults they build from.
+    """The first account, and the defaults it builds from.
 
-    A fresh install seeds `ship-a-ticket` here, because a workflow needs an
+    **The first account holds everything**, because it is the owner of the
+    installation rather than an admin somebody appointed. The `admin` preset is
+    deliberately narrow — add people, read the trail — and on a fresh install
+    that is a dead end: there is nobody else, and nobody may change their own
+    permissions (separation of duties, correctly). The owner would have had to
+    invent a second person to be granted anything by. So the first account gets
+    the full set and delegates from there, which is the direction authority is
+    supposed to flow.
+
+    A fresh install also seeds `ship-a-ticket` here, because a workflow needs an
     owner and this is the first moment there is one. Without it, an install has
     no pipeline at all and the first `POST /runs` fails on a name nobody typed —
     "defaults to build from" is only true if they are actually there.
     """
+    from ..authority import PERMISSIONS
     from ..pipeline import store as ps
 
     if count_users(session) > 0:
         raise HTTPException(status_code=409, detail="already set up")
-    user, token = create_user(session, body.email, body.password, "admin")
+    user, token = create_user(session, body.email, body.password, "admin",
+                              permissions=list(PERMISSIONS))
     ps.ensure_default(session, user.id)
     session.refresh(user)   # seeding committed, which expired the row we return
     return {"user": user, "token": token}

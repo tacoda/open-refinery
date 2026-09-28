@@ -1,144 +1,224 @@
 # Architecture
 
-open-refinery is the **platform layer** that governs AI-driven software work.
-Harnesses (agents, scripts, CI) call through it to reach targets (repos, models,
-MCP servers, APIs). The platform governs *how* work reaches those targets:
-identity, roles, authorization, provenance, an append-only audit trail, quotas,
-content filtering, oversight, and metrics.
+open-refinery is a self-hosted server that runs a **software factory**. Work
+arrives as a ticket, goes through a stage graph, and comes out as a pull request
+that a person merges. Everything it does on the way is authorized, owned,
+quota'd, filtered and audited.
 
-Two governed loops sit at the core — both are **deterministic plain code**, not
-an agent deciding what happens next.
+Four things make up the product, and every module belongs to one of them:
 
-## 1. The transition loop (work items)
+| Pillar | What it is | Where |
+|---|---|---|
+| **1 · the factory** | the stage graph, the worktree, the forge, the delivery gate | `pipeline/` |
+| **2 · the harness** | the coding agent that does a stage's work | `pipeline/agent.py`, `pipeline/phases.py` |
+| **3 · the queue** | workers claiming runs and advancing them one stage at a time | `pipeline/workers.py` |
+| **4 · the business** | audit, proposals, observation, evidence | `store.py`, `improve.py`, `approval_workflows.py` |
 
-A work item moves through a **process** (ordered stages + allowed transitions,
-board or doctrine archetype). Each move is governed:
+The orchestration is **deterministic plain code**. An agent does a stage's work;
+it never decides what happens next.
 
-```
-transition(item, to, actor, approver?)
-   ├─ validate the transition is allowed by the process
-   ├─ enforce policy         (role-based allow/deny, deny-overrides)   ← policies.py
-   ├─ check attestations      (required quality-gate checks passed)     ← attestations.py
-   ├─ oversight gate          (approval if the process/step requires it) ← oversight.py
-   ├─ move the item
-   └─ record an append-only audit Event                                 ← store.py / provenance.py
-```
+---
 
-Gated moves either take an inline approver or go through the **async approval
-queue** with **chained approvals** (an ordered role chain, distinct signer per
-slot). Order is load-bearing: authorize before moving; record only after a
-successful move.
+## The run
 
-## 2. The executor pipeline (outbound calls)
-
-When a step reaches a target, `execute()` runs the governed call site:
+A `Run` is the unit. One run, one worktree, one branch, one pull request.
 
 ```
-execute(process, step, payload, actor)
-   ├─ resolve route → candidate targets (priority; step-specific wins)  ← targets.py
-   │     └─ routing policy filters region/compliance, prefers cost      ← targets.py
-   ├─ hold the team's live concurrency slot (over cap → 429)            ← concurrency.py
-   ├─ role-based invoke authorization                                   ← policies.py
-   ├─ consume quota (pre-call; windowed rate caps)                      ← targets.py
-   ├─ inject the target's decrypted credential (never returned)         ← crypto.py
-   ├─ content-filter payload + response (secret/PII redaction)          ← policies.py
-   ├─ call the backend (Anthropic / OpenAI / MCP / API / stub)          ← executor.py
-   ├─ validate structured output against the target's schema
-   ├─ audit (invoke / invoke-failed) + record usage units to the ledger ← ledger.py
-   └─ optionally feed an experiment's control/treatment eval; fail over
+POST /runs  ─→  Run row at the graph's first stage
+                  │
+        ┌─────────┴──────────  a worker ticks  ──────────────┐
+        │                                                     │
+   claim (conditional UPDATE)                          nothing actionable
+        │
+   advance ONE stage ────────────────────────────────┐
+        │                                            │
+   ┌────┴─────┐                                      │
+ action    phase                                     │
+ (plain    (the harness: a governed turn)            │
+  code)         │                                    │
+        │       └─ contract parsed → pass/refuse     │
+        │                                            │
+   apply_move  ──→  the pure machine decides where next
+        │           (graph.advance: three dicts in, a Move out)
+   release the claim ───────────────────────────────┘
 ```
 
-Backends dispatch by kind/provider and connect by **API key or OAuth token**; a
-missing credential falls back to a stub so a fresh install works offline.
+The `Run` row **is** the durable state. Nothing is held in memory between ticks,
+which is what makes resume free: a crash mid-stage leaves a *stale* claim that a
+later worker takes over, where a lock file would just stay locked.
 
-## Governance stack
+- `pipeline/spec.py` — the graph schema and the four templates
+- `pipeline/graph.py` — the pure state machine. `advance`/`plan_next` are
+  functions of three dicts, so the whole thing is testable with literals
+- `pipeline/store.py` — versioned pipelines, runs, steps. `apply_move` is the
+  only place a run's stage changes, which is why the live channel publishes from
+  there
+- `pipeline/runner.py` — one stage per call
+- `pipeline/workers.py` — the claim, the tick, the concurrency cap
+- `pipeline/workspace.py` — git worktrees; refuses a `git_url` that is not a
+  checkout before creating anything
+- `pipeline/forge.py` — GitHub · GitLab · Gitea · Bitbucket · `local`
+- `pipeline/actions.py` — the delivery gate
+- `pipeline/contracts.py` — `PROVEN:` / `VERDICT:` parsing. **Unparseable is
+  never a pass**
+- `pipeline/document.py` — the run document, which becomes the PR body
 
-- **Roles** are admin-configurable data (seeded developer/platform/admin; rank
-  drives every authorization check). — `users.py`
-- **Policies** are authored governed harness artifacts: `rule` (allow/deny) plus
-  `skill`/`command`/`agent`. A **strict** rule can't be overridden by a lower
-  layer; strict precedence resolves along the layer graph (author role rank). A
-  policy can scope to a **namespace** (per-namespace whitelists). — `policies.py`
-- **Proactive enforcement** — an org mode of `audit` (default-allow) or `strict`
-  (whitelist / default-deny), applied at the transition and invoke gates and at a
-  **pre-action `/authorize`** seam a harness calls before a tool / command /
-  host-egress action (verify identity + intent first). Every refusal is audited. —
-  `policies.py`
-- **Packs** are opt-in, role-gated starter bundles (standards + example
-  processes) — the curated software / platform / team-workflow canon. — `packs.py`
-- **Approval workflows** govern changes *to* governance: a change proposal walks
-  an admin-configured (or auto-escalating) chain with accept / deny / feedback. —
-  `approval_workflows.py`
-- **Governance landscape + analysis** — what's defined where, what overrides
-  what, and poison flags (dead / contradiction / redundant / prompt-injection). —
-  `governance.py`, `analysis.py`
-- **Repo coverage & debt audits** — per-repo `Claim`s on charter/harness/code
-  surfaces (ingested via GitHub) drive coverage, imitation surfaces, drift, and
-  0–100 health scores per area. — `repo_governance.py`, `ingest.py`, `debt.py`
-- **Evals & experiments** — hypothesis → change → before/after evals →
-  significance verdict. — `experiments.py`
-- **Webhooks** fan HMAC-signed audit events to external endpoints. — `webhooks.py`
-- **Rollbacks** revert a work item to a known-good prior stage (append-only
-  `StageHistory`) and compute a structured **reverse plan** across the whole
-  deployment (code, migrations, config, env, libraries, data, services, secret
-  refs, infra, dns — an open category set); the harness applies it and reports
-  apply-status back, all audited. — `rollback.py`
-- **Teams, usage ledger & concurrency** — teams are the unit of cost attribution;
-  a `LedgerEntry` per invoke meters units (the audit event digests them away), and
-  a team's live in-flight cap is enforced at the invoke seam. — `teams.py`,
-  `ledger.py`, `concurrency.py`
-- **Traffic graph** — a cross-agent graph (actor→target, weighted by calls +
-  units) derived from the ledger. — `ledger.py`
+**Parallelism is runs, not turns.** Ten tickets go through at once because ten
+runs are in flight, each a clean governed unit — not because one run was
+shattered into pieces that have to be reassembled.
 
-## Runtime infrastructure (in-process, single serve)
+## The harness
 
-Same zero-dependency, single-process ethos throughout — each has a Redis/queue
-swap point behind the same API for multi-process later:
+`pipeline/agent.py` is the **only** module that imports `deepagents`. That is
+deliberate containment: it is a pre-1.0 dependency carrying a pillar, so an
+upstream API change has a one-file blast radius.
 
-- **Background jobs** — a thread-backed runner for long tasks (audits, ingest). — `jobs.py`
-- **Scheduler** — a serve-path daemon that enqueues due per-repo ingests. — `scheduler.py`
-- **Live channel** — an in-process pub/sub **hub** fans job status, new audit
-  events, and per-run **live logs** to the `/ws` WebSocket. — `live.py`, `logs.py`
+- `pipeline/phases.py` — seven phases (refine · plan · run · prove · review ·
+  security · improve). A phase's **tool grant is rung 1**: what it is never
+  given, it cannot misuse
+- `pipeline/middleware.py` — `GovernanceMiddleware`, rung 3: sees each call
+  before it happens and may hold it for a person
+- the repo's **charter** (`.agents` / `AGENTS.md` by default, overridable)
+  reaches the model as memory; enabled packs reach it as skills
 
-## Ports & adapters
+## The ladder
+
+A rule has a **rung**: the mechanism that carries it. "Money is Decimal" in a
+markdown file is rung 0, and prose is a request. The same sentence as a
+predicate that refuses the write is a guarantee.
+
+| Rung | Carried by | Sees |
+|---|---|---|
+| 0 | prose in the charter | nothing. It asks |
+| 1 | the tool grant | function ids, before any call |
+| 2 | a hook on the call | the arguments *(not ours)* |
+| 3 | a callback in the turn | the call; may hold it |
+| 4 | the delivery gate | the finished diff |
+| 5 | CI | the merged tree *(not ours — too late)* |
+
+**A rung is a place, not a strictness.** Rung 3 sees a call and never a diff;
+rung 4 sees a diff and never the call. Promotion and demotion are not
+symmetric, and that asymmetry is the safety property: a promotion adds
+enforcement and the factory may implement its own; a demotion removes it and
+never runs unattended. — `ladder.py`
+
+## Authorization
+
+**Permissions live on the user.** A role is a preset — a starting point that is
+copied and then edited — so changing a preset later changes nobody.
+
+`approve:<layer>` · `propose:<layer>` · `run:factory` · `manage:users` ·
+`read:audit` · `see:operations`, over layers `code` / `harness` / `factory` /
+`charter`. `propose:*` is wide; `approve:*` is narrow. — `authority.py`
+
+Every route carries an explicit `Depends(...)` guard. There is no path-matching
+middleware: there was one, it disagreed with the per-route guards the moment
+permissions moved, and two authorization systems that disagree are worse than
+either alone.
+
+## The governed call site
+
+When a stage reaches a target, `execute()` runs the outbound pipeline:
+
+```
+resolve route → authorize → consume quota → inject the secret (never surfaced)
+  → content-filter in → call the backend → filter out → validate the schema
+  → audit → meter the usage
+```
+
+Failover moves to the next candidate route when a backend fails; a policy denial
+aborts without failover. — `executor.py`, `targets.py`, `policies.py`
+
+## Audit
+
+Append-only, hash-chained, and **keyed**: each link is an HMAC under a subkey
+derived from `SECRET_KEY`, so forging an event and recomputing the chain does not
+produce a valid one. Purges write a signed `AuditCheckpoint`, so deleting the
+oldest events is detectable rather than reading as a legitimate retention pass.
+The chain head is authenticated, which catches a wholesale algorithm downgrade,
+and an export is signed over every event rather than only the head.
+
+`GET /audit/verify` recomputes it. An external auditor gets a time-boxed grant
+rather than an account. — `store.py`, `provenance.py`, `auditors.py`
+
+## Intake
+
+Three doors, one destination:
+
+- **webhook** — `POST /intake/{id}`, the one route with no bearer token, because
+  the caller is a tracker rather than a person. The HMAC over the raw bytes is
+  the credential
+- **sync** — pull a tracker's issues on demand
+- **by hand**
+
+A ticket is **untrusted data**: it reaches a phase as a quoted spec, never as
+instructions. — `intake.py`, `trackers.py`
+
+## The improve lane
+
+Reads the audit trail *and the run history* — contradictory rules, injection
+text, denial spikes, stages that keep failing, revisions burned to no end, holds
+nobody clears. Two rules carry it:
+
+- **evidence or it is dropped** — a lane that always finds three things is one
+  nobody believes by the third time
+- **nothing is applied** — a finding becomes a proposal, and accepting one
+  creates a *work item* that goes through the same graph as anything a person
+  filed. The exception is a ladder move, which has no diff to produce
+
+— `improve.py`, `approval_workflows.py`
+
+## Ports and adapters
 
 New connectors are adapters behind an existing port; vendor detail never threads
-through the core. Ports: integration `ADAPTERS` (source hosts, trackers),
-executor `EXECUTORS` + `MODEL_BACKENDS`, OAuth `PROVIDERS`, `EmailSender`,
-`AuditSink`, and the data store (SQLModel over SQLite; Postgres seam). Seams are
-`typing.Protocol`s — swap implementations without touching the core.
+through the core. Seams are `typing.Protocol`s.
 
-## Data & config
+| Port | Adapters |
+|---|---|
+| `models_port.PROVIDERS` | anthropic · openai · google · mistral · deepseek · groq · openrouter · azure-openai · ollama |
+| `pipeline/forge.FORGES` | github · gitlab · gitea · bitbucket · local |
+| `trackers.TRACKERS` | github-issues · gitlab-issues · jira · linear · shortcut |
+| `intake.PARSERS` | github-issues · gitlab-issues · jira · linear |
+| `executor.EXECUTORS` | model · mcp · api |
+| `audit.AuditSink` | memory · jsonl · sqlite |
+| `ladder.PREDICATES` | no-secrets · no-force-push · no-secrets-in-diff · no-migration-without-downgrade |
 
-- **SQLModel over SQLite.** Per-request `Session`; versioned migrations
-  (`PRAGMA user_version` + append-only `MIGRATIONS`).
-- **Only `SECRET_KEY` in the environment.** All other config (OAuth creds,
-  email) lives in an encrypted `Setting` store, UI-editable by the right role.
-- **Secrets encrypted at rest** (Fernet via `SECRET_KEY`); the API returns keys,
-  never values.
-- **Immutable records, append-only audit;** digests, not payloads, in events.
+## Surfaces
 
-## Schema stability
+The **web app** is the main surface (React + TypeScript + Vite + Tailwind +
+shadcn/ui, `frontend/`), and the **CLI** is a peer rather than an afterthought —
+`credentials`, `roles`, `pipelines`, `runs`, `phases`, `ladder` and `packs` all
+drive the same API. Environment variables are for the server's lifecycle only.
 
-**At 1.0.0 the schema is frozen.** Post-1.0 changes are **additive only** (new
-tables / nullable columns via the migration runner) — no restructures. Pre-1.0
-breaking churn is over.
+The **canvas** is the workflow builder, and live mode is the same canvas with
+runs standing on it. — `frontend/src/Canvas.tsx`, `live.py`
 
-## The library core
+## Runtime
 
-The original governed-production loop (`authorize → produce → record → audit →
-log`) is still embeddable without the server:
+In-process, single `serve`, no Redis and no Celery:
 
-```python
-from open_refinery import Factory
-factory = Factory()
+- **workers** — threads advancing runs — `pipeline/workers.py`
+- **jobs** — a thread-backed runner for long tasks — `jobs.py`
+- **scheduler** — enqueues due per-repo ingests — `scheduler.py`
+- **live channel** — in-process pub/sub to `/ws` — `live.py`, `logs.py`
 
-@factory.recipe("upper")
-def upper(text: str) -> str: return text.upper()
+## Data
 
-artifact, record = factory.produce("upper", actor="ian", text="hello")
-```
+SQLModel over **SQLite only** — `engine_for` refuses anything else rather than
+half-working on it. Per-request `Session`; versioned migrations under
+`PRAGMA user_version` with an append-only `MIGRATIONS` list and a reverse in
+`DOWNGRADES` for each.
 
-Modules: `factory.py` (recipe registry + loop), `provenance.py` (immutable
-`Record` + SHA-256 I/O digests), `authz.py` (`Authorizer`), `audit.py`
-(`AuditSink`).
+Secrets are encrypted at rest (Fernet via `SECRET_KEY`); the API returns key
+*names*, never values. Events carry digests, not payloads.
+
+**The schema is frozen at 1.0** — additive changes only. Every 3.0 table is new;
+no existing column changes type.
+
+## Reading further
+
+- [ADOPTING.md](ADOPTING.md) — install to first pull request
+- [LIMITATIONS.md](LIMITATIONS.md) — what this does not do
+- [PLAN-3.0.md](PLAN-3.0.md) — the design record and why each decision went the
+  way it did
+- [FEATURES.md](FEATURES.md) — features by permission, journeys as diagrams
