@@ -204,6 +204,28 @@ def test_nested_arguments_are_scanned_not_just_the_top_level(governed):
     assert refused.startswith("refused:")
 
 
+def test_ordinary_code_is_not_mistaken_for_a_secret(governed):
+    """The refusals this seam used to produce were mostly about nothing: an
+    email address in a commit author, a thirteen-digit constant. The filter here
+    is secrets only now — personal data is caught where text leaves, in
+    `actions.open_pull_request`."""
+    g, _ = governed
+    for args in (
+        {"command": 'git commit --author="Ian <ian@example.com>"'},
+        {"path": "CODEOWNERS", "content": "* @acme/platform-team\n"},
+        {"path": "t.py", "content": "TWITTER_EPOCH = 1288834974657\n"},
+        {"path": "package.json", "content": '{"author": "team@acme.dev"}'},
+    ):
+        assert g.check("write_file", args) == "", args
+    assert g.redactions == []
+
+
+def test_the_refusal_tells_you_what_to_do_instead(governed):
+    g, _ = governed
+    refused = g.check("write_file", {"content": "key = AKIAIOSFODNN7EXAMPLE"})
+    assert "read it from the environment" in refused
+
+
 # --- the dependency boundary ------------------------------------------------
 
 def test_only_agent_py_imports_deepagents():

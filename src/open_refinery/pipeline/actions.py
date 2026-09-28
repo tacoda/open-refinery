@@ -119,13 +119,23 @@ def open_pull_request(run: dict, ctx: Context) -> Result:
     cred.setdefault("base", ctx.base)
     cred.setdefault("branch", branch)
 
+    # This is the egress point: the body is the run document, which a model
+    # wrote from whatever it read in the checkout. Personal data is filtered
+    # here and not at the tool-call seam, because writing an address into a
+    # CODEOWNERS file is the file working and publishing it is not.
+    from ..policies import scan_content
+
+    title, title_hits = scan_content(_title(run), egress=True)
+    body, body_hits = scan_content(_body(run), egress=True)
+    redactions = tuple(dict.fromkeys(title_hits + body_hits))
+
     try:
         pr = driver.open_pr(cred, ctx.repo_slug, branch=branch, base=ctx.base,
-                            title=_title(run), body=_body(run))
+                            title=title, body=body)
     except forgelib.ForgeError as exc:
         return Result(ERROR, error=str(exc))
 
-    return Result(OK, produced=("pull_request",),
+    return Result(OK, produced=("pull_request",), redactions=redactions,
                   reason=f"{pr.number}\t{pr.url}")   # the runner records these
 
 

@@ -9,6 +9,59 @@ All notable changes to open-refinery are documented here. Format follows
 two governed call sites, two workflow engines — and the older half of each
 was what the docs, the dashboard and `doctor` still pointed at.*
 
+### Step 4 — scope the content filter to egress
+
+#### Changed
+- **The filter asks two questions instead of one.** `policies.scan_content`
+  now takes `egress`:
+  - **`SECRET_FILTERS`** — scanned everywhere. AWS keys, common bearer-token
+    prefixes, and (new) PEM private keys. No legitimate source file contains a
+    live credential, so writing one into your own checkout is as much of a
+    mistake as posting it.
+  - **`PERSONAL_FILTERS`** — scanned on egress only. Email addresses and card
+    numbers. An address in a CODEOWNERS file is the file doing its job; the
+    same address in a pull request body is an address you published.
+- **A credit-card candidate has to pass a Luhn check.** The old pattern was
+  `\b(?:\d[ -]*?){13,16}\b` — any run of 13–16 digits. A random digit run
+  passes Luhn about one time in ten, which is the difference between a filter
+  and noise.
+- **The tool-call seam scans secrets only.** It scanned everything, so it
+  refused ordinary work with *"Secrets do not leave this machine"* while nothing
+  had left anything:
+
+  | refused before | why it was wrong |
+  |---|---|
+  | `git commit --author="Ian <ian@x.com>"` | an author line, not a leak |
+  | `{"author": "team@acme.dev"}` | a `package.json` |
+  | `* @acme/platform-team` | a CODEOWNERS file |
+  | `TWITTER_EPOCH = 1288834974657` | a constant read as a card number |
+
+  The refusal that remains also says what to do instead — read the credential
+  from the environment — rather than only that the call was refused.
+- **`actions.open_pull_request` is the egress point** and filters there, over
+  the title and the run document. That document is written by a model from
+  whatever it read in the checkout, which is exactly the text worth checking
+  before it reaches a forge.
+- **`Result.redactions`** carries what was taken out, because an action holds no
+  audit sink. The runner writes a `redacted` audit record when it is non-empty —
+  a redaction is a governance event, and the trail should say what was removed.
+- **`POST /content/scan` takes `egress`**, and the Policies screen has a
+  *leaving this machine* toggle, so both questions can be tried.
+
+#### Not changed, deliberately
+- **Webhooks and notifications carry only metadata** — event id, recipe, actor,
+  subject, timestamp. No model output goes out through either, so neither is a
+  leak vector and neither needed the filter.
+
+#### Stated rather than papered over
+- `docs/LIMITATIONS.md` gains a section: this is a starter rule set, not a DLP
+  product, and **the model sees the repository**. The prompt is not filtered,
+  because the agent's job is to read the code — a secret committed in the
+  checkout reaches the provider. Rung 4's `no-secrets-in-diff` predicate is the
+  honest place for that problem.
+
+834 tests pass.
+
 ### Step 3 — put metering and a spend ceiling on the run
 
 #### Added

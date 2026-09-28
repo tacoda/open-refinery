@@ -80,6 +80,19 @@ ship to a real team.
 **A repository must already be cloned.** `workspace.root_of` refuses a
 `git_url` that is not a local checkout; the factory does not clone for you.
 
+## The content filter
+
+**It is a starter rule set, not a DLP product.** Three secret patterns (AWS
+keys, common bearer-token prefixes, PEM private keys) and two personal ones
+(email, Luhn-checked card numbers). A credential in a shape none of those match
+passes.
+
+**The model sees the repository.** Filtering happens at the tool-call seam and
+at the pull-request boundary; the prompt itself is not filtered, because the
+agent's job is to read the code. If a secret is committed in the repository, it
+reaches the provider. Keep secrets out of the checkout — that is what rung 4's
+`no-secrets-in-diff` predicate is for, and it is the honest place for it.
+
 ## Oversight
 
 **`dark` is a real setting.** An organization can turn oversight off, and the

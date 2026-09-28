@@ -61,8 +61,14 @@ def remove_notification_rule(rule_id: str, session: Session = Depends(get_sessio
 
 @router.post("/content/scan")
 def content_scan(body: ScanRequest, _: User = Depends(current_user)):
-    clean, hits = scan_content(body.text)
-    return {"clean": clean, "hits": hits}
+    """Try the content filter against some text.
+
+    `egress` picks which question is asked: the local one (secrets only, what a
+    tool call is held to) or the leaving one (secrets plus personal data, what a
+    pull request body is held to).
+    """
+    clean, hits = scan_content(body.text, egress=body.egress)
+    return {"clean": clean, "hits": hits, "egress": body.egress}
 
 # --- auth ---
 # Humans: email + password (+ optional TOTP). Machines: API tokens. Services:

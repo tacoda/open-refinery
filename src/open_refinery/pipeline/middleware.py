@@ -17,7 +17,11 @@ than the last:
    phase never got cannot be called, so there is nothing here to refuse
 2. **the ladder** — rung 3: a deterministic predicate, refusing in the rule's
    own words
-3. **the filter** — `scan_content`, over the call's arguments
+3. **the filter** — `scan_content` over the call's arguments, **secrets
+   only**. Personal data is filtered where text leaves for a third party
+   (`actions.open_pull_request`), not here: a run writes files in its own
+   worktree all day, and refusing one because it contains an email address
+   refuses the work rather than protecting anything
 
 And one thing happens after: the call is **audited**, subject-linked to the run,
 whatever it returned.
@@ -62,13 +66,13 @@ class Governed:
         """"" to let the call run, or the reason it was refused."""
         self.calls += 1
 
-        text = _stringify(args)
-        clean, hits = scan_content(text)
+        _, hits = scan_content(_stringify(args))      # secrets only; see the module docstring
         if hits:
             # The filter is not advisory: a call carrying a secret does not run.
             self.redactions += hits
             return (f"refused: the arguments contain {', '.join(sorted(set(hits)))}. "
-                    "Secrets do not leave this machine.")
+                    "A credential does not belong in the code — read it from the "
+                    "environment instead.")
 
         session = self._session()
         try:

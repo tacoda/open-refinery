@@ -183,6 +183,13 @@ def step(session: Session, run: Run, audit: AuditSink, *,
                               inputs={"stage": stage.name}, output=url, subject=run.id))
         produced = {}
 
+    if result.redactions:
+        # A redaction is a governance event: something was taken out of what
+        # left this machine, and the trail should say what.
+        audit.write(Record.of(recipe="redacted", actor=run.actor_id, owner=run.actor_id,
+                              inputs={"stage": stage.name},
+                              output=", ".join(result.redactions), subject=run.id))
+
     ps.record_step(session, run, stage.name, outcome=result.outcome,
                    why=result.error or result.reason or "", phase=stage.phase,
                    action=stage.action, answer=answer, units=result.units,

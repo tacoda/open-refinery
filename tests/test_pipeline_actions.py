@@ -158,6 +158,34 @@ def test_the_request_body_is_the_run_document(repo, ctx):
     assert "Nothing merges itself" in body
 
 
+def test_the_request_body_is_filtered_on_the_way_out(repo, ctx):
+    """This is the egress point: the body is a document a model wrote from
+    whatever it read in the checkout. Personal data is filtered *here* rather
+    than at the tool-call seam — writing an address into a CODEOWNERS file is
+    the file working; publishing it on a forge is not."""
+    perform("prepare_workspace", _run(), ctx)
+    (ws.worktree_path(repo, "run0001abcd99") / "a.py").write_text("x = 1\n")
+    perform("commit_and_push", _run(), ctx)
+
+    run = _run(document=("## What was built\n\nEmailed ian@example.com and set "
+                         "AKIAIOSFODNN7EXAMPLE as the key.\n"))
+    result = perform("open_pull_request", run, ctx)
+    body = Path(result.reason.split("\t")[1]).read_text()
+
+    assert "ian@example.com" not in body and "AKIAIOSFODNN7EXAMPLE" not in body
+    assert "[redacted:email]" in body and "[redacted:aws-key]" in body
+    assert sorted(result.redactions) == ["aws-key", "email"]
+
+
+def test_a_clean_body_reports_no_redactions(repo, ctx):
+    perform("prepare_workspace", _run(), ctx)
+    (ws.worktree_path(repo, "run0001abcd99") / "a.py").write_text("x = 1\n")
+    perform("commit_and_push", _run(), ctx)
+
+    result = perform("open_pull_request", _run(document="## Built\n\nTwo files.\n"), ctx)
+    assert result.redactions == ()
+
+
 # --- watching ---------------------------------------------------------------
 
 def test_an_open_request_keeps_the_run_waiting(repo, ctx):

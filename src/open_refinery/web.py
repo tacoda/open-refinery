@@ -451,6 +451,9 @@ class NewEval(BaseModel):
 
 class ScanRequest(BaseModel):
     text: str
+    # True to ask the question the pull-request boundary asks — secrets *and*
+    # personal data. False (the default) is the local question: secrets only.
+    egress: bool = False
 
 
 # --- app ------------------------------------------------------------------

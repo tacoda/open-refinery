@@ -38,6 +38,10 @@ class Result:
     # reports what the provider billed. Recorded on the step and charged to the
     # budgets the run answers to.
     units: int = 0
+    # What the content filter took out on the way to a third party. Carried
+    # rather than logged here because an action holds no audit sink — the
+    # runner writes it down.
+    redactions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

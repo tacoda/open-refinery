@@ -122,12 +122,19 @@ There is one, and it is inside a turn. Every tool a phase reaches for goes
 through `Governed.check` before it runs:
 
 ```
-the grant (rung 1, at build time) → the ladder (rung 3) → the content filter
+the grant (rung 1, at build time) → the ladder (rung 3) → the secrets filter
   → the call → audit, subject-linked to the run
 ```
 
 A refusal is handed back to the model as a tool result, not raised: an exception
 ends the turn, and a refusal the model can read is one it can work around.
+
+**The filter here is secrets only.** Personal data is filtered where text leaves
+for a third party — `actions.open_pull_request`, over the title and the run
+document — and not at this seam. One list scanned over every tool call refused
+ordinary work: a `git commit --author`, a CODEOWNERS file, any thirteen-digit
+literal. A credit-card candidate now has to pass a Luhn check before it counts,
+which is the difference between a filter and noise. — `policies.scan_content`
 — `pipeline/middleware.py`, `ladder.py`, `policies.py`
 
 **The spend ceiling is not here.** It cannot be: this seam sees a tool call,

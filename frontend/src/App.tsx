@@ -1117,7 +1117,8 @@ function Policies() {
   const del = (id: string) => api(`/policies/${id}`, { method: 'DELETE' }).then(load).catch(fail)
 
   const [text, setText] = useState(''), [scan, setScan] = useState<any>(null)
-  const runScan = () => post('/content/scan', { text }).then(setScan).catch(fail)
+  const [egress, setEgress] = useState(false)
+  const runScan = () => post('/content/scan', { text, egress }).then(setScan).catch(fail)
 
   // versioned history + point-in-time reconstruction
   const [hist, setHist] = useState<any[] | null>(null)
@@ -1220,8 +1221,15 @@ function Policies() {
       <Card>
         <CardHeader><CardTitle>Content filter — test redaction</CardTitle></CardHeader>
         <CardContent>
+          <p className="muted">
+            Two questions, not one. <strong>In a run</strong> the filter asks only
+            “is this a credential” — a tool call carrying one is refused, and an email
+            address in a CODEOWNERS file is the file working. <strong>Leaving</strong>{' '}
+            adds personal data, because a pull request body goes to a third party.
+          </p>
           <div className="toolbar">
-            <Input className="field" placeholder="text with secrets/PII" value={text} onChange={(e) => setText(e.target.value)} />
+            <Input className="field" placeholder="text to check" value={text} onChange={(e) => setText(e.target.value)} />
+            <Toggle on={egress} onChange={setEgress} label="leaving this machine" />
             <Button onClick={runScan}>Scan</Button>
           </div>
           {scan && (

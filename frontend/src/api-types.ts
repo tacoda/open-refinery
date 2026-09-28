@@ -1262,7 +1262,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Content Scan */
+        /**
+         * Content Scan
+         * @description Try the content filter against some text.
+         *
+         *     `egress` picks which question is asked: the local one (secrets only, what a
+         *     tool call is held to) or the leaving one (secrets plus personal data, what a
+         *     pull request body is held to).
+         */
         post: operations["content_scan_content_scan_post"];
         delete?: never;
         options?: never;
@@ -2745,6 +2752,11 @@ export interface components {
         ScanRequest: {
             /** Text */
             text: string;
+            /**
+             * Egress
+             * @default false
+             */
+            egress: boolean;
         };
         /** SettingBody */
         SettingBody: {

@@ -2,8 +2,12 @@
 
 A `Policy` is a rule `(effect, role, action, resource)`; `decide()` evaluates a
 request against all policies with **deny-overrides** and a default of allow.
-Policies are set by platform users and apply fleet-wide (single-tenant). Content
-filtering redacts sensitive patterns from text crossing a target boundary.
+Policies are set by platform users and apply fleet-wide (single-tenant).
+
+Content filtering asks **two** questions, not one. Locally — a tool call inside
+a run — the question is "is this a credential", and only that. On **egress**,
+where text leaves for a third party, it also asks "did we just publish somebody's
+personal data". See `scan_content`.
 """
 
 from __future__ import annotations
@@ -207,21 +211,83 @@ def enforce(session: Session, role: str, action: str, resource: str, *,
 
 # --- content filtering ----------------------------------------------------
 
-# ponytail: a starter rule set for secrets/PII. Extend via config when needed.
-_FILTERS: list[tuple[str, re.Pattern]] = [
-    ("email", re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")),
-    ("credit-card", re.compile(r"\b(?:\d[ -]*?){13,16}\b")),
+# "Sensitive" means two different things, and conflating them refused ordinary
+# work. Until 3.0 one list was scanned over every tool call's arguments, so a
+# `git commit --author="a@b.com"`, a `package.json`, a CODEOWNERS file or any
+# 13-digit literal was refused with "Secrets do not leave this machine" — while
+# nothing had left anything.
+
+# A SECRET is wrong wherever it appears. No legitimate source file contains a
+# live AWS key, and writing one into your own checkout is as much of a mistake
+# as posting it to a pull request. These are scanned everywhere.
+SECRET_FILTERS: list[tuple[str, re.Pattern]] = [
     ("aws-key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("bearer-token", re.compile(r"\b(?:gh[pousr]|glpat|sk|pypi)[-_][A-Za-z0-9_-]{16,}\b")),
+    ("private-key", re.compile(r"-----BEGIN(?: [A-Z]+)? PRIVATE KEY-----")),
 ]
 
+# PERSONAL data is only a problem when the text **leaves**. An email address in
+# a CODEOWNERS file is the file doing its job; the same address in a pull
+# request body on a public forge is an address you published. Scanned on egress
+# only.
+PERSONAL_FILTERS: list[tuple[str, re.Pattern]] = [
+    ("email", re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")),
+    # Candidates only — a digit run is not a card number. `_luhn` decides, which
+    # is what keeps `const id = 1234567890123` from being called a credit card.
+    ("credit-card", re.compile(r"(?<![\d-])(?:\d[ -]?){12,18}\d(?![\d-])")),
+]
 
-def scan_content(text: str) -> tuple[str, list[str]]:
-    """Redact known sensitive patterns; return (clean_text, kinds_hit)."""
+_LUHN_CHECKED = {"credit-card"}
+
+
+def _luhn(digits: str) -> bool:
+    """The check digit every card number carries. A random run of digits passes
+    about one time in ten, which is the difference between a filter and noise."""
+    if not 13 <= len(digits) <= 19 or not digits.isdigit():
+        return False
+    total, parity = 0, len(digits) % 2
+    for i, ch in enumerate(digits):
+        n = int(ch)
+        if i % 2 == parity:
+            n *= 2
+            if n > 9:
+                n -= 9
+        total += n
+    return total % 10 == 0
+
+
+def _apply(text: str, filters, hits: list[str]) -> str:
+    for kind, pattern in filters:
+        if kind in _LUHN_CHECKED:
+            def sub(m):
+                if not _luhn(re.sub(r"[ -]", "", m.group(0))):
+                    return m.group(0)          # a number, not a card
+                if kind not in hits:
+                    hits.append(kind)
+                return f"[redacted:{kind}]"
+            text = pattern.sub(sub, text)
+            continue
+        if pattern.search(text):
+            if kind not in hits:
+                hits.append(kind)
+            text = pattern.sub(f"[redacted:{kind}]", text)
+    return text
+
+
+def scan_content(text: str, *, egress: bool = False) -> tuple[str, list[str]]:
+    """Redact what should not be there; return (clean_text, kinds_hit).
+
+    `egress=True` for text **leaving this machine** — a pull request body, a
+    comment on a forge. That adds the personal-data filters on top of the
+    secrets, because the question there is not only "is this a credential" but
+    "did we just publish somebody's address".
+
+    The default is the local case: secrets only. A run writes files in its own
+    worktree all day, and scanning those for email addresses refuses the work
+    rather than protecting anything.
+    """
     hits: list[str] = []
-    clean = text
-    for kind, pattern in _FILTERS:
-        if pattern.search(clean):
-            hits.append(kind)
-            clean = pattern.sub(f"[redacted:{kind}]", clean)
+    clean = _apply(text, SECRET_FILTERS, hits)
+    if egress:
+        clean = _apply(clean, PERSONAL_FILTERS, hits)
     return clean, hits
