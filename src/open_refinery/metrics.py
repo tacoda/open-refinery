@@ -16,12 +16,22 @@ from .models import Event, WorkItem
 
 
 def wip_by_stage(session: Session, owner_id: str | None = None) -> dict[str, int]:
-    """Count of work items currently at each step (work in progress)."""
-    stmt = select(WorkItem.current_stage, func.count())
+    """Count of work items at each stage — **derived from their runs**.
+
+    It used to read `WorkItem.current_stage`, a column a person moved by hand on
+    a board the factory ignored. Reading the runs instead means this counts what
+    is actually happening. Stages come from `work_items.STAGES`.
+    """
+    from .work_items import stages_for
+
+    stmt = select(WorkItem)
     if owner_id:
         stmt = stmt.where(WorkItem.owner_id == owner_id)
-    stmt = stmt.group_by(WorkItem.current_stage)
-    return {stage: n for stage, n in session.exec(stmt)}
+    items = list(session.exec(stmt))
+    counts: dict[str, int] = {}
+    for stage in stages_for(session, items).values():
+        counts[stage] = counts.get(stage, 0) + 1
+    return counts
 
 
 def event_counts(session: Session, owner_id: str | None = None) -> dict[str, int]:

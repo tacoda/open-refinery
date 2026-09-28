@@ -59,8 +59,9 @@ def test_the_first_account_can_actually_do_something(client_=None):
     assert set(boss["user"]["permissions"]) == set(PERMISSIONS)
 
     # the thing that was impossible before: standing up the machinery
-    made = c.post("/processes", headers=auth,
-                  json={"name": "flow", "archetype": "board", "stages": ["todo", "done"]})
+    made = c.post("/pipelines", headers=auth,
+                  json={"name": "flow", "first": "a", "terminal": ["done"],
+                        "stages": {"a": {"action": "prepare_workspace", "next": "done"}}})
     assert made.status_code == 201, made.json()
 
     # and the next admin is still narrow — this is the owner, not the preset

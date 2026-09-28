@@ -72,10 +72,8 @@ REQUIRED = {
     "sync a tracker": "/integrations/{integ_id}/sync",
     # the work
     "repositories": "/repositories",
-    "processes": "/processes",
     "work items": "/work-items",
-    "move a work item": "/work-items/{item_id}/transition",
-    "approvals": "/approvals",
+    "what is waiting on a person": "/approvals",
     "runs": "/runs",
     # operations
     "settings": "/settings",
@@ -106,6 +104,12 @@ def test_no_route_survives_a_deleted_module(paths):
     # a run resolves its model from the phase and the actor's credential.
     "/execute", "/targets", "/routes", "/quotas", "/routing-policy",
     "/traffic", "/usage",
+    # 3.0: the kanban. A work item has no state machine of its own — its stage
+    # is derived from its runs, and a run is what a person approves.
+    "/processes", "/work-items/{item_id}/transition",
+    "/work-items/{item_id}/attest", "/work-items/{item_id}/request-approval",
+    "/approvals/overdue", "/approvals/{request_id}/approve",
+    "/approvals/{request_id}/reject",
 ])
 def test_removed_features_leave_no_dead_routes(paths, gone):
     """A route that lingers after its feature is removed is worse than no
@@ -138,6 +142,6 @@ def test_literal_paths_are_not_swallowed_by_a_catch_all():
     # Each of these shares a prefix with a path-parameter route declared nearby.
     for path in ("/pipelines/templates", "/pipelines/templates/default",
                  "/pipelines/actions", "/repositories/charter-presets",
-                 "/credentials/catalog", "/permissions", "/approvals/overdue"):
+                 "/credentials/catalog", "/permissions"):
         r = client.get(path, headers=headers)
         assert r.status_code != 404, f"{path} is shadowed by a catch-all route"

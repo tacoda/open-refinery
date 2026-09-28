@@ -18,7 +18,6 @@ from open_refinery.pipeline import store as ps
 from open_refinery.pipeline import workspace as ws
 from open_refinery.pipeline.graph import OK, Result
 from open_refinery.pipeline.runner import drive, step
-from open_refinery.processes import create_process
 from open_refinery.store import SqliteSink, connect
 from open_refinery.users import create_user, ensure_presets
 from open_refinery.work_items import create_work_item
@@ -48,8 +47,7 @@ def ctx(tmp_path):
     session.commit()
     session.refresh(repo)
 
-    process = create_process(session, "flow", "board", ["todo", "done"], user.id)
-    item = create_work_item(session, repo.id, process.id, "Add a login page", user.id)
+    item = create_work_item(session, repo.id, "Add a login page", user.id)
     pipeline = ps.ensure_default(session, user.id)
     run = ps.start_run(session, item.id, pipeline, repo.id, user.id,
                        spec="Add a login page")

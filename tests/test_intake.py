@@ -13,7 +13,6 @@ from open_refinery import (
     SqliteSink,
     connect,
     create_integration,
-    create_process,
     create_repository,
     create_user,
 )
@@ -36,11 +35,9 @@ def fixture(monkeypatch, *, autostart=False, kind="github-issues"):
     conn = connect("sqlite:///:memory:")
     dev, _ = create_user(conn, "dev@x.dev", "pw", "developer")
     repo = create_repository(conn, "or", "git@x:or.git", dev.id)
-    proc = create_process(conn, "flow", "board", ["todo", "done"], dev.id)
     integ = create_integration(conn, kind, {"token": "t"}, dev.id)
-    integ, secret = configure(conn, integ.id, repo_id=repo.id, process_id=proc.id,
-                              autostart=autostart, rotate_secret=True)
-    return conn, dev, repo, proc, integ, secret
+    integ, secret = configure(conn, integ.id, repo_id=repo.id, autostart=autostart, rotate_secret=True)
+    return conn, dev, repo, integ, secret
 
 
 def delivery(secret, payload):
@@ -75,7 +72,7 @@ def test_a_tampered_body_is_refused(monkeypatch):
 
 def test_an_integration_with_no_secret_accepts_nothing(monkeypatch):
     """Not "no secret means no check" — that is how a front door is left open."""
-    conn, dev, repo, proc, integ, _ = fixture(monkeypatch)
+    conn, dev, repo, integ, _ = fixture(monkeypatch)
     integ.webhook_secret = ""
     conn.add(integ); conn.commit()
     body, _ = delivery("anything", ISSUE)
@@ -90,7 +87,7 @@ def test_an_unknown_integration_is_refused_before_any_work(monkeypatch):
 
 
 def test_a_tracker_with_no_parser_is_refused_rather_than_guessed_at(monkeypatch):
-    conn, dev, repo, proc, integ, secret = fixture(monkeypatch, kind="github")  # a forge, not a tracker
+    conn, dev, repo, integ, secret = fixture(monkeypatch, kind="github")  # a forge, not a tracker
     body, sig = delivery(secret, ISSUE)
     with pytest.raises(IntakeError, match="no webhook parser"):
         accept(conn, integ.id, body, sig, audit=SqliteSink(conn))
@@ -99,7 +96,7 @@ def test_a_tracker_with_no_parser_is_refused_rather_than_guessed_at(monkeypatch)
 # --- accepting --------------------------------------------------------------
 
 def test_a_new_issue_becomes_a_work_item(monkeypatch):
-    conn, dev, repo, proc, integ, secret = fixture(monkeypatch)
+    conn, dev, repo, integ, secret = fixture(monkeypatch)
     body, sig = delivery(secret, ISSUE)
     result = accept(conn, integ.id, body, sig, audit=SqliteSink(conn))
     assert result["accepted"] and result["ref"] == "github-issues:#7"
@@ -110,7 +107,7 @@ def test_a_new_issue_becomes_a_work_item(monkeypatch):
 def test_a_redelivery_does_not_create_a_second_work_item(monkeypatch):
     """Every tracker re-delivers. Dedupe by external ref or a flaky network
     turns one ticket into five."""
-    conn, dev, repo, proc, integ, secret = fixture(monkeypatch)
+    conn, dev, repo, integ, secret = fixture(monkeypatch)
     body, sig = delivery(secret, ISSUE)
     accept(conn, integ.id, body, sig, audit=SqliteSink(conn))
     again = accept(conn, integ.id, body, sig, audit=SqliteSink(conn))
@@ -120,26 +117,26 @@ def test_a_redelivery_does_not_create_a_second_work_item(monkeypatch):
 
 
 def test_an_edit_is_not_new_work(monkeypatch):
-    conn, dev, repo, proc, integ, secret = fixture(monkeypatch)
+    conn, dev, repo, integ, secret = fixture(monkeypatch)
     body, sig = delivery(secret, {**ISSUE, "action": "edited"})
     assert accept(conn, integ.id, body, sig, audit=SqliteSink(conn))["accepted"] is False
     assert conn.exec(select(WorkItem)).all() == []
 
 
 def test_an_integration_with_nowhere_to_file_accepts_nothing(monkeypatch):
-    conn, dev, repo, proc, integ, secret = fixture(monkeypatch)
+    conn, dev, repo, integ, secret = fixture(monkeypatch)
     integ.intake_repo_id = None
     conn.add(integ); conn.commit()
     body, sig = delivery(secret, ISSUE)
     out = accept(conn, integ.id, body, sig, audit=SqliteSink(conn))
-    assert out["accepted"] is False and "repo/process" in out["why"]
+    assert out["accepted"] is False and "no repo" in out["why"]
 
 
 def test_the_ticket_is_audited_against_the_item_it_created(monkeypatch):
     """A ticket that arrived by itself still has to be answerable for. The
     entry names the work item, so the trail runs from webhook to pull request."""
     from open_refinery import query_events
-    conn, dev, repo, proc, integ, secret = fixture(monkeypatch)
+    conn, dev, repo, integ, secret = fixture(monkeypatch)
     body, sig = delivery(secret, ISSUE)
     out = accept(conn, integ.id, body, sig, audit=SqliteSink(conn))
     entry = [e for e in query_events(conn) if e.recipe == "intake"]
@@ -185,7 +182,7 @@ def test_autostart_off_files_the_ticket_and_stops_there():
 
 def test_autostart_starts_a_run_for_a_new_ticket(monkeypatch):
     from open_refinery.pipeline import store as ps
-    conn, dev, repo, proc, integ, secret = fixture(monkeypatch, autostart=True)
+    conn, dev, repo, integ, secret = fixture(monkeypatch, autostart=True)
     pipeline = ps.ensure_default(conn, dev.id)
     monkeypatch.setattr(ps, "latest_pipeline", lambda s, n: pipeline)
 
@@ -200,7 +197,7 @@ def test_autostart_starts_a_run_for_a_new_ticket(monkeypatch):
 
 def test_without_autostart_nothing_runs(monkeypatch):
     from open_refinery.pipeline import store as ps
-    conn, dev, repo, proc, integ, secret = fixture(monkeypatch, autostart=False)
+    conn, dev, repo, integ, secret = fixture(monkeypatch, autostart=False)
     body, sig = delivery(secret, ISSUE)
     out = accept(conn, integ.id, body, sig, audit=SqliteSink(conn))
     assert out["accepted"] and out["run"] is None

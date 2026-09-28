@@ -5,7 +5,6 @@ from fastapi.testclient import TestClient
 
 from open_refinery.models import Repository
 from open_refinery.pipeline import default_pipeline
-from open_refinery.processes import create_process
 from open_refinery.store import connect
 from open_refinery.users import create_session, create_user, ensure_presets
 from open_refinery.web import create_app
@@ -25,8 +24,7 @@ def ctx():
     session.add(repo)
     session.commit()
     session.refresh(repo)
-    process = create_process(session, "flow", "board", ["todo", "done"], dev.id)
-    item = create_work_item(session, repo.id, process.id, "Add login", dev.id)
+    item = create_work_item(session, repo.id, "Add login", dev.id)
 
     client = TestClient(create_app(session))
 

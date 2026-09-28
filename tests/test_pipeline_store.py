@@ -7,7 +7,6 @@ in flight**, and the graph a finished run followed is still readable later.
 import pytest
 
 from open_refinery.models import Repository
-from open_refinery.processes import create_process
 from open_refinery.pipeline import GraphError, default_pipeline
 from open_refinery.pipeline import store as ps
 from open_refinery.pipeline.graph import Move, Result
@@ -28,8 +27,7 @@ def ctx():
     # A run points at a real work item — the FK is what keeps a run from
     # outliving the thing it was started for.
     from open_refinery.work_items import create_work_item
-    process = create_process(session, "flow", "board", ["todo", "done"], user.id)
-    items = [create_work_item(session, repo.id, process.id, f"T{n}", user.id).id
+    items = [create_work_item(session, repo.id, f"T{n}", user.id).id
              for n in (1, 2)]
     return session, user, repo, items
 

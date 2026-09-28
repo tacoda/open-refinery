@@ -161,16 +161,16 @@ def accept(session: Session, integration_id: str, body: bytes, signature: str,
         return {"accepted": False, "why": "not an issue event"}
     if action and action not in OPENING:
         return {"accepted": False, "why": f"'{action}' is not new work"}
-    if not integ.intake_repo_id or not integ.intake_process_id:
+    if not integ.intake_repo_id:
         return {"accepted": False,
-                "why": "this integration has no repo/process to file into"}
+                "why": "this integration has no repo to file into"}
 
     ref = f"{integ.kind}:{ticket.key}"
     if find_by_external_ref(session, ref):
         return {"accepted": False, "why": "already imported", "ref": ref}
 
-    item = create_work_item(session, integ.intake_repo_id, integ.intake_process_id,
-                            ticket.title, integ.owner_id, external_ref=ref)
+    item = create_work_item(session, integ.intake_repo_id, ticket.title,
+                            integ.owner_id, external_ref=ref)
     audit.write(Record.of(
         recipe="intake", actor=integ.owner_id, owner=integ.owner_id,
         inputs={"integration": integ.id, "tracker": integ.kind, "key": ticket.key},
@@ -215,7 +215,7 @@ def _start(session: Session, item: WorkItem, ticket: Ticket, integ: Integration,
 
 
 def configure(session: Session, integration_id: str, *, repo_id: str = "",
-              process_id: str = "", pipeline: str = "", autostart: bool | None = None,
+              pipeline: str = "", autostart: bool | None = None,
               rotate_secret: bool = False) -> tuple[Integration, str]:
     """Point an integration at where its tickets should land.
 
@@ -232,8 +232,6 @@ def configure(session: Session, integration_id: str, *, repo_id: str = "",
 
     if repo_id:
         integ.intake_repo_id = repo_id
-    if process_id:
-        integ.intake_process_id = process_id
     if pipeline:
         integ.intake_pipeline = pipeline
     if autostart is not None:

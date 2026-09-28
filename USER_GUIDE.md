@@ -104,7 +104,7 @@ Open your server's URL in a browser (e.g. `http://YOUR_SERVER_IP:8000`).
   there if you skipped step 4.
 - Otherwise sign in with the admin **email + password**.
 
-From the dashboard you manage everything: users, repositories, processes,
+From the dashboard you manage everything: users, repositories, pipelines,
 integrations, oversight, and the audit trail.
 
 ---

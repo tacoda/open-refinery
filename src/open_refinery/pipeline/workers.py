@@ -30,7 +30,7 @@ from sqlmodel import Session, select
 
 from ..audit import AuditSink
 from ..concurrency import ConcurrencyExceeded, slot
-from ..models import Process, Run, Team, User, WorkItem, now_iso
+from ..models import Repository, Run, Team, User, now_iso
 from ..provenance import Record
 from .runner import RunnerError, step
 
@@ -109,10 +109,13 @@ def _cap_for(session: Session, run: Run) -> tuple[str | None, int]:
 
 
 def oversight_for(session: Session, run: Run) -> str:
-    """How closely this run is watched — the team's setting, not the harness's."""
-    item = session.get(WorkItem, run.work_item_id)
-    process = session.get(Process, item.process_id) if item else None
-    return process.oversight if process else "supervised"
+    """How closely this run is watched — the repository's setting, not the
+    harness's. It lived on the work item's process until 3.0, where it was the
+    only field of that record a run ever read."""
+    from ..oversight import DEFAULT
+
+    repo = session.get(Repository, run.repo_id)
+    return repo.oversight if repo else DEFAULT
 
 
 @dataclass

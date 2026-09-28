@@ -120,7 +120,7 @@ Three doors, and work behaves the same however it arrived:
 - **sync** — pull a tracker's issues on demand
 - **webhook** — point the tracker at `POST /intake/{integration_id}`
 
-For the webhook, set the repo and process the tickets should land in, then
+For the webhook, set the repo the tickets should land in, then
 create the signing secret. **It is shown once.** An integration with no secret
 accepts nothing, which is the correct behaviour for an unauthenticated route.
 

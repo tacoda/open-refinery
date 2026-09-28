@@ -5,10 +5,88 @@ All notable changes to open-refinery are documented here. Format follows
 
 ## [Unreleased]
 
+*The road to 3.0 is subtraction. The product carried two of several things —
+two governed call sites, two workflow engines — and the older half of each
+was what the docs, the dashboard and `doctor` still pointed at.*
+
+### Step 2 — fold `Process` into `Pipeline`
+*Road to 3.0, step 2: fold `Process` into `Pipeline`. The second workflow engine
+goes; a work item's stage is derived from its runs.*
+
+#### Removed
+- **`Process` and the kanban around it** — `processes.py`, `approvals.py`,
+  `attestations.py`, `escalations.py`, and the `Process` / `StageHistory` /
+  `ApprovalRequest` / `Attestation` models.
+
+  A `Process` was a second stage graph — transitions, gates, checks, an approval
+  chain, an SLA — and **a run completely ignored it**. `Run` carried both a
+  `work_item_id` and a `pipeline_id`; `WorkItem` carried a `process_id`; the
+  only link between them was one string, `workers.oversight_for` reading
+  `process.oversight`. Everything else on the record governed a manual board
+  that nothing in the factory looked at.
+
+  The acceptance test is the clearest evidence: it created a process with stages
+  `["todo", "done"]` because the field was required, then never transitioned the
+  item. The run did all the work.
+- **The routes**: `GET|POST /processes`, `POST /work-items/{id}/transition`,
+  `/work-items/{id}/attest`, `/work-items/{id}/request-approval`,
+  `GET /approvals/overdue`, `POST /approvals/{id}/approve|reject`.
+  142 → 134 operations.
+- **The Processes dashboard view** and the wizard's *Process* step. 20 → 19 nav
+  entries; onboarding is six steps, not seven.
+- **`oversight.requires_approval`** and the overdue-escalation sweep from the
+  scheduler. `LEVELS` stays — it is what the harness turns into interrupts.
+- **Example processes from packs.** Three of thirty-one packs seeded them; they
+  keep their standards and governed artifacts.
+
+#### Changed
+- **The oversight dial moved to the repository.** `Repository.oversight`
+  (default `supervised`), settable on `PUT /repositories/{id}` and in the repo
+  drawer, validated against `oversight.LEVELS` at the boundary. It was the one
+  field of a `Process` a run ever read.
+- **A work item's stage is derived from its runs** — `work_items.stage_of` /
+  `stages_for`, over a fixed vocabulary: `open` · `running` · `waiting` ·
+  `landed` · `closed` · `failed`. An outcome wins over a stage, and the newest
+  run wins. The Work board and `metrics.wip_by_stage` read this, so they now
+  describe what the factory is doing rather than where a card was dragged.
+- **`/approvals` lists held runs.** It was a queue of kanban-transition requests
+  signed by *role rank* (`at_least`) — an authority model the rest of the
+  product had already left behind. What waits now is a run, and clearing it is
+  `POST /runs/{id}/approve`: `approve:code`, and never your own run.
+- **Creating work no longer needs a process.** `POST /work-items` takes a repo
+  and a title. Intake, tracker sync and the improve lane all dropped their
+  `process_id` with it.
+- **The wizard's last step starts a run.** It created a work item and toasted
+  "Work shipped" while nothing shipped; a user finished setup having never seen
+  the factory work.
+- **The evidence pack's "quality gates" control** counted attestations. It now
+  counts what actually gates a release: rules carried at rung 2+ and recorded
+  run approvals.
+- `open-refinery seed` makes a repo and two tickets; both read `open` until
+  somebody runs them.
+
+#### Schema
+- **Migration v31**: `ALTER TABLE repositories ADD COLUMN oversight TEXT NOT
+  NULL DEFAULT 'supervised'`, with its reverse in `DOWNGRADES`.
+- `WorkItem.process_id` and `WorkItem.current_stage` stay as **tombstones**,
+  written `""` and never read. Removing the fields would break inserts on an
+  upgraded install, where both columns are `NOT NULL` with no default. The
+  `processes`, `stage_history`, `approval_requests` and `attestations` tables
+  are left in place, unread and unwritten, per the additive-only freeze.
+
+#### Kept, deliberately
+- **`at_least` / role rank** — still used by pack enablement and the governance
+  proposal chain. Neither authorizes work; that is `authority.py` and the
+  permissions on the person. Reconciling the two is step 8.
+- **`POST /authorize`**, the policy engine, and `/work-items/{id}/logs`.
+
+794 tests pass.
+
+### Step 1 — delete the second execution path
 *Road to 3.0, step 1: delete the second execution path. Subtraction only — no
 feature that ships a change was touched.*
 
-### Removed
+#### Removed
 - **`POST /execute` and everything behind it** — `executor.py`, `targets.py`,
   `ledger.py`, and the `Target` / `Route` / `Quota` / `LedgerEntry` models.
 
@@ -36,7 +114,7 @@ feature that ships a change was touched.*
 - The seeded target + route. `open-refinery seed` now makes a repo, a process
   and two work items.
 
-### Changed
+#### Changed
 - **`doctor` stops misdirecting setup.** `check_targets` warned *"no targets
   configured — add a model target so work has somewhere to run"*, which was
   never true: a target has nothing to do with where a run runs. It is replaced
@@ -49,7 +127,7 @@ feature that ships a change was touched.*
   checks — and states plainly that **there is no spend ceiling yet**.
   `docs/LIMITATIONS.md` and the README say the same.
 
-### Schema
+#### Schema
 - No migration. The schema freeze is additive-only, so `targets`, `routes`,
   `quotas` and `ledger_entries` are **left in place** on existing installs —
   unread and unwritten. A fresh install is stamped to the latest version and
@@ -57,11 +135,13 @@ feature that ships a change was touched.*
   `tests/test_migrations.py` now creates the two legacy tables itself when it
   simulates a pre-3.0 install, which is what such an install really has.
 
-### Kept, deliberately
+#### Kept, deliberately
 - **`POST /authorize`** — the pre-action policy gate for an out-of-process
   harness. It reads `policies.enforce`, not the executor, and is unaffected.
 - **`concurrency.slot`** and per-team caps — the pipeline workers use them.
 - **`/content/scan`** and the whole `policies.py` filter.
+
+---
 
 ## [2.23.0] — 2026-09-28
 

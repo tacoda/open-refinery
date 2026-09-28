@@ -1,10 +1,11 @@
 """Compliance evidence packs — turn the audit trail, policies, versioned history,
-and attestations into a framework-mapped bundle an auditor can read.
+and the ladder into a framework-mapped bundle an auditor can read.
 
 A pack answers, per control: *is there evidence this control is enforced?* — the
 tamper-evident audit chain, the role authorization matrix, versioned policy
-history + approval workflows, quality-gate attestations, and enforcement mode.
-Framework maps are representative starters; orgs extend them.
+history + approval workflows, mechanically-enforced rules, recorded run
+approvals, and enforcement mode. Framework maps are representative starters;
+orgs extend them.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from sqlmodel import Session, func, select
 
 from .models import (
     ApprovalWorkflow,
-    Attestation,
+    Constraint,
     Event,
     Policy,
     PolicyVersion,
@@ -42,10 +43,16 @@ def _facts(session: Session) -> dict:
         "strict_rules": sum(1 for p in rules if p.strict),
         "policy_versions": count(PolicyVersion),
         "approval_workflows": count(ApprovalWorkflow),
-        "attestations": count(Attestation),
+        # A rule at rung 2+ is carried by a mechanism rather than by prose —
+        # the ladder's whole point, and the only "check" the product enforces
+        # now that per-transition attestations are gone with the kanban.
+        "enforcing_rules": len([c for c in session.exec(
+            select(Constraint).where(Constraint.enabled)) if c.rung >= 2]),
         "audit_events": count(Event),
         "denials": recipes.get("denied", 0),
         "approvals": recipes.get("approval", 0),
+        "run_approvals": recipes.get("run-approved", 0),   # a held run cleared by a person
+        "runs_delivered": recipes.get("pr-opened", 0),     # a run that reached a pull request
         "users": count(User),
         "recipes": recipes,
     }
@@ -71,8 +78,12 @@ def _controls(f: dict) -> dict:
         "monitoring": ("Monitoring & enforcement", "Violations are blocked and recorded",
             (_met(f["enforcement_mode"] == "strict", partial=f["denials"] >= 0),
              {"enforcement_mode": f["enforcement_mode"], "denials_recorded": f["denials"]})),
-        "quality-gates": ("Quality gates / verification", "Required checks attested before release",
-            (_met(f["attestations"] > 0, partial=True), {"attestations": f["attestations"]})),
+        "quality-gates": ("Quality gates / verification",
+            "Checks are mechanically enforced, and gated work is signed before it ships",
+            (_met(f["enforcing_rules"] > 0 and f["run_approvals"] > 0,
+                  partial=f["enforcing_rules"] > 0 or f["run_approvals"] > 0),
+             {"enforcing_rules": f["enforcing_rules"], "run_approvals": f["run_approvals"],
+              "runs_delivered": f["runs_delivered"]})),
     }
 
 
@@ -107,6 +118,7 @@ def evidence_pack(session: Session, framework: str) -> dict:
         "summary": {"controls": len(controls), "met": met,
                     "coverage_pct": round(100 * met / len(controls)) if controls else 0},
         "facts": {k: facts[k] for k in ("enforcement_mode", "rules_total", "strict_rules",
-                  "policy_versions", "approval_workflows", "attestations", "audit_events")},
+                  "policy_versions", "approval_workflows", "enforcing_rules",
+                  "run_approvals", "runs_delivered", "audit_events")},
         "controls": controls,
     }

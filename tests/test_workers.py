@@ -23,7 +23,6 @@ from open_refinery.pipeline.workers import (
     release,
     tick,
 )
-from open_refinery.processes import create_process
 from open_refinery.store import SqliteSink, connect
 from open_refinery.users import create_user, ensure_presets
 from open_refinery.work_items import create_work_item
@@ -52,11 +51,10 @@ def ctx(tmp_path):
     session.add(repo)
     session.commit()
     session.refresh(repo)
-    process = create_process(session, "flow", "board", ["todo", "done"], user.id)
     pipeline = ps.ensure_default(session, user.id)
 
     def start(title="Add a thing"):
-        item = create_work_item(session, repo.id, process.id, title, user.id)
+        item = create_work_item(session, repo.id, title, user.id)
         run = ps.start_run(session, item.id, pipeline, repo.id, user.id, spec=title)
         ps.approve_run(session, run.id, user.id)      # past the plan gate
         session.refresh(run)
@@ -186,8 +184,7 @@ def test_racing_workers_produce_one_winner(tmp_path):
     setup.add(repo)
     setup.commit()
     setup.refresh(repo)
-    process = create_process(setup, "flow", "board", ["todo", "done"], user.id)
-    item = create_work_item(setup, repo.id, process.id, "T", user.id)
+    item = create_work_item(setup, repo.id, "T", user.id)
     pipeline = ps.ensure_default(setup, user.id)
     run = ps.start_run(setup, item.id, pipeline, repo.id, user.id)
     setup.close()

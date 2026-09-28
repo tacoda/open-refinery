@@ -73,14 +73,13 @@ def test_a_run_announces_every_stage_it_moves_to():
 
 
 def _a_run():
-    from open_refinery import (connect, create_process, create_repository,
-                               create_user, create_work_item)
+    from open_refinery import (connect, create_repository, create_user,
+                               create_work_item)
     from open_refinery.pipeline import store as ps
 
     conn = connect("sqlite:///:memory:")
     dev, _ = create_user(conn, "dev@x.dev", "pw", "developer")
     repo = create_repository(conn, "or", "git@x:or.git", dev.id)
-    proc = create_process(conn, "flow", "board", ["todo", "done"], dev.id)
-    item = create_work_item(conn, repo.id, proc.id, "T", dev.id)
+    item = create_work_item(conn, repo.id, "T", dev.id)
     pipeline = ps.ensure_default(conn, dev.id)
     return conn, ps.start_run(conn, item.id, pipeline, repo.id, dev.id, spec="do it")

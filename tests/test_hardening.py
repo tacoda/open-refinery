@@ -13,7 +13,6 @@ def test_fresh_instance_has_no_seeded_data():
     tok = client.post("/setup", json={"email": "a@x.dev", "password": "pw"}).json()["token"]
     h = {"Authorization": f"Bearer {tok}"}
     assert client.get("/repositories", headers=h).json() == []
-    assert client.get("/processes", headers=h).json() == []
     assert client.get("/runs", headers=h).json() == []
 
 

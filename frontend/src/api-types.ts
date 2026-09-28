@@ -442,6 +442,10 @@ export interface paths {
          *     and `AGENTS.md`, and a team whose rules live in `.claude/`, `.cursorrules`
          *     or anywhere else says so here. An override **replaces** the default rather
          *     than adding to it.
+         *
+         *     `oversight` is how closely a run in this repository is watched. It lived on
+         *     the work item's process until 3.0, where it was the only field of that
+         *     record a run ever read.
          */
         put: operations["update_repo_repositories__repo_id__put"];
         post?: never;
@@ -504,35 +508,6 @@ export interface paths {
         put?: never;
         /** Import Repo */
         post: operations["import_repo_repositories_import_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/processes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Processes
-         * @description Every process, to any authenticated user.
-         *
-         *     A process is a **shared workflow definition**, not personal property: it is
-         *     the board everyone's work moves across, so a developer has to be able to
-         *     read the one their own work items sit on. Owner-scoping this meant a
-         *     developer could hold a work item at a stage while being unable to see the
-         *     stages — which is what the seeded dev account hit.
-         *
-         *     Authoring stays gated (`POST /processes` is platform+). Reading is not.
-         */
-        get: operations["get_processes_processes_get"];
-        put?: never;
-        /** Add Process */
-        post: operations["add_process_processes_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -769,57 +744,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/work-items/{item_id}/attest": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Add Attestation */
-        post: operations["add_attestation_work_items__item_id__attest_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/work-items/{item_id}/transition": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Move */
-        post: operations["move_work_items__item_id__transition_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/work-items/{item_id}/request-approval": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Request Move Approval */
-        post: operations["request_move_approval_work_items__item_id__request_approval_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/approvals": {
         parameters: {
             query?: never;
@@ -827,61 +751,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Approvals */
+        /**
+         * Get Approvals
+         * @description What is waiting on a person.
+         *
+         *     A run holds at a gated stage and waits; clearing it is
+         *     `POST /runs/{id}/approve`, which needs `approve:code`. Until 3.0 this listed
+         *     a separate queue of kanban-transition approvals, signed by *role rank* — an
+         *     authority model the rest of the product had already left behind.
+         */
         get: operations["get_approvals_approvals_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/approvals/overdue": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Overdue Approvals */
-        get: operations["get_overdue_approvals_approvals_overdue_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/approvals/{request_id}/approve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Approve Move */
-        post: operations["approve_move_approvals__request_id__approve_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/approvals/{request_id}/reject": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Reject Move */
-        post: operations["reject_move_approvals__request_id__reject_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2272,16 +2153,6 @@ export interface components {
             /** Team Id */
             team_id?: string | null;
         };
-        /** Attest */
-        Attest: {
-            /** Check */
-            check: string;
-            /**
-             * Passed
-             * @default true
-             */
-            passed: boolean;
-        };
         /** AuthorizeReq */
         AuthorizeReq: {
             /** Action */
@@ -2340,8 +2211,6 @@ export interface components {
             detail: string;
             /** Repo Id */
             repo_id: string;
-            /** Process Id */
-            process_id: string;
         };
         /** IntakeConfig */
         IntakeConfig: {
@@ -2350,11 +2219,6 @@ export interface components {
              * @default
              */
             repo_id: string;
-            /**
-             * Process Id
-             * @default
-             */
-            process_id: string;
             /**
              * Pipeline
              * @default
@@ -2382,20 +2246,6 @@ export interface components {
         MfaCode: {
             /** Code */
             code: string;
-        };
-        /** Move */
-        Move: {
-            /** To */
-            to: string;
-            /**
-             * Approve
-             * @default false
-             */
-            approve: boolean;
-            /** Changes */
-            changes?: {
-                [key: string]: unknown;
-            } | null;
         };
         /**
          * MoveRule
@@ -2552,45 +2402,6 @@ export interface components {
              */
             note: string;
         };
-        /** NewProcess */
-        NewProcess: {
-            /** Name */
-            name: string;
-            /** Archetype */
-            archetype: string;
-            /** Stages */
-            stages: string[];
-            /** Transitions */
-            transitions?: [
-                string,
-                string
-            ][] | null;
-            /** Initial */
-            initial?: string | null;
-            /**
-             * Oversight
-             * @default dark
-             */
-            oversight: string;
-            /** Gates */
-            gates?: string[] | null;
-            /** Checks */
-            checks?: {
-                [key: string]: string[];
-            } | null;
-            /**
-             * Min Approver Role
-             * @default lead
-             */
-            min_approver_role: string;
-            /** Approval Chain */
-            approval_chain?: string[] | null;
-            /**
-             * Approval Sla Hours
-             * @default 0
-             */
-            approval_sla_hours: number;
-        };
         /** NewRepo */
         NewRepo: {
             /** Name */
@@ -2708,8 +2519,6 @@ export interface components {
         NewWorkItem: {
             /** Repo Id */
             repo_id: string;
-            /** Process Id */
-            process_id: string;
             /** Title */
             title: string;
         };
@@ -2817,11 +2626,8 @@ export interface components {
             integration_id?: string | null;
             /** Ingest Interval Hours */
             ingest_interval_hours?: number | null;
-        };
-        /** RequestApproval */
-        RequestApproval: {
-            /** To */
-            to: string;
+            /** Oversight */
+            oversight?: string | null;
         };
         /** ResubmitBody */
         ResubmitBody: {
@@ -2870,8 +2676,6 @@ export interface components {
         SyncRequest: {
             /** Repo Id */
             repo_id: string;
-            /** Process Id */
-            process_id: string;
             /** Autostart */
             autostart?: boolean | null;
         };
@@ -3868,72 +3672,6 @@ export interface operations {
             };
         };
     };
-    get_processes_processes_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    add_process_processes_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NewProcess"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_work_items_work_items_get: {
         parameters: {
             query?: {
@@ -4507,117 +4245,6 @@ export interface operations {
             };
         };
     };
-    add_attestation_work_items__item_id__attest_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Attest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    move_work_items__item_id__transition_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Move"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    request_move_approval_work_items__item_id__request_approval_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RequestApproval"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_approvals_approvals_get: {
         parameters: {
             query?: {
@@ -4627,103 +4254,6 @@ export interface operations {
                 authorization?: string | null;
             };
             path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_overdue_approvals_approvals_overdue_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    approve_move_approvals__request_id__approve_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                request_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    reject_move_approvals__request_id__reject_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                request_id: string;
-            };
             cookie?: never;
         };
         requestBody?: never;

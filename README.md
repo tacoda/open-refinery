@@ -7,10 +7,9 @@
 ---
 
 **open-refinery is a self-hosted control plane for AI-driven software work.**
-Teams define the *processes* their work moves through — a kanban board, a
-vulnerability-remediation doctrine, whatever fits — connect their repositories,
-and ship work through those processes. Every step is owned, authorized,
-recorded, and queryable. It runs "dark" (lights-out automation) but stays
+Teams define the *pipeline* their work moves through — the stage graph a run
+follows from a ticket to a pull request — connect their repositories, and ship
+work through it. Every step is owned, authorized, recorded, and queryable. It runs "dark" (lights-out automation) but stays
 "open": nothing happens without an attributable, auditable trail.
 
 ### What it is
@@ -29,32 +28,26 @@ with `pip install` and one command; manage everything from the web dashboard.
   **per-layer approval workflow** (accept / deny / feedback). Packs seed starter
   rules, skills, commands, and standards (TDD, ATDD, spec-driven, UI
   verification, tech-debt, infrastructure, org policy…).
-- **Configurable oversight strategy** — a per-process human-oversight dial
-  (L0 manual → L4 fully dark) with a configurable risk profile: which steps are
-  **gated**, which **quality-gate attestations** must pass, and the minimum
-  approver role.
-- **Human approval gates** — gated steps need recorded sign-off: inline, or an
-  **async approval queue** with **chained approvals** (an ordered role chain,
-  distinct signer per slot) for higher-risk moves.
+- **Configurable oversight strategy** — a per-repository human-oversight dial
+  (L0 manual → L4 fully dark) deciding how much of a run waits for a person.
+  `ask` never degrades to `allow`: unattended, it refuses instead.
+- **Human approval gates** — a gated stage holds the run and waits. Clearing it
+  needs `approve:code`, and nobody clears their own run. Changes to *governance*
+  go through a separate **per-layer approval workflow** with an ordered chain and
+  a distinct signer per slot.
 - **Proactive enforcement** — an org-wide mode of `audit` (default-allow, opt-in
   deny) or **`strict`** (whitelist / default-deny). A **pre-action authorize**
   seam lets a harness verify identity + intent against policy *before* it runs a
   tool / command / host-egress action; **per-namespace whitelists** scope rules;
   every refused attempt is audited.
-- **First-class rollbacks** — revert a work item to a known-good prior stage and
-  compute a structured **reverse plan** that unwinds the whole deployment: code,
-  DB migrations, config, env, libraries, data, services, secret refs, infra,
-  DNS — any surface the PR touched. The harness applies it and reports back;
-  the platform governs + audits.
 - **Teams & concurrency caps** — group users into teams; a team's live
   in-flight cap bounds how many runs it can have going at once.
 - **Connects your code hosts and issue trackers** — GitHub, GitLab (code hosts);
   GitHub Issues, Jira, Linear (issue trackers), connected by token or OAuth,
   credentials encrypted at rest. Trackers expose **workflow discovery** — the
-  tool's own columns/statuses — so a process can be shaped from *your* board
-  (your Jira statuses, your Linear states) rather than a generic template.
-- Ships work through **customizable processes** — ordered steps with feedback
-  loops (board or doctrine archetypes).
+  tool's own columns/statuses.
+- Ships work through **customizable pipelines** — a stage graph with gates and
+  feedback loops, versioned, and pinned per run.
 - Records a **complete, attributed audit trail** — who did what, to which work
   item, with what inputs — fans it out to **webhooks**, and derives **metrics**
   plus **debt-audit health scores** (factory / harness / charter) with insights.
@@ -81,8 +74,8 @@ production authorized, owned, provenanced, and logged, with human oversight
 configurable to each team's philosophy. Minimal to run (one process, SQLite,
 env-light), everything managed through the UI, and completely open source.
 
-**The orchestrator is a queue, not an agent.** Work advances through processes
-via deterministic code (the transition loop over a durable store), not an LLM
+**The orchestrator is a queue, not an agent.** Work advances through the stage
+graph via deterministic code (workers over a durable store), not an LLM
 deciding what happens next. That determinism is the point: it's cheap (no model
 call to move a step), reproducible, and auditable — the agent's judgment is
 confined to the work *inside* a step, while sequencing stays plain software.
@@ -99,13 +92,12 @@ agent bottleneck would impose.
 > / command / agent) with a **strict** override lock and layered precedence;
 > **proactive enforcement** (`audit` / `strict` modes, a pre-action `/authorize`
 > gate, per-namespace whitelists); **packs** — a curated marketplace of starter
-> standards + processes; **per-layer approval workflows** that govern changes to
-> governance itself; **teams + concurrency caps**; **first-class rollbacks**
-> (full-deployment reverse plans, apply-side reporting); **governance landscape +
+> standards; **per-layer approval workflows** that govern changes to
+> governance itself; **teams + concurrency caps**; **governance landscape +
 > analysis**; **repo coverage & debt-audit health** with GitHub **ingest** (on a
 > schedule); **evals & experiments**; **webhooks**; **background jobs** and a
 > **WebSocket live channel** with per-run **live logs**; oversight, the async
-> approval queue + chained approvals, metrics, agent-run **post-mortems**, and a
+> metrics, and a
 > full audit trail — behind a **visibility-first dashboard**. Config lives in the
 > **database, not the env** — encrypted, UI-managed, so **only `SECRET_KEY` is
 > required in the environment**. Self-hosted API docs with live "Try it out" at
@@ -123,7 +115,7 @@ open-refinery serve              # server + dashboard on port 8000
 
 Open `http://your-host:8000` — on a fresh instance the **dashboard** walks you
 through creating the first admin (no CLI needed), then signs you in. From there,
-manage repos, processes, work, oversight, and the audit trail. The UI (React +
+manage repos, pipelines, work, oversight, and the audit trail. The UI (React +
 shadcn/ui, light/dark/auto themes) is bundled in the package — no Node to run.
 
 Prefer the CLI to seed the admin? `open-refinery create-admin --email you@x.dev`
@@ -164,18 +156,18 @@ H="Authorization: Bearer $TOKEN"
 curl -s -H "$H" localhost:9000/repositories \
   -d '{"name":"my-app","git_url":"git@github.com:me/my-app.git"}'
 
-# define a process: steps + oversight (dark = lights-out; assisted needs approval)
-curl -s -H "$H" localhost:9000/processes \
-  -d '{"name":"remediate","archetype":"doctrine",
-       "stages":["detect","triage","patch","verify","close"],
-       "transitions":[["detect","triage"],["triage","patch"],["patch","verify"],
-                      ["verify","close"],["verify","patch"]],
-       "oversight":"supervised","gates":["close"]}'
+# how closely runs in this repo are watched (manual → dark)
+curl -s -X PUT -H "$H" localhost:9000/repositories/<repo> \
+  -d '{"oversight":"supervised"}'
 
-# ship work through it, then move it a step (approve=true when a gate needs sign-off)
+# name a ticket, then put it through the factory
 curl -s -H "$H" localhost:9000/work-items \
-  -d '{"repo_id":"<repo>","process_id":"<proc>","title":"CVE-1234"}'
-curl -s -H "$H" localhost:9000/work-items/<item>/transition -d '{"to":"triage"}'
+  -d '{"repo_id":"<repo>","title":"CVE-1234"}'
+curl -s -H "$H" localhost:9000/runs -d '{"work_item_id":"<item>"}'
+
+# what is waiting on a person, and clearing it
+curl -s -H "$H" localhost:9000/approvals
+curl -s -H "$H" localhost:9000/runs/<run>/approve -d '{}'
 
 # read the audit trail — every move, owned and attributed
 curl -s -H "$H" "localhost:9000/events?subject=<item>"
@@ -230,10 +222,9 @@ artifact, record = factory.produce("upper", actor="ian", text="hello")
 | Ownership       | `owner` on every record (defaults to the actor)             |
 | Auditability    | `AuditSink` (`MemorySink`, `JsonlSink`) — append-only trail  |
 | Logging         | stdlib `logging`, logger name `open_refinery`               |
-| Oversight       | Per-process autonomy levels L0–L4; gated steps need recorded approvals |
+| Oversight       | Per-repository autonomy levels L0–L4; a gated stage holds the run for a person |
 | Observability   | `GET /metrics` — WIP, event counts, per-actor activity, lead times; per-run live logs |
 | Governance      | Policy layer (`audit` / `strict` enforcement, layered strict overrides, per-namespace whitelists) + pre-action `/authorize` gate |
-| Reversibility   | First-class rollbacks — revert to a prior stage + a full-deployment reverse plan, applied by the harness and audited |
 | Cost & limits   | Live per-team concurrency caps. **No spend ceiling** — see [LIMITATIONS](docs/LIMITATIONS.md) |
 
 ## Durable audit trail

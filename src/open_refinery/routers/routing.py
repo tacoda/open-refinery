@@ -43,12 +43,12 @@ def integration_issues(integ_id: str, session: Session = Depends(get_session),
 @router.get("/integrations/{integ_id}/workflow")
 def integration_workflow(integ_id: str, session: Session = Depends(get_session),
                          _: User = Depends(current_user)):
-    return {"stages": list_workflow(session, integ_id)}  # for process-from-columns
+    return {"stages": list_workflow(session, integ_id)}  # the tracker's own columns
 
 @router.post("/integrations/{integ_id}/sync")
 def sync_integration(integ_id: str, body: SyncRequest, session: Session = Depends(get_session),
                      user: User = Depends(may_run)):
-    return sync_tracker(session, integ_id, body.repo_id, body.process_id,
+    return sync_tracker(session, integ_id, body.repo_id,
                         user.id, SqliteSink(session), autostart=body.autostart)
 
 # --- policy governance + content filtering ---

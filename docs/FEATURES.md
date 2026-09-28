@@ -60,7 +60,7 @@ and only the layer's owner signs it.
 
 ## 2. Every feature, by the permission it needs
 
-142 routes. Grouped by what you must hold to reach them.
+134 routes. Grouped by what you must hold to reach them.
 
 `propose:*` below is shorthand for all four: `propose:code`,
 `propose:harness`, `propose:factory`, `propose:charter`.
@@ -71,10 +71,10 @@ and only the layer's owner signs it.
 |---|---|
 | Who am I, what do I hold | `GET /me` · `GET /users/{id}/permissions` (your own) |
 | Read the vocabulary | `GET /permissions` · `GET /permissions/approvers/{layer}` · `GET /roles` |
-| Read the shared workflow | `GET /processes` |
+| Read the shared workflow | `GET /pipelines` |
 | Your own connections | `GET|POST|PUT|DELETE /credentials` · `GET /credentials/catalog` |
 | Your own repos and work | `GET /repositories` · `GET /work-items` · `GET /metrics` |
-| Approvals you are party to | `GET /approvals` · `POST /approvals/{request_id}/approve` |
+| What is waiting on you | `GET /approvals` · `POST /runs/{id}/approve` |
 | Put a change forward | `POST /proposals` · `GET /proposals` · `POST /proposals/{proposal_id}/review` |
 
 A credential is personal: you see and manage your own, and a secret is never
@@ -87,7 +87,6 @@ returned to anyone at any permission.
 | Create work | `POST /work-items` |
 | Pull tickets in from a tracker | `POST /integrations/{id}/sync` |
 | Let a tracker push them in | `PUT /integrations/{id}/intake` (sets the webhook + autostart) |
-| Move work along | `POST /work-items/{id}/transition` |
 | Trigger a run | `POST /runs` |
 | Watch runs move | `GET /runs` · the live canvas over `/ws` |
 | Clear a hold | `POST /runs/{id}/approve` |
@@ -96,7 +95,7 @@ returned to anyone at any permission.
 
 | Feature | Routes |
 |---|---|
-| The stage graph | `POST /processes` |
+| The stage graph | `POST /pipelines` |
 
 ### `approve:charter` — the standards are the lead's
 

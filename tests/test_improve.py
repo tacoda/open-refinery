@@ -187,22 +187,20 @@ def factory(session):
     """A repo, a process and a pipeline — enough to have runs to look at."""
     from open_refinery.pipeline import store as ps
     from open_refinery.repositories import create_repository
-    from open_refinery.processes import create_process
     from open_refinery.work_items import create_work_item
     from open_refinery.users import create_user
 
     dev, _ = create_user(session, "runs@x.io", "pw", "developer")
     repo = create_repository(session, "or", "git@x:or.git", dev.id)
-    proc = create_process(session, "flow", "board", ["todo", "done"], dev.id)
     pipeline = ps.ensure_default(session, dev.id)
-    return dev, repo, proc, pipeline
+    return dev, repo, pipeline
 
 
-def a_run(session, dev, repo, proc, pipeline):
+def a_run(session, dev, repo, pipeline):
     from open_refinery.pipeline import store as ps
     from open_refinery.work_items import create_work_item
 
-    item = create_work_item(session, repo.id, proc.id, "T", dev.id)
+    item = create_work_item(session, repo.id, "T", dev.id)
     return ps.start_run(session, item.id, pipeline, repo.id, dev.id, spec="do it")
 
 
@@ -213,14 +211,14 @@ def test_one_failing_run_is_a_bad_ticket_three_is_the_workflow(ctx):
     from open_refinery.pipeline import store as ps
 
     session, _, _ = ctx
-    dev, repo, proc, pipeline = factory(session)
+    dev, repo, pipeline = factory(session)
 
-    runs = [a_run(session, dev, repo, proc, pipeline) for _ in range(2)]
+    runs = [a_run(session, dev, repo, pipeline) for _ in range(2)]
     for r in runs:
         ps.record_step(session, r, "prove", outcome="error", why="pytest: command not found")
     assert stage_failures(session) == [], "two runs is not yet a pattern"
 
-    third = a_run(session, dev, repo, proc, pipeline)
+    third = a_run(session, dev, repo, pipeline)
     ps.record_step(session, third, "prove", outcome="error", why="pytest: command not found")
 
     found = stage_failures(session)
@@ -236,9 +234,9 @@ def test_a_stage_that_merely_refuses_is_not_a_failure(ctx):
     from open_refinery.pipeline import store as ps
 
     session, _, _ = ctx
-    dev, repo, proc, pipeline = factory(session)
+    dev, repo, pipeline = factory(session)
     for _ in range(4):
-        r = a_run(session, dev, repo, proc, pipeline)
+        r = a_run(session, dev, repo, pipeline)
         ps.record_step(session, r, "review", outcome="refused", why="VERDICT: no")
     assert stage_failures(session) == []
 
@@ -248,9 +246,9 @@ def test_runs_that_burn_their_revisions_and_fail_are_reported(ctx):
     from open_refinery.pipeline import store as ps
 
     session, _, _ = ctx
-    dev, repo, proc, pipeline = factory(session)
+    dev, repo, pipeline = factory(session)
     for _ in range(2):
-        run = a_run(session, dev, repo, proc, pipeline)
+        run = a_run(session, dev, repo, pipeline)
         run.revisions, run.outcome = 3, "failed"
         session.add(run)
     session.commit()
@@ -267,8 +265,8 @@ def test_a_hold_nobody_clears_is_a_queue(ctx):
     from open_refinery.pipeline import store as ps
 
     session, _, _ = ctx
-    dev, repo, proc, pipeline = factory(session)
-    run = a_run(session, dev, repo, proc, pipeline)
+    dev, repo, pipeline = factory(session)
+    run = a_run(session, dev, repo, pipeline)
     run.held = True
     session.add(run); session.commit()
     assert stalled_holds(session) == [], "a hold from a moment ago is just a hold"
@@ -291,14 +289,14 @@ def test_a_finding_becomes_a_work_proposal_carrying_the_servers_evidence(ctx):
     from open_refinery.pipeline import store as ps
 
     session, _, _ = ctx
-    dev, repo, proc, pipeline = factory(session)
+    dev, repo, pipeline = factory(session)
     for _ in range(3):
-        r = a_run(session, dev, repo, proc, pipeline)
+        r = a_run(session, dev, repo, pipeline)
         ps.record_step(session, r, "prove", outcome="error", why="pytest missing")
 
     finding = next(f for f in findings(session) if f.kind == "stage_failure")
     prop = propose_finding(session, finding.kind, finding.detail, repo_id=repo.id,
-                           process_id=proc.id, proposer_id=dev.id)
+                           proposer_id=dev.id)
 
     assert (prop.target_kind, prop.action) == ("work", "create")
     assert prop.status == "pending", "nothing is applied by proposing"
@@ -311,10 +309,10 @@ def test_evidence_comes_from_the_server_not_the_request(ctx):
     from open_refinery.improve import propose_finding
 
     session, dev, _ = ctx
-    _, repo, proc, _ = factory(session)
+    _, repo, _ = factory(session)
     with pytest.raises(LookupError, match="no current finding"):
         propose_finding(session, "stage_failure", "a problem I made up",
-                        repo_id=repo.id, process_id=proc.id, proposer_id=dev.id)
+                        repo_id=repo.id, proposer_id=dev.id)
 
 
 def test_accepting_a_work_proposal_creates_a_work_item_not_a_change(ctx):
@@ -324,10 +322,10 @@ def test_accepting_a_work_proposal_creates_a_work_item_not_a_change(ctx):
     from sqlmodel import select
 
     session, dev, sink = ctx
-    _, repo, proc, _ = factory(session)
+    _, repo, _ = factory(session)
 
     prop = propose(session, "work", "create",
-                   {"repo_id": repo.id, "process_id": proc.id, "title": "Fix prove"},
+                   {"repo_id": repo.id, "title": "Fix prove"},
                    "platform", dev.id)
     before = len(session.exec(select(WorkItem)).all())
 

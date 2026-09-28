@@ -23,10 +23,6 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
-from .approvals import approve as approve_request
-from .approvals import list_approvals, reject as reject_request, request_approval
-from .escalations import current_overdue
-from .attestations import AttestationFailed, AttestationMissing, attest
 from .integrations import (
     connectors,
     create_integration,
@@ -92,7 +88,6 @@ from .policies import (
     policies_in_effect_at,
     scan_content,
 )
-from .processes import create_process, list_processes
 from .provenance import Record
 from .repositories import (
     DuplicateRepository,
@@ -135,13 +130,12 @@ from .users import (
     user_by_token,
 )
 from .work_items import (
-    ApprovalRequired,
-    InvalidTransition,
     UnknownWorkItem,
     create_work_item,
     list_work_items,
+    stage_of,
+    stages_for,
     sync_tracker,
-    transition,
 )
 from .deps import (
     base_url as _base,
@@ -177,23 +171,8 @@ class NewRepo(BaseModel):
     git_url: str
 
 
-class NewProcess(BaseModel):
-    name: str
-    archetype: str
-    stages: list[str]
-    transitions: list[tuple[str, str]] | None = None
-    initial: str | None = None
-    oversight: str = "dark"
-    gates: list[str] | None = None
-    checks: dict[str, list[str]] | None = None
-    min_approver_role: str = DEFAULT_MIN_APPROVER_ROLE
-    approval_chain: list[str] | None = None
-    approval_sla_hours: int = Field(0, ge=0)  # hours; validated non-negative at the boundary
-
-
 class NewWorkItem(BaseModel):
     repo_id: str
-    process_id: str
     title: str
 
 
@@ -253,16 +232,6 @@ class LogLine(BaseModel):
 
 
 
-class Move(BaseModel):
-    to: str
-    approve: bool = False  # current user signs off, if the process requires it
-    changes: dict | None = None  # PR change set: code/migrations + open {name:{old,new}} maps (config/env/libraries/data/services/secrets/infra/dns/…); refs only, never material
-
-
-class RequestApproval(BaseModel):
-    to: str
-
-
 
 
 
@@ -272,11 +241,6 @@ class RequestApproval(BaseModel):
 class SettingBody(BaseModel):
     key: str
     value: str
-
-
-class Attest(BaseModel):
-    check: str
-    passed: bool = True
 
 
 class Setup(BaseModel):
@@ -320,6 +284,7 @@ class RepoSettings(BaseModel):
     charter_paths: list[str] | None = None   # [] resets to the default
     integration_id: str | None = None
     ingest_interval_hours: int | None = None
+    oversight: str | None = None             # oversight.LEVELS
 
 
 class NewRule(BaseModel):
@@ -390,12 +355,10 @@ class ImproveProposal(BaseModel):
     kind: str          # the finding's kind
     detail: str        # its exact detail line — the server re-derives the evidence
     repo_id: str
-    process_id: str
 
 
 class SyncRequest(BaseModel):
     repo_id: str
-    process_id: str
     autostart: bool | None = None   # None = whatever the integration is set to
 
 
@@ -510,10 +473,6 @@ async def _live_ws(websocket: WebSocket, token: str = ""):
 _EXC_CODES = (
     (DuplicateUser, 409),
     (DuplicateRepository, 409),
-    (InvalidTransition, 409),
-    (ApprovalRequired, 409),
-    (AttestationMissing, 409),
-    (AttestationFailed, 409),
     (ConcurrencyExceeded, 429),
     (DeviceExpired, 400),
     (PolicyDenied, 403),

@@ -122,32 +122,22 @@ def test_ownership_scoping_on_repos(ctx):
     assert len(client.get("/repositories", headers=auth(admin_token)).json()) == 0
 
 
-def test_end_to_end_transition_and_audit(ctx):
+def test_a_work_item_needs_no_process_and_reads_its_stage_from_its_runs(ctx):
+    """Until 3.0 creating work meant picking a `Process` first — a second stage
+    graph the run ignored. A ticket is now just a ticket."""
     _, client, admin, admin_token, ops_token = ctx
     h = dev_auth(client, admin_token)   # a developer does the work
     repo = client.post("/repositories", headers=h,
                        json={"name": "or", "git_url": "git@x:or.git"}).json()
-    # The stage graph is factory configuration, so platform authors it (2.16.0).
-    proc = client.post("/processes", headers=auth(ops_token),
-                       json={"name": "flow", "archetype": "doctrine",
-                             "stages": ["todo", "doing", "done"]}).json()
     item = client.post("/work-items", headers=h,
-                       json={"repo_id": repo["id"], "process_id": proc["id"],
-                             "title": "T"}).json()
-    assert item["current_stage"] == "todo"
+                       json={"repo_id": repo["id"], "title": "T"})
+    assert item.status_code == 201, item.json()
+    item = item.json()
+    assert item["stage"] == "open"          # nothing has run yet
+    assert "process_id" not in item
 
-    moved = client.post(f"/work-items/{item['id']}/transition", headers=h,
-                        json={"to": "doing"})
-    assert moved.status_code == 200 and moved.json()["current_stage"] == "doing"
-
-    # illegal move rejected
-    bad = client.post(f"/work-items/{item['id']}/transition", headers=h,
-                      json={"to": "todo"})  # doing -> todo not allowed (doctrine)
-    assert bad.status_code == 409
-
-    # audit trail records the one valid transition — read by admin (oversight)
-    events = client.get(f"/events?subject={item['id']}", headers=auth(admin_token)).json()
-    assert len(events) == 1 and events[0]["recipe"] == "transition"
+    listed = client.get("/work-items", headers=h).json()
+    assert [(w["id"], w["stage"]) for w in listed] == [(item["id"], "open")]
 
 
 def test_authorize_gate_allows_and_denies(ctx):
@@ -173,35 +163,50 @@ def test_authorize_gate_allows_and_denies(ctx):
     assert other.status_code == 200
 
 
-def test_oversight_approval_flow(ctx):
-    _, client, _, admin_token, ops_token = ctx
+def test_approvals_lists_the_runs_waiting_on_a_person(ctx):
+    """`/approvals` used to be a queue of kanban-transition requests signed by
+    role rank. It is now what actually waits: a held run, cleared by somebody
+    holding `approve:code`."""
+    from open_refinery import create_repository, create_work_item
+    from open_refinery.pipeline import store as ps
+
+    conn, client, _, admin_token, ops_token = ctx
     h = dev_auth(client, admin_token)
-    repo = client.post("/repositories", headers=h,
-                       json={"name": "or", "git_url": "git@x:or.git"}).json()
-    proc = client.post("/processes", headers=auth(ops_token),   # factory config
-                       json={"name": "flow", "archetype": "board", "stages": ["todo", "doing"],
-                             "oversight": "assisted", "min_approver_role": "developer"}).json()
-    item = client.post("/work-items", headers=h,
-                       json={"repo_id": repo["id"], "process_id": proc["id"],
-                             "title": "T"}).json()
+    me = client.get("/me", headers=h).json()
 
-    # without approval → 409
-    blocked = client.post(f"/work-items/{item['id']}/transition", headers=h,
-                          json={"to": "doing"})
-    assert blocked.status_code == 409
+    repo = create_repository(conn, "or", "git@x:or.git", me["id"])
+    item = create_work_item(conn, repo.id, "T", me["id"])
+    pipeline = ps.ensure_default(conn, me["id"])
+    run = ps.start_run(conn, item.id, pipeline, repo.id, me["id"], spec="do it")
 
-    # with approve=true → applies (min approver is developer, so self-approval works)
-    ok = client.post(f"/work-items/{item['id']}/transition", headers=h,
-                     json={"to": "doing", "approve": True})
-    assert ok.status_code == 200 and ok.json()["current_stage"] == "doing"
+    assert client.get("/approvals", headers=h).json() == []   # running, not held
 
-    events = client.get(f"/events?subject={item['id']}", headers=auth(admin_token)).json()
-    assert {e["recipe"] for e in events} == {"transition", "approval"}
-
-
+    run.held = True
+    conn.add(run); conn.commit()
+    waiting = client.get("/approvals", headers=h).json()
+    assert len(waiting) == 1
+    assert waiting[0]["run_id"] == run.id
+    assert waiting[0]["approve_with"] == f"POST /runs/{run.id}/approve"
 def test_duplicate_repo_conflicts(ctx):
     _, client, _, admin_token, ops_token = ctx
     h = dev_auth(client, admin_token)
     client.post("/repositories", headers=h, json={"name": "a", "git_url": "git@x:a.git"})
     dup = client.post("/repositories", headers=h, json={"name": "b", "git_url": "git@x:a.git"})
     assert dup.status_code == 409
+
+
+def test_oversight_is_set_on_the_repository(ctx):
+    """The dial moved off the process in 3.0. An unknown level is refused at the
+    boundary rather than stored."""
+    _, client, _, admin_token, ops_token = ctx
+    h = dev_auth(client, admin_token)
+    repo = client.post("/repositories", headers=h,
+                       json={"name": "or", "git_url": "git@x:or.git"}).json()
+    assert repo["oversight"] == "supervised"
+
+    ok = client.put(f"/repositories/{repo['id']}", headers=h, json={"oversight": "dark"})
+    assert ok.status_code == 200 and ok.json()["oversight"] == "dark"
+
+    bad = client.put(f"/repositories/{repo['id']}", headers=h, json={"oversight": "loose"})
+    assert bad.status_code == 400
+    assert "unknown oversight level" in bad.json()["detail"]

@@ -271,7 +271,7 @@ def proposals(session: Session) -> list[dict]:
 
 
 def propose_finding(session: Session, kind: str, detail: str, *, repo_id: str,
-                    process_id: str, proposer_id: str):
+                    proposer_id: str):
     """Turn one finding into a proposal that goes through the ordinary gate.
 
     The caller names the finding; **the server supplies the evidence.** Taking
@@ -291,7 +291,7 @@ def propose_finding(session: Session, kind: str, detail: str, *, repo_id: str,
             "been fixed already, or the evidence may have aged out")
 
     return propose(session, "work", "create", {
-        "repo_id": repo_id, "process_id": process_id,
+        "repo_id": repo_id,
         "title": match.detail,
         "spec": f"{match.detail}\n\n{match.suggestion}",
         "finding": match.kind,

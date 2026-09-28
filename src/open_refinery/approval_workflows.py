@@ -183,11 +183,10 @@ def _apply_work_create(session: Session, prop: ChangeProposal) -> str:
     from .work_items import create_work_item
 
     p = prop.payload
-    for key in ("repo_id", "process_id", "title"):
+    for key in ("repo_id", "title"):
         if not p.get(key):
             raise ValueError(f"a work proposal needs {key!r}")
-    item = create_work_item(session, p["repo_id"], p["process_id"], p["title"],
-                            prop.proposed_by)
+    item = create_work_item(session, p["repo_id"], p["title"], prop.proposed_by)
     return item.id
 
 

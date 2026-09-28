@@ -26,7 +26,7 @@ const VIEW_ICON: Record<string, any> = {
   // Set up
   connections: Plug, repos: GitBranch, users: UsersIcon, settings: SettingsIcon,
   // Build
-  pipelines: Workflow, processes: ListChecks, packs: Package, policies: Shield,
+  pipelines: Workflow, packs: Package, policies: Shield,
   // Run
   work: ListChecks, runs: Activity, approvals: CheckSquare,
   proposals: GitPullRequest, harnesses: Bot,
@@ -40,7 +40,7 @@ const GROUP_ICON: Record<string, any> = {
 }
 
 type View = 'overview' | 'connections' | 'repos' | 'users'
-  | 'pipelines' | 'processes' | 'packs' | 'policies'
+  | 'pipelines' | 'packs' | 'policies'
   | 'work' | 'runs' | 'approvals' | 'proposals' | 'harnesses'
   | 'events' | 'metrics' | 'evidence' | 'experiments'
   | 'teams' | 'settings' | 'myrules'
@@ -62,7 +62,6 @@ const NAV: { group: string; tabs: NavTab[] }[] = [
     { value: 'settings', label: 'Settings', needs: ['see:operations'] } ] },
   { group: 'Build', tabs: [
     { value: 'pipelines', label: 'Workflows', always: true },       // read open; edit gated
-    { value: 'processes', label: 'Processes', always: true },
     { value: 'packs', label: 'Standards', always: true },
     { value: 'policies', label: 'Policies', needs: ['approve:charter', 'see:operations'] } ] },
   { group: 'Run', tabs: [
@@ -92,8 +91,8 @@ export function EmptyRow({ show, cols, children }: { show: boolean; cols: number
   return <TableRow><TableCell colSpan={cols} className="muted">{children}</TableCell></TableRow>
 }
 
-// A process, drawn: stages as nodes, flow left→right, gated stages locked, the
-// current stage lit, feedback loops noted. The process concept made visible.
+// A stage graph, drawn: stages as nodes, flow left→right, gated stages locked,
+// the current stage lit, feedback loops noted.
 export function Pipeline({ stages, gates = [], transitions = [], current }:
     { stages: string[]; gates?: string[]; transitions?: any[]; current?: string }) {
   const idx = (s: string) => stages.indexOf(s)
@@ -307,7 +306,6 @@ export default function App() {
               {can('settings') && <TabsContent value="settings"><Settings /></TabsContent>}
               {/* Build */}
               <TabsContent value="pipelines"><Pipelines me={me} /></TabsContent>
-              <TabsContent value="processes"><Processes /></TabsContent>
               <TabsContent value="packs"><Packs me={me} roles={roles} /></TabsContent>
               {can('policies') && <TabsContent value="policies"><Policies /></TabsContent>}
               {/* Run */}
@@ -451,14 +449,14 @@ function useList(path: string) {
 
 // First-run setup wizard — the first admin goes from signed-up to a running
 // factory: connect a service, import a repo, enable a pack, shape the first
-// process from the tracker's own columns, ship the first work item.
+// adopt standards, then put the first ticket through the factory.
 // Onboarding follows the entity dependency direction: services → repos →
-// processes → first work. Admins also invite the team who'll run the factory.
-const WIZ_BASE = ['Welcome', 'Connect', 'Repository', 'Standards', 'Process', 'First work']
+// standards → first work. Admins also invite the team who'll run the factory.
+const WIZ_BASE = ['Welcome', 'Connect', 'Repository', 'Standards', 'First work']
 export function Wizard({ onDone, me, roles }: { onDone: () => void; me: any; roles: Role[] }) {
   const isAdmin = me?.role === 'admin'
   const steps = isAdmin
-    ? [...WIZ_BASE.slice(0, 5), 'Invite', 'First work']  // invite before shipping
+    ? [...WIZ_BASE.slice(0, 4), 'Invite', 'First work']  // invite before shipping
     : WIZ_BASE
   const [step, setStep] = useState(0)
   const [catalog, setCatalog] = useState<any[]>([])
@@ -489,19 +487,6 @@ export function Wizard({ onDone, me, roles }: { onDone: () => void; me: any; rol
   const enablePack = (key: string) => api(`/packs/${key}/enable`, { method: 'POST' })
     .then(reloadPacks).catch(fail)
 
-  // step 4 — process (from a tracker's columns, or manual)
-  const { rows: procs, load: reloadProcs } = useList('/processes')
-  const [pname, setPname] = useState('My process'), [parch, setParch] = useState('board')
-  const [pstages, setPstages] = useState('backlog, in progress, review, done')
-  const [fromTracker, setFromTracker] = useState('')
-  const pullColumns = (id: string) => api(`/integrations/${id}/workflow`)
-    .then((r) => { if (r.stages?.length) setPstages(r.stages.join(', ')) })
-    .then(() => toast.success('Columns imported')).catch(fail)
-  const addProc = () => post('/processes', {
-    name: pname, archetype: parch, oversight: 'supervised',
-    stages: pstages.split(',').map((s) => s.trim()).filter(Boolean),
-  }).then(() => { reloadProcs(); toast.success('Process created') }).catch(fail)
-
   // add-people step — an admin creates the account and picks a starting preset
   const presetNames = roles.map((r) => r.name)
   const [iemail, setIemail] = useState(''), [irole, setIrole] = useState('developer')
@@ -512,9 +497,13 @@ export function Wizard({ onDone, me, roles }: { onDone: () => void; me: any; rol
     .catch(fail)
 
   // first work item
-  const [wtitle, setWtitle] = useState(''), [wrepo, setWrepo] = useState(''), [wproc, setWproc] = useState('')
-  const ship = () => post('/work-items', { repo_id: wrepo, process_id: wproc, title: wtitle })
-    .then(() => toast.success('Work shipped')).catch(fail)
+  const [wtitle, setWtitle] = useState(''), [wrepo, setWrepo] = useState('')
+  // Creating the ticket is not shipping it. The point of this step is to see a
+  // run go, so it starts one — the wizard should end at the factory working.
+  const ship = () => post('/work-items', { repo_id: wrepo, title: wtitle })
+    .then((w) => post('/runs', { work_item_id: w.id }))
+    .then(() => toast.success('Run started — watch it on Runs'))
+    .catch(fail)
 
   const finish = () => api('/onboarding/complete', { method: 'POST' }).then(onDone).catch(fail)
   const next = () => setStep((s) => Math.min(s + 1, steps.length - 1))
@@ -540,7 +529,7 @@ export function Wizard({ onDone, me, roles }: { onDone: () => void; me: any; rol
         <div className="wizard-body">
           {cur === 'Welcome' && (
             <div className="space-y-2">
-              <p>Welcome. In a few steps you'll connect your tools, import a repository, adopt a set of standards, and shape the first process from your own board — then ship a work item through it.</p>
+              <p>Welcome. In a few steps you'll connect your tools, import a repository and adopt a set of standards — then put the first ticket through the factory and watch it run.</p>
               <p className="muted">You're the first user, so what you set up here becomes the org default. Later teammates inherit it.</p>
             </div>
           )}
@@ -582,43 +571,13 @@ export function Wizard({ onDone, me, roles }: { onDone: () => void; me: any; rol
 
           {cur === 'Standards' && (
             <div className="space-y-3">
-              <p className="muted">Adopt a starter set of standards & processes. Enable what fits (you can add more later).</p>
+              <p className="muted">Adopt a starter set of standards. Enable what fits (you can add more later).</p>
               <div className="board">{packs.slice(0, 9).map((p: any) => (
                 <button key={p.key} className={`wizard-pill${p.enabled ? ' picked' : ''}`}
                         onClick={() => !p.enabled && enablePack(p.key)}>
                   <Package size={15} /> {p.title}{p.enabled && <Badge>on</Badge>}
                 </button>
               ))}</div>
-            </div>
-          )}
-
-          {cur === 'Process' && (
-            <div className="space-y-3">
-              <p className="muted">Shape your first process. Pull the stages from a connected tracker's board, or type your own.</p>
-              {trackers.length > 0 && (
-                <div className="field-form">
-                  <Field label="From tracker columns">
-                    <Select value={fromTracker} onValueChange={(v) => { setFromTracker(v ?? ''); if (v) pullColumns(v) }}>
-                      <SelectTrigger className="field"><SelectValue placeholder="tracker…" /></SelectTrigger>
-                      <SelectContent>{trackers.map((i) => <SelectItem key={i.id} value={i.id}>{i.kind} · {i.account}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </Field>
-                </div>
-              )}
-              <div className="field-form">
-                <Field label="Name"><Input className="field" value={pname} onChange={(e) => setPname(e.target.value)} /></Field>
-                <Field label="Type">
-                  <Select value={parch} onValueChange={(v) => setParch(v ?? '')}>
-                    <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="board">board</SelectItem><SelectItem value="doctrine">doctrine</SelectItem></SelectContent>
-                  </Select>
-                </Field>
-                <Field label="Stages"><Input className="field" style={{ width: '20rem' }} value={pstages} onChange={(e) => setPstages(e.target.value)} /></Field>
-                <Button onClick={addProc} disabled={!pname || !pstages}>Create process</Button>
-              </div>
-              {/* preview the process as a pipeline */}
-              <Pipeline stages={pstages.split(',').map((s) => s.trim()).filter(Boolean)} />
-              <div className="toolbar">{procs.map((p: any) => <Badge key={p.id} variant="secondary">{p.name}</Badge>)}</div>
             </div>
           )}
 
@@ -643,7 +602,7 @@ export function Wizard({ onDone, me, roles }: { onDone: () => void; me: any; rol
 
           {cur === 'First work' && (
             <div className="space-y-3">
-              <p className="muted">Ship your first work item through the process you just built.</p>
+              <p className="muted">Name the first ticket. Shipping it starts a run — watch it on Runs.</p>
               <div className="field-form">
                 <Field label="Title"><Input className="field" placeholder="first task" value={wtitle} onChange={(e) => setWtitle(e.target.value)} /></Field>
                 <Field label="Repository">
@@ -652,13 +611,7 @@ export function Wizard({ onDone, me, roles }: { onDone: () => void; me: any; rol
                     <SelectContent>{repos.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </Field>
-                <Field label="Process">
-                  <Select value={wproc} onValueChange={(v) => setWproc(v ?? '')}>
-                    <SelectTrigger className="field"><SelectValue placeholder="process…" /></SelectTrigger>
-                    <SelectContent>{procs.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </Field>
-                <Button onClick={ship} disabled={!wtitle || !wrepo || !wproc}>Ship it</Button>
+                <Button onClick={ship} disabled={!wtitle || !wrepo}>Ship it</Button>
               </div>
             </div>
           )}
@@ -722,11 +675,13 @@ function RepoSettingsDrawer({ repo, onClose, onSaved }: any) {
   const [presets, setPresets] = useState<any>({ presets: {}, default: [] })
   const [paths, setPaths] = useState('')
   const [hours, setHours] = useState('0')
+  const [oversight, setOversight] = useState('supervised')
   useEffect(() => { api('/repositories/charter-presets').then(setPresets).catch(() => {}) }, [])
   useEffect(() => {
     if (!repo) return
     setPaths((repo.charter_paths ?? []).join('\n'))
     setHours(String(repo.ingest_interval_hours ?? 0))
+    setOversight(repo.oversight ?? 'supervised')
   }, [repo])
   if (!repo) return null
 
@@ -734,6 +689,7 @@ function RepoSettingsDrawer({ repo, onClose, onSaved }: any) {
     api(`/repositories/${repo.id}`, { method: 'PUT', body: JSON.stringify({
       charter_paths: paths.split('\n').map((s) => s.trim()).filter(Boolean),
       ingest_interval_hours: Number(hours) || 0,
+      oversight,
     }) }).then(() => { toast.success('Saved'); onSaved?.(); onClose() }).catch(fail)
 
   return (
@@ -759,81 +715,24 @@ function RepoSettingsDrawer({ repo, onClose, onSaved }: any) {
           <Input className="field" type="number" value={hours} title="0 = only when asked"
             onChange={(e) => setHours(e.target.value)} />
         </Field>
+        <Field label="Oversight">
+          <Select value={oversight} onValueChange={(v) => setOversight(v ?? 'supervised')}>
+            <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {OVERSIGHT_LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </Field>
+        <p className="muted">
+          How much of a run waits for a person. <strong>supervised</strong> holds what a
+          rule marks <span className="mono">ask</span>; <strong>dark</strong> holds nothing.
+          At <strong>autonomous</strong> and <strong>dark</strong>, <span className="mono">ask</span>{' '}
+          degrades to <em>refuse</em> rather than to yes — an unattended factory reading{' '}
+          <span className="mono">ask</span> as yes has answered a question nobody put.
+        </p>
         <Button onClick={save}>Save</Button>
       </div>
     </Drawer>
-  )
-}
-
-function Processes() {
-  const { rows, load } = useList('/processes')
-  const { rows: roleRows } = useList('/roles')
-  const [name, setName] = useState(''), [arch, setArch] = useState('board')
-  const [stages, setStages] = useState('todo, doing, done')
-  const [oversight, setOversight] = useState('dark'), [gates, setGates] = useState('')
-  const [minApprover, setMinApprover] = useState('platform')
-  const [chain, setChain] = useState('')
-  const [sla, setSla] = useState('')
-  const add = () => post('/processes', {
-    name, archetype: arch, oversight, min_approver_role: minApprover,
-    stages: stages.split(',').map((s) => s.trim()).filter(Boolean),
-    gates: gates.split(',').map((s) => s.trim()).filter(Boolean),
-    approval_chain: chain.split(',').map((s) => s.trim()).filter(Boolean),
-    approval_sla_hours: Number(sla) || 0,
-  }).then(() => { setName(''); load() }).catch(fail)
-  return (
-    <section className="page">
-      <h2 className="page-title">Processes</h2>
-      <p className="muted">A process is the ordered steps work moves through, plus its oversight — which steps are gated and who must approve.</p>
-      <div className="field-form">
-        <Field label="Name"><Input className="field" placeholder="e.g. Feature" value={name} onChange={(e) => setName(e.target.value)} /></Field>
-        <Field label="Type">
-          <Select value={arch} onValueChange={(v) => setArch(v ?? '')}>
-            <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="board">board</SelectItem><SelectItem value="doctrine">doctrine</SelectItem></SelectContent>
-          </Select>
-        </Field>
-        <Field label="Steps (in order)"><Input className="field" placeholder="todo, doing, done" value={stages} onChange={(e) => setStages(e.target.value)} /></Field>
-        <Field label="Oversight">
-          <Select value={oversight} onValueChange={(v) => setOversight(v ?? '')}>
-            <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-            <SelectContent>{['dark', 'autonomous', 'supervised', 'assisted', 'manual'].map((o) =>
-              <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
-          </Select>
-        </Field>
-        <Field label="Gated steps"><Input className="field" placeholder="blank = none" value={gates} onChange={(e) => setGates(e.target.value)} /></Field>
-        <Field label="Min approver role">
-          <Select value={minApprover} onValueChange={(v) => setMinApprover(v ?? '')}>
-            <SelectTrigger className="field"><SelectValue /></SelectTrigger>
-            <SelectContent>{roleRows.map((r: any) =>
-              <SelectItem key={r.name} value={r.name}>{r.name}+</SelectItem>)}</SelectContent>
-          </Select>
-        </Field>
-        <Field label="Approval chain (roles)"><Input className="field" placeholder="blank = single approver" value={chain}
-               onChange={(e) => setChain(e.target.value)} /></Field>
-        <Field label="Approval SLA (hours)"><Input className="field" type="number" min="0" placeholder="0 = no SLA" value={sla}
-               onChange={(e) => setSla(e.target.value)} /></Field>
-        <Button onClick={add} disabled={!name}>Add process</Button>
-      </div>
-      <div className="work-list">
-        {!rows.length && <Card><CardContent><p className="muted">No processes yet — define one above.</p></CardContent></Card>}
-        {rows.map((p) => (
-          <Card key={p.id}>
-            <CardContent>
-              <div className="work-head">
-                <span className="work-title">{p.name}</span>
-                <Badge variant="secondary">{p.archetype}</Badge>
-                <Badge variant="outline">{p.oversight}</Badge>
-                {p.approval_sla_hours > 0 && <Badge variant="outline">SLA {p.approval_sla_hours}h</Badge>}
-              </div>
-              <div style={{ marginTop: '.6rem' }}>
-                <Pipeline stages={p.stages} gates={p.gates} transitions={p.transitions} />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </section>
   )
 }
 
@@ -1077,16 +976,15 @@ const FAMILY_LABEL: Record<string, string> = {
  * way however it arrived.
  */
 function SyncPanel({ integ }: any) {
-  const [repos, setRepos] = useState<any[]>([]), [procs, setProcs] = useState<any[]>([])
-  const [repo, setRepo] = useState(''), [proc, setProc] = useState('')
+  const [repos, setRepos] = useState<any[]>([])
+  const [repo, setRepo] = useState('')
   const [cfg, setCfg] = useState<any>(null)
   const [secret, setSecret] = useState('')
 
   useEffect(() => {
     api('/repositories').then(setRepos).catch(() => {})
-    api('/processes').then(setProcs).catch(() => {})
     api(`/integrations/${integ.id}/intake`).then((c) => {
-      setCfg(c); setRepo(c.repo_id ?? ''); setProc(c.process_id ?? '')
+      setCfg(c); setRepo(c.repo_id ?? '')
     }).catch(() => {})
   }, [integ.id])
 
@@ -1094,14 +992,14 @@ function SyncPanel({ integ }: any) {
     api(`/integrations/${integ.id}/intake`, { method: 'PUT', body: JSON.stringify(body) })
       .then((c) => { setCfg(c); if (c.secret) setSecret(c.secret); return c })
 
-  const save = () => put({ repo_id: repo, process_id: proc })
+  const save = () => put({ repo_id: repo })
     .then(() => toast.success('Intake saved')).catch(fail)
-  const toggleAuto = () => put({ repo_id: repo, process_id: proc, autostart: !cfg?.autostart })
+  const toggleAuto = () => put({ repo_id: repo, autostart: !cfg?.autostart })
     .then((c) => toast.success(c.autostart ? 'Tickets will start a run' : 'Tickets will wait for a person'))
     .catch(fail)
   const rotate = () => put({ rotate_secret: true })
     .then(() => toast.success('New secret — copy it now, it is not shown again')).catch(fail)
-  const sync = () => post(`/integrations/${integ.id}/sync`, { repo_id: repo, process_id: proc })
+  const sync = () => post(`/integrations/${integ.id}/sync`, { repo_id: repo })
     .then((r) => toast.success(
       `Synced: ${r.created} new, ${r.skipped} skipped${r.runs?.length ? `, ${r.runs.length} started` : ''}`))
     .catch(fail)
@@ -1113,14 +1011,10 @@ function SyncPanel({ integ }: any) {
           <SelectTrigger className="field"><SelectValue placeholder="into repo…" /></SelectTrigger>
           <SelectContent>{repos.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
         </Select>
-        <Select value={proc} onValueChange={(v) => setProc(v ?? '')}>
-          <SelectTrigger className="field"><SelectValue placeholder="using process…" /></SelectTrigger>
-          <SelectContent>{procs.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-        </Select>
-        <Button size="sm" onClick={sync} disabled={!repo || !proc}>Sync issues</Button>
-        <Button size="sm" variant="outline" onClick={save} disabled={!repo || !proc}>Save intake</Button>
+        <Button size="sm" onClick={sync} disabled={!repo}>Sync issues</Button>
+        <Button size="sm" variant="outline" onClick={save} disabled={!repo}>Save intake</Button>
         <Button size="sm" variant={cfg?.autostart ? 'default' : 'outline'} onClick={toggleAuto}
-          disabled={!repo || !proc}>
+          disabled={!repo}>
           {cfg?.autostart ? 'Autostart on' : 'Autostart off'}
         </Button>
       </div>
@@ -1756,7 +1650,7 @@ export function Packs({ me, roles }: any) {
     <section className="page">
       <h2 className="page-title">Pack marketplace</h2>
       <p className="muted">
-        Browse starter bundles of standards & processes — the modern software / platform / team-workflow
+        Browse starter bundles of standards & governed artifacts — the modern software / platform / team-workflow
         canon. Enable what fits your team ({enabledCount}/{rows.length} enabled).
       </p>
       {layers.map((layer: any) => (
@@ -1803,14 +1697,6 @@ export function Packs({ me, roles }: any) {
               ))}
             </div>}
 
-            {detail.processes.length > 0 && <div>
-              <div className="field-label">Example processes</div>
-              {detail.processes.map((pr: any, i: number) => (
-                <div key={i} className="kv-row"><span>{pr.name} <span className="muted">({pr.archetype})</span></span>
-                  <span className="mono">{(pr.stages || []).join(' → ')}</span></div>
-              ))}
-            </div>}
-
             {detail.artifacts.length > 0 && <div>
               <div className="field-label">Governed artifacts</div>
               {detail.artifacts.map((a: any, i: number) => (
@@ -1821,7 +1707,7 @@ export function Packs({ me, roles }: any) {
               ))}
             </div>}
 
-            {!detail.standards.length && !detail.processes.length && !detail.artifacts.length &&
+            {!detail.standards.length && !detail.artifacts.length &&
               <p className="muted">This pack has no seeded content.</p>}
           </div>
         )}
@@ -2360,7 +2246,7 @@ export function Overview({ goto, can = () => true }: { goto: (v: any) => void; c
   const count = (recipe: string) => events.filter((e) => e.recipe === recipe).length
   const denials = count('denied')
   const byStage = items.reduce((m: Record<string, number>, w) => {
-    m[w.current_stage] = (m[w.current_stage] ?? 0) + 1; return m
+    m[w.stage] = (m[w.stage] ?? 0) + 1; return m
   }, {})
 
   const cards = [
@@ -2417,34 +2303,33 @@ export function Overview({ goto, can = () => true }: { goto: (v: any) => void; c
   )
 }
 
+// The stages a work item can be in. Derived from its runs by the server
+// (work_items.STAGES) — there is no board anybody drags a card across.
+const WORK_STAGES = ['open', 'running', 'waiting', 'landed', 'closed', 'failed']
+// oversight.LEVELS, in order of how much a person has to touch.
+const OVERSIGHT_LEVELS = ['manual', 'assisted', 'supervised', 'autonomous', 'dark']
+
 function Work() {
   const { rows, load } = useList('/work-items')
   const [repos, setRepos] = useState<any[]>([])
-  const [procs, setProcs] = useState<any[]>([])
-  const [title, setTitle] = useState(''), [repo, setRepo] = useState(''), [proc, setProc] = useState('')
-  useEffect(() => {
-    api('/repositories').then(setRepos).catch(fail)
-    api('/processes').then(setProcs).catch(fail)
-  }, [])
-  const add = () => post('/work-items', { repo_id: repo, process_id: proc, title })
+  const [title, setTitle] = useState(''), [repo, setRepo] = useState('')
+  useEffect(() => { api('/repositories').then(setRepos).catch(fail) }, [])
+  // Naming work and running it are one action: a ticket nobody runs is a ticket.
+  const add = () => post('/work-items', { repo_id: repo, title })
+    .then((w) => post('/runs', { work_item_id: w.id })
+      .then(() => toast.success('Run started'))
+      .catch((e) => toast.message('Work created', { description: `not started: ${e.message}` })))
     .then(() => { setTitle(''); load() }).catch(fail)
-  const move = (id: string, to: string, approve: boolean) =>
-    post(`/work-items/${id}/transition`, { to, approve }).then(load).catch(fail)
-  const attest = (id: string, check: string, passed: boolean) =>
-    post(`/work-items/${id}/attest`, { check, passed })
-      .then(() => toast.success(`attested ${check}`)).catch(fail)
-  const requestApproval = (id: string, to: string) =>
-    post(`/work-items/${id}/request-approval`, { to })
-      .then(() => toast.success('approval requested')).catch(fail)
+  const start = (id: string) => post('/runs', { work_item_id: id })
+    .then(() => { toast.success('Run started'); load() }).catch(fail)
   const [selId, setSelId] = useState<string | null>(null)
   const selected = rows.find((r) => r.id === selId) ?? null  // re-derive so it tracks reloads
-  const stages: string[] = []
-  for (const w of rows) if (!stages.includes(w.current_stage)) stages.push(w.current_stage)
+  const stages = WORK_STAGES.filter((s) => rows.some((w) => w.stage === s))
 
   return (
     <section className="page">
       <h2 className="page-title">Work</h2>
-      <p className="muted">Your work by stage. Select an item to act on it.</p>
+      <p className="muted">Your work, by what its latest run is doing. Select an item for detail.</p>
       <div className="field-form">
         <Field label="Title"><Input className="field" placeholder="what needs doing" value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
         <Field label="Repository">
@@ -2453,13 +2338,7 @@ function Work() {
             <SelectContent>{repos.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
           </Select>
         </Field>
-        <Field label="Process">
-          <Select value={proc} onValueChange={(v) => setProc(v ?? '')}>
-            <SelectTrigger className="field"><SelectValue placeholder="process…" /></SelectTrigger>
-            <SelectContent>{procs.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-          </Select>
-        </Field>
-        <Button onClick={add} disabled={!title || !repo || !proc}>Ship work</Button>
+        <Button onClick={add} disabled={!title || !repo}>Ship work</Button>
       </div>
 
       {rows.length === 0
@@ -2468,8 +2347,8 @@ function Work() {
           <div className="board">
             {stages.map((s) => (
               <div key={s} className="board-col">
-                <div className="board-col-head"><span>{s}</span><Badge variant="secondary">{rows.filter((w) => w.current_stage === s).length}</Badge></div>
-                {rows.filter((w) => w.current_stage === s).map((w) => (
+                <div className="board-col-head"><span>{s}</span><Badge variant="secondary">{rows.filter((w) => w.stage === s).length}</Badge></div>
+                {rows.filter((w) => w.stage === s).map((w) => (
                   <button key={w.id} className={`board-card${selId === w.id ? ' board-card-selected' : ''}`} onClick={() => setSelId(w.id)}>
                     <div className="work-title">{w.title}</div>
                   </button>
@@ -2480,19 +2359,19 @@ function Work() {
         )}
 
       <Drawer open={!!selected} title={selected?.title ?? ''} onClose={() => setSelId(null)}>
-        {selected && <WorkRow bare w={selected} onMove={move} onAttest={attest}
-                              onRequest={requestApproval} onReload={load} />}
+        {selected && <WorkRow bare w={selected} onStart={start} />}
       </Drawer>
     </section>
   )
 }
 
-function WorkRow({ w, onMove, onAttest, onRequest, bare }: any) {
-  // Rollback and post-mortems went in 2.15.0: once a run opens a pull request,
-  // rolling back is `git revert` and another run, and a run's own steps are the
-  // history worth reading.
-  const [to, setTo] = useState(''), [check, setCheck] = useState('')
+function WorkRow({ w, onStart, bare }: any) {
+  // No move/attest/request-approval here any more: a work item has no state
+  // machine of its own. What happens to it is a run, and a run is approved at
+  // `POST /runs/{id}/approve`.
   const [logs, setLogs] = useState<any[] | null>(null)
+  const [runs, setRuns] = useState<any[]>([])
+  useEffect(() => { api(`/runs?work_item_id=${w.id}`).then(setRuns).catch(() => {}) }, [w.id])
   // live log tail: subscribe to WS-relayed log lines for this item while open
   useEffect(() => {
     if (logs === null) return
@@ -2507,18 +2386,24 @@ function WorkRow({ w, onMove, onAttest, onRequest, bare }: any) {
       <CardContent>
         <div className="work-head">
           {!bare && <span className="work-title">{w.title}</span>}
-          <Badge>{w.current_stage}</Badge>
+          <Badge>{w.stage}</Badge>
+          {w.external_ref && <Badge variant="outline">{w.external_ref}</Badge>}
         </div>
         <div className="work-actions">
-          <Input className="field" placeholder="→ step" value={to} onChange={(e) => setTo(e.target.value)} />
-          <Button variant="secondary" size="sm" onClick={() => onMove(w.id, to, false)}>Move</Button>
-          <Button size="sm" onClick={() => onMove(w.id, to, true)}>Move + approve</Button>
-          <Button variant="outline" size="sm" onClick={() => onRequest(w.id, to)}>Request approval</Button>
-          <Input className="field" placeholder="check" value={check} onChange={(e) => setCheck(e.target.value)} />
-          <Button variant="outline" size="sm" onClick={() => onAttest(w.id, check, true)}>Attest ✓</Button>
-          <Button variant="outline" size="sm" onClick={() => onAttest(w.id, check, false)}>Attest ✗</Button>
+          <Button size="sm" onClick={() => onStart(w.id)}>Start a run</Button>
           <Button variant="outline" size="sm" onClick={showLogs}>{logs ? 'Hide logs' : 'Logs'}</Button>
         </div>
+        {runs.length > 0 && (
+          <div className="work-list" style={{ marginTop: '0.6rem' }}>
+            {runs.map((r) => (
+              <div key={r.id} className="work-head">
+                <Badge variant={r.held ? 'destructive' : 'outline'}>{r.outcome || r.stage}</Badge>
+                {r.held && <Badge>waiting on a person</Badge>}
+                {r.pr_url && <a className="muted" href={r.pr_url} target="_blank" rel="noreferrer">pull request</a>}
+              </div>
+            ))}
+          </div>
+        )}
         {logs && (
           <div className="mono" style={{ marginTop: '0.6rem', borderTop: '1px solid var(--border)', paddingTop: '0.6rem', maxHeight: '12rem', overflow: 'auto' }}>
             {logs.length ? logs.map((l: any, i: number) => (
@@ -2533,34 +2418,30 @@ function WorkRow({ w, onMove, onAttest, onRequest, bare }: any) {
 }
 
 function Approvals() {
+  // A held run, cleared by somebody holding `approve:code`. This used to list a
+  // separate queue of kanban-transition requests signed by role rank.
   const { rows, load } = useList('/approvals?status=pending')
-  const act = (id: string, action: string) => api(`/approvals/${id}/${action}`, { method: 'POST' })
-    .then(() => { toast.success(action === 'approve' ? 'approved' : 'rejected'); load() }).catch(fail)
+  const clear = (runId: string) => post(`/runs/${runId}/approve`, {})
+    .then(() => { toast.success('approved'); load() }).catch(fail)
   return (
     <section className="page">
-      <h2 className="page-title">Pending approvals</h2>
+      <h2 className="page-title">Waiting on a person</h2>
+      <p className="muted">Runs held at a gate. Clearing one needs <span className="mono">approve:code</span>, and you cannot clear your own.</p>
       <div className="work-list">
-        {rows.map((r) => {
-          const signed = r.approvals.length
-          const next = r.required_roles[signed]
-          return (
-            <Card key={r.id}>
-              <CardContent>
-                <div className="work-head">
-                  <span className="work-title">→ {r.to_step}</span>
-                  <Badge variant="outline">{signed}/{r.required_roles.length} signed</Badge>
-                  {next && <Badge>next: {next}</Badge>}
-                </div>
-                <Pipeline stages={r.required_roles} current={next ?? undefined} />
-                <div className="work-actions">
-                  <Button size="sm" onClick={() => act(r.id, 'approve')}>Approve</Button>
-                  <Button variant="outline" size="sm" onClick={() => act(r.id, 'reject')}>Reject</Button>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-        {!rows.length && <div className="muted">no pending approvals</div>}
+        {rows.map((r) => (
+          <Card key={r.run_id}>
+            <CardContent>
+              <div className="work-head">
+                <span className="work-title">held at {r.stage}</span>
+                <Badge variant="outline">{r.run_id.slice(0, 8)}</Badge>
+              </div>
+              <div className="work-actions">
+                <Button size="sm" onClick={() => clear(r.run_id)}>Approve</Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {!rows.length && <div className="muted">nothing is waiting</div>}
       </div>
     </section>
   )
@@ -2765,13 +2646,11 @@ function Metrics() {
  */
 function ImproveLane({ improve }: { improve: any }) {
   const { rows: repos } = useList('/repositories')
-  const { rows: procs } = useList('/processes')
   const [repo, setRepo] = useState('')
-  const [proc, setProc] = useState('')
   const [raised, setRaised] = useState<Record<string, boolean>>({})
 
   const propose = (f: any) =>
-    post('/improve/propose', { kind: f.kind, detail: f.detail, repo_id: repo, process_id: proc })
+    post('/improve/propose', { kind: f.kind, detail: f.detail, repo_id: repo })
       .then(() => {
         setRaised((r) => ({ ...r, [f.detail]: true }))
         toast.success('Proposed — it needs a signature before it becomes work')
@@ -2795,12 +2674,6 @@ function ImproveLane({ improve }: { improve: any }) {
                 {repos.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={proc} onValueChange={(v) => setProc(v ?? '')}>
-              <SelectTrigger className="field"><SelectValue placeholder="using process…" /></SelectTrigger>
-              <SelectContent>
-                {procs.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
           </div>
           <Table>
             <TableHeader><TableRow>
@@ -2818,7 +2691,7 @@ function ImproveLane({ improve }: { improve: any }) {
                 <TableCell>
                   {raised[f.detail]
                     ? <Badge variant="outline">proposed</Badge>
-                    : <Button size="sm" variant="outline" disabled={!repo || !proc || !f.suggestion}
+                    : <Button size="sm" variant="outline" disabled={!repo || !f.suggestion}
                         onClick={() => propose(f)}>Propose as work</Button>}
                 </TableCell>
               </TableRow>

@@ -97,12 +97,12 @@ def test_adding_people_needs_manage_users(ctx, who, expected):
 @pytest.mark.parametrize("who,expected", [
     ("platform", 201), ("developer", 403), ("lead", 403), ("admin", 403)])
 def test_factory_configuration_needs_approve_factory(ctx, who, expected):
-    """A process is the stage graph — factory configuration, which is
+    """A pipeline is the stage graph — factory configuration, which is
     platform's. A developer proposes one; they do not sign it off."""
     _, client, hdr, _ = ctx
-    r = client.post("/processes", headers=hdr(who),
-                    json={"name": f"flow-{who}", "archetype": "board",
-                          "stages": ["todo", "done"]})
+    r = client.post("/pipelines", headers=hdr(who),
+                    json={"name": f"flow-{who}", "first": "a", "terminal": ["done"],
+                          "stages": {"a": {"action": "prepare_workspace", "next": "done"}}})
     assert r.status_code == expected
 
 
@@ -110,17 +110,17 @@ def test_admin_cannot_configure_the_factory(ctx):
     """The account that grants access does not shape what ships."""
     _, client, hdr, _ = ctx
     r = client.post("/pipelines", headers=hdr("admin"),
-                    json={"name": "flow", "first": "a",
-                          "stages": {"a": {"kind": "action", "action": "prepare"}}})
+                    json={"name": "flow", "first": "a", "terminal": ["done"],
+                          "stages": {"a": {"action": "prepare_workspace", "next": "done"}}})
     assert r.status_code == 403
 
 
 def test_a_refusal_names_who_can_actually_sign_it(ctx):
     """What somebody blocked needs is a person, not the rule they hit."""
     _, client, hdr, _ = ctx
-    r = client.post("/processes", headers=hdr("developer"),
-                    json={"name": "flow", "archetype": "board",
-                          "stages": ["todo", "done"]})
+    r = client.post("/pipelines", headers=hdr("developer"),
+                    json={"name": "flow", "first": "a",
+                          "stages": {"a": {"kind": "action", "action": "prepare"}}})
     assert r.status_code == 403
     assert "platform@x.io" in r.json()["detail"]
 
@@ -135,9 +135,10 @@ def test_an_auditor_grant_reads_the_trail_and_writes_nothing(ctx):
     h = {"Authorization": f"Bearer {token}"}
 
     assert client.get("/events", headers=h).status_code == 200
-    assert client.post("/processes", headers=h,
-                       json={"name": "x", "archetype": "board",
-                             "stages": ["a", "b"]}).status_code == 403
+    assert client.post("/pipelines", headers=h,
+                       json={"name": "x", "first": "a", "terminal": ["done"],
+                             "stages": {"a": {"action": "prepare_workspace", "next": "done"}}}
+                       ).status_code == 403
     assert client.post("/users", headers=h,
                        json={"email": "x@x.io", "password": "pw",
                              "role": "developer"}).status_code == 403

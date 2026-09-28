@@ -20,7 +20,6 @@ router = APIRouter()
 
 class IntakeConfig(BaseModel):
     repo_id: str = ""
-    process_id: str = ""
     pipeline: str = ""
     autostart: bool | None = None
     rotate_secret: bool = False
@@ -54,13 +53,13 @@ async def receive(integration_id: str, request: Request,
 def set_intake(integ_id: str, body: IntakeConfig, request: Request,
                session: Session = Depends(get_session), _: User = Depends(may_run)):
     integ, secret = configure(session, integ_id, repo_id=body.repo_id,
-                              process_id=body.process_id, pipeline=body.pipeline,
+                              pipeline=body.pipeline,
                               autostart=body.autostart,
                               rotate_secret=body.rotate_secret)
     return {
         "integration": integ.id,
         "url": f"{base_url(request)}/intake/{integ.id}",
-        "repo_id": integ.intake_repo_id, "process_id": integ.intake_process_id,
+        "repo_id": integ.intake_repo_id,
         "pipeline": integ.intake_pipeline, "autostart": integ.autostart,
         "has_secret": bool(integ.webhook_secret),
         "secret": secret,  # shown once, on rotation only
@@ -76,7 +75,7 @@ def get_intake(integ_id: str, request: Request, session: Session = Depends(get_s
     return {
         "integration": integ.id,
         "url": f"{base_url(request)}/intake/{integ.id}",
-        "repo_id": integ.intake_repo_id, "process_id": integ.intake_process_id,
+        "repo_id": integ.intake_repo_id,
         "pipeline": integ.intake_pipeline, "autostart": integ.autostart,
         "has_secret": bool(integ.webhook_secret),
     }

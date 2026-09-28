@@ -14,9 +14,8 @@ from dataclasses import dataclass
 
 from sqlmodel import Session, select
 
-from .models import PackState, Policy, Process, Standard, User
+from .models import PackState, Policy, Standard, User
 from .policies import PolicyDenied, create_policy
-from .processes import create_process
 from .users import at_least
 
 
@@ -27,7 +26,6 @@ class Pack:
     title: str
     description: str
     standards: tuple[tuple[str, str, str], ...]  # (topic, title, body)
-    processes: tuple[dict, ...] = ()             # example process templates to seed
     artifacts: tuple[dict, ...] = ()             # governed Policy artifacts (rule/skill/command/agent)
 
 
@@ -133,35 +131,14 @@ PACKS: tuple[Pack, ...] = (
               "Reserve a fixed capacity each cycle for debt paydown; ratchet the health score up, never down."),
              ("boy-scout", "Boy-scout rule",
               "Leave touched code cleaner than you found it — small, in-scope cleanups over big-bang refactors."),
-         ),
-         processes=(
-             {"name": "Debt Remediation", "archetype": "doctrine",
-              "stages": ["detect", "triage", "patch", "verify", "close"],
-              "transitions": [["detect", "triage"], ["triage", "patch"], ["patch", "verify"],
-                              ["verify", "close"], ["verify", "patch"]],  # verify→patch loop
-              "gates": ["close"]},
-         )),
+         ),),
     Pack("workflows", "developer", "Workflow processes",
          "Ready-made processes: bug fix, feature, spec-driven delivery.", (
              ("bug-fix", "Bug fix",
               "Reproduce with a failing test, fix, verify the test passes, then close."),
              ("feature", "Feature",
               "A board: backlog → in-progress → review → done."),
-         ),
-         processes=(
-             {"name": "Bug Fix", "archetype": "doctrine",
-              "stages": ["reproduce", "fix", "verify", "close"],
-              "transitions": [["reproduce", "fix"], ["fix", "verify"], ["verify", "close"],
-                              ["verify", "fix"]],  # verify→fix loop
-              "gates": ["close"]},
-             {"name": "Feature", "archetype": "board",
-              "stages": ["backlog", "in-progress", "review", "done"], "gates": ["done"]},
-             {"name": "Spec-driven Delivery", "archetype": "doctrine",
-              "stages": ["spec", "tests", "implement", "verify", "ship"],
-              "transitions": [["spec", "tests"], ["tests", "implement"], ["implement", "verify"],
-                              ["verify", "ship"], ["verify", "implement"], ["tests", "spec"]],
-              "gates": ["ship"]},
-         )),
+         ),),
     Pack("platform-general", "platform", "Platform engineering",
          "Platform-engineering canon.", (
              ("platform-basics", "Platform standards",
@@ -351,14 +328,7 @@ PACKS: tuple[Pack, ...] = (
               "Post regular status updates to a known channel; over-communicate during impact."),
              ("runbooks", "Runbooks",
               "Keep tested runbooks for known failure modes; link them from alerts."),
-         ),
-         processes=(
-             {"name": "Incident", "archetype": "doctrine",
-              "stages": ["detect", "triage", "mitigate", "resolve", "review"],
-              "transitions": [["detect", "triage"], ["triage", "mitigate"], ["mitigate", "resolve"],
-                              ["resolve", "review"], ["mitigate", "triage"]],
-              "gates": ["review"]},
-         )),
+         ),),
     Pack("cost-optimization", "platform", "Cost optimization (FinOps)",
          "Treat spend as an engineering metric.", (
              ("measure-spend", "Measure spend",
@@ -435,8 +405,8 @@ def list_packs(session: Session) -> list[dict]:
 
 
 def pack_detail(session: Session, key: str) -> dict | None:
-    """A pack's full contents — examples of what enabling it seeds: standards,
-    example processes, and governed policy artifacts. Read-only preview."""
+    """A pack's full contents — what enabling it seeds: standards and governed
+    policy artifacts. Read-only preview."""
     pack = pack_by_key(key)
     if pack is None:
         return None
@@ -445,8 +415,6 @@ def pack_detail(session: Session, key: str) -> dict | None:
         "key": pack.key, "role": pack.role, "title": pack.title,
         "description": pack.description, "enabled": enabled,
         "standards": [{"topic": t, "title": ti, "body": b} for t, ti, b in pack.standards],
-        "processes": [{"name": s["name"], "archetype": s.get("archetype", ""),
-                       "stages": s.get("stages", [])} for s in pack.processes],
         "artifacts": [{"kind": a.get("kind", "rule"), "effect": a.get("effect", "allow"),
                        "role": a.get("role", "*"), "action": a.get("action", "*"),
                        "resource": a.get("resource", "*"), "namespace": a.get("namespace", ""),
@@ -469,13 +437,6 @@ def enable_pack(session: Session, key: str, user: User) -> dict:
     for topic, title, body in pack.standards:
         if title not in existing:  # idempotent
             session.add(Standard(pack=key, topic=topic, title=title, body=body, owner_id=user.id))
-
-    have_proc = {p.name for p in session.exec(select(Process).where(Process.pack == key))}
-    for spec in pack.processes:
-        if spec["name"] not in have_proc:  # idempotent
-            create_process(session, spec["name"], spec["archetype"], spec["stages"], user.id,
-                           transitions=spec.get("transitions"), gates=spec.get("gates"),
-                           oversight=spec.get("oversight", "supervised"), pack=key)
 
     if not session.exec(select(Policy).where(Policy.pack == key)).first():  # idempotent
         for a in pack.artifacts:
@@ -501,8 +462,6 @@ def disable_pack(session: Session, key: str, user: User) -> dict:
 
     for std in session.exec(select(Standard).where(Standard.pack == key)):
         session.delete(std)
-    for proc in session.exec(select(Process).where(Process.pack == key)):
-        session.delete(proc)
     for pol in session.exec(select(Policy).where(Policy.pack == key)):
         session.delete(pol)
     state = session.get(PackState, key) or PackState(key=key, updated_by=user.id)

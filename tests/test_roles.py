@@ -2,17 +2,12 @@ import pytest
 
 from open_refinery import (
     PolicyDenied,
-    SqliteSink,
     at_least,
     connect,
-    create_process,
-    create_repository,
     create_role,
     create_user,
-    create_work_item,
     delete_role,
     list_roles,
-    transition,
     valid_role,
 )
 from open_refinery.users import RoleInUse
@@ -71,27 +66,17 @@ def test_at_least_fails_closed_on_an_unknown_role():
     assert at_least(conn, "senior", "developer") is False
 
 
-def fixture():
+def test_at_least_gates_enabling_a_pack():
+    """`at_least` is role *rank*, and after 3.0 the only things that read it are
+    pack enablement and the proposal chain — not anything that ships a change.
+    Authorizing work is `authority.py` and the permissions on the person."""
+    from open_refinery.packs import enable_pack
+
     conn = connect("sqlite:///:memory:")
     dev, _ = create_user(conn, "dev@x.dev", "pw", "developer")
-    dev2, _ = create_user(conn, "dev2@x.dev", "pw", "developer")
     platform, _ = create_user(conn, "platform@x.dev", "pw", "platform")
-    repo = create_repository(conn, "or", "git@x:or.git", dev.id)
-    # assisted process: every move needs approval (default approver = platform)
-    proc = create_process(conn, "flow", "board", ["todo", "done"], dev.id, oversight="assisted")  # min approver: lead
-    item = create_work_item(conn, repo.id, proc.id, "T", dev.id)
-    return conn, dev, dev2, platform, item
 
-
-def test_developer_cannot_approve_risky_move():
-    conn, dev, dev2, platform, item = fixture()
-    audit = SqliteSink(conn)
+    # `ci-cd` is a platform-level pack; a developer may not turn it on
     with pytest.raises(PolicyDenied):
-        transition(conn, item.id, "done", dev.id, audit, approver_id=dev2.id)  # dev approving dev
-
-
-def test_platform_can_approve():
-    conn, dev, dev2, platform, item = fixture()
-    audit = SqliteSink(conn)
-    moved = transition(conn, item.id, "done", dev.id, audit, approver_id=platform.id)
-    assert moved.current_stage == "done"
+        enable_pack(conn, "ci-cd", dev)
+    assert enable_pack(conn, "ci-cd", platform) == {"key": "ci-cd", "enabled": True}

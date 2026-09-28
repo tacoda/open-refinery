@@ -166,6 +166,9 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE integrations ADD COLUMN intake_process_id TEXT;"
     "ALTER TABLE integrations ADD COLUMN intake_pipeline TEXT NOT NULL DEFAULT '';"
     "ALTER TABLE integrations ADD COLUMN autostart INTEGER NOT NULL DEFAULT 0;",
+    # v31 (3.0.0): the oversight dial moves from the process onto the repository.
+    # It was the only field of a `Process` a run ever read.
+    "ALTER TABLE repositories ADD COLUMN oversight TEXT NOT NULL DEFAULT 'supervised';",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -243,6 +246,7 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE integrations DROP COLUMN intake_process_id;"
     "ALTER TABLE integrations DROP COLUMN intake_pipeline;"
     "ALTER TABLE integrations DROP COLUMN autostart;",                                   # v30
+    "ALTER TABLE repositories DROP COLUMN oversight;",                                   # v31
 ]
 
 

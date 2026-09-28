@@ -25,44 +25,26 @@ class CsvFilter:  # query params for /audit/export.csv
     limit: int = 10000
 
 
-@router.post("/work-items/{item_id}/attest", status_code=201)
-def add_attestation(item_id: str, body: Attest, session: Session = Depends(get_session),
-                    user: User = Depends(current_user)):
-    attest(session, item_id, body.check, user.id, body.passed, SqliteSink(session))
-    return {"status": "recorded"}
-
-@router.post("/work-items/{item_id}/transition")
-def move(item_id: str, body: Move, session: Session = Depends(get_session),
-         user: User = Depends(current_user)):
-    return transition(session, item_id, body.to, user.id, SqliteSink(session),
-                      approver_id=user.id if body.approve else None, changes=body.changes)
-
-# --- async approval queue (chained sign-off) ---
-@router.post("/work-items/{item_id}/request-approval", status_code=201)
-def request_move_approval(item_id: str, body: RequestApproval,
-                          session: Session = Depends(get_session),
-                          user: User = Depends(current_user)):
-    return request_approval(session, item_id, body.to, user.id, SqliteSink(session))
-
 @router.get("/approvals")
-def get_approvals(session: Session = Depends(get_session), _: User = Depends(current_user),
+def get_approvals(session: Session = Depends(get_session), user: User = Depends(current_user),
                   status: str | None = "pending"):
-    return list_approvals(session, status=status)
+    """What is waiting on a person.
 
-@router.get("/approvals/overdue")
-def get_overdue_approvals(session: Session = Depends(get_session),
-                          _: User = Depends(current_user)):
-    return current_overdue(session)
+    A run holds at a gated stage and waits; clearing it is
+    `POST /runs/{id}/approve`, which needs `approve:code`. Until 3.0 this listed
+    a separate queue of kanban-transition approvals, signed by *role rank* — an
+    authority model the rest of the product had already left behind.
+    """
+    from ..pipeline import store as ps
 
-@router.post("/approvals/{request_id}/approve")
-def approve_move(request_id: str, session: Session = Depends(get_session),
-                 user: User = Depends(current_user)):
-    return approve_request(session, request_id, user.id, SqliteSink(session))
-
-@router.post("/approvals/{request_id}/reject")
-def reject_move(request_id: str, session: Session = Depends(get_session),
-                user: User = Depends(current_user)):
-    return reject_request(session, request_id, user.id, SqliteSink(session))
+    scope = None if authority.sees_operations(user) else user.id
+    runs = ps.list_runs(session, actor_id=scope, active=True)
+    if status == "pending":
+        runs = [r for r in runs if r.held]
+    return [{"run_id": r.id, "work_item_id": r.work_item_id, "stage": r.stage,
+             "requested_by": r.actor_id, "held": r.held,
+             "approve_with": f"POST /runs/{r.id}/approve",
+             "created_at": r.created_at} for r in runs]
 
 @router.get("/events")
 def get_events(q: EventFilter = Depends(), session: Session = Depends(get_session),

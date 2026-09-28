@@ -6,10 +6,11 @@ from open_refinery import connect, run_migrations
 from open_refinery.migrations import MIGRATIONS
 
 
-# `targets` and `quotas` carried the pre-3.0 execution path. The models are gone,
-# so `create_all` no longer builds them — but MIGRATIONS v4/v6/v14 still ALTER
-# them, because an install that predates 3.0 still *has* them. These tests
-# simulate that install, so they build the tables the way that install has them.
+# The pre-3.0 tables: `targets`/`quotas` carried the old execution path, and
+# `processes`/`approval_requests` carried the kanban. The models are gone, so
+# `create_all` no longer builds them — but MIGRATIONS still ALTER them, because
+# an install that predates 3.0 still *has* them. These tests simulate that
+# install, so they build the tables the way that install has them.
 LEGACY_TABLES = (
     """CREATE TABLE IF NOT EXISTS targets (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL,
@@ -22,6 +23,25 @@ LEGACY_TABLES = (
         used INTEGER NOT NULL DEFAULT 0, window_seconds INTEGER NOT NULL DEFAULT 0,
         window_started_at TEXT NOT NULL DEFAULT '', owner_id TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT '')""",
+    """CREATE TABLE IF NOT EXISTS processes (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, archetype TEXT NOT NULL,
+        owner_id TEXT NOT NULL, initial TEXT NOT NULL,
+        oversight TEXT NOT NULL DEFAULT 'dark',
+        min_approver_role TEXT NOT NULL DEFAULT 'lead',
+        approval_chain TEXT NOT NULL DEFAULT '[]',
+        stages TEXT NOT NULL DEFAULT '[]', transitions TEXT NOT NULL DEFAULT '[]',
+        gates TEXT NOT NULL DEFAULT '[]', checks TEXT NOT NULL DEFAULT '{}',
+        pack TEXT NOT NULL DEFAULT '',
+        approval_sla_hours INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT '')""",
+    "CREATE INDEX IF NOT EXISTS ix_processes_pack ON processes (pack)",
+    """CREATE TABLE IF NOT EXISTS approval_requests (
+        id TEXT PRIMARY KEY, work_item_id TEXT NOT NULL, to_step TEXT NOT NULL,
+        requested_by TEXT NOT NULL, required_roles TEXT NOT NULL DEFAULT '[]',
+        approvals TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL DEFAULT 'pending',
+        due_at TEXT NOT NULL DEFAULT '', escalated_at TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT '')""",
+    "CREATE INDEX IF NOT EXISTS ix_approval_requests_due_at ON approval_requests (due_at)",
 )
 
 
@@ -128,6 +148,7 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
             "ALTER TABLE integrations DROP COLUMN intake_process_id",
             "ALTER TABLE integrations DROP COLUMN intake_pipeline",
             "ALTER TABLE integrations DROP COLUMN autostart",
+            "ALTER TABLE repositories DROP COLUMN oversight",
             "PRAGMA user_version = 7",   # pretend this is a 1.0-era install (schema v7)
         ):
             raw.execute(stmt)
@@ -153,6 +174,9 @@ def test_upgrade_from_1_0_install_adds_new_schema(tmp_path):
         assert "permissions" in usr
         integ = {r[1] for r in raw.execute("PRAGMA table_info(integrations)").fetchall()}
         assert {"webhook_secret", "autostart"} <= integ
+        # v31: the oversight dial moved off the process onto the repository
+        repo_cols = {r[1] for r in raw.execute("PRAGMA table_info(repositories)").fetchall()}
+        assert "oversight" in repo_cols
         assert raw.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
     finally:
         raw.close()

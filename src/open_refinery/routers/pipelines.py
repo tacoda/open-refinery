@@ -313,7 +313,6 @@ def advance_run(run_id: str, all_the_way: bool = False,
 
 def _phase_runner(session, run):
     """The harness if a model is connected, else the offline stub."""
-    from ..models import Process, WorkItem
     from ..pipeline.runner import harness_phase, stub_phase
 
     pipeline = ps.get_pipeline(session, run.pipeline_id)
@@ -326,12 +325,11 @@ def _phase_runner(session, run):
     except creds_mod.NoCredential:
         return stub_phase
 
-    # Oversight comes from the work item's process, so how closely a run is
-    # watched is the team's setting rather than the harness's.
-    item = session.get(WorkItem, run.work_item_id)
-    process = session.get(Process, item.process_id) if item else None
-    level = process.oversight if process else "supervised"
-    return harness_phase(session, SqliteSink(session), oversight=level)
+    # One place decides how closely a run is watched: the repository.
+    from ..pipeline.workers import oversight_for
+
+    return harness_phase(session, SqliteSink(session),
+                         oversight=oversight_for(session, run))
 
 
 def _model_of(graph, session, run) -> str:

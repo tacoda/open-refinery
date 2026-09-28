@@ -114,11 +114,8 @@ def test_a_ticket_becomes_a_pull_request_and_nothing_merges_itself(api, checkout
         "name": "web-app", "git_url": str(checkout)}).json()
     client.put(f"/repositories/{repo['id']}", headers=admin,
                json={"forge": "local", "base_branch": "main"})
-    proc = client.post("/processes", headers=admin, json={
-        "name": "flow", "archetype": "board", "stages": ["todo", "done"]}).json()
-
     # 4. a ticket arrives at the front door, signed, and starts a run by itself
-    integ = _tracker(session, dev["user"]["id"], repo["id"], proc["id"])
+    integ = _tracker(session, dev["user"]["id"], repo["id"])
     body = json.dumps({"action": "opened", "issue": {
         "number": 1, "title": "Add a login page", "body": "People need to sign in.",
         "state": "open"}}).encode()
@@ -180,10 +177,8 @@ def test_the_same_loop_leaves_a_verifiable_trail(api, checkout):
         "name": "web-app", "git_url": str(checkout)}).json()
     client.put(f"/repositories/{repo['id']}", headers=admin,
                json={"forge": "local", "base_branch": "main"})
-    proc = client.post("/processes", headers=admin, json={
-        "name": "flow", "archetype": "board", "stages": ["todo", "done"]}).json()
     item = client.post("/work-items", headers=admin, json={
-        "repo_id": repo["id"], "process_id": proc["id"], "title": "Add a login page"}).json()
+        "repo_id": repo["id"], "title": "Add a login page"}).json()
     started = client.post("/runs", headers=admin, json={"work_item_id": item["id"]}).json()
 
     signer = client.post("/users", headers=admin, json={
@@ -201,7 +196,7 @@ def test_the_same_loop_leaves_a_verifiable_trail(api, checkout):
 
 # --- helpers ----------------------------------------------------------------
 
-def _tracker(session, owner_id, repo_id, process_id):
+def _tracker(session, owner_id, repo_id):
     """A tracker integration wired for intake, without calling GitHub."""
     import json as _json
 
@@ -214,8 +209,7 @@ def _tracker(session, owner_id, repo_id, process_id):
     session.add(integ)
     session.commit()
     session.refresh(integ)
-    integ, _ = configure(session, integ.id, repo_id=repo_id, process_id=process_id,
-                         autostart=True, rotate_secret=True)
+    integ, _ = configure(session, integ.id, repo_id=repo_id, autostart=True, rotate_secret=True)
     return integ
 
 

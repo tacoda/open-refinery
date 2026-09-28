@@ -102,6 +102,6 @@ def raise_improve_proposal(body: ImproveProposal, session: Session = Depends(get
         raise HTTPException(status_code=403, detail="you do not hold propose:factory")
     try:
         return improve_propose(session, body.kind, body.detail, repo_id=body.repo_id,
-                               process_id=body.process_id, proposer_id=user.id)
+                               proposer_id=user.id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from None

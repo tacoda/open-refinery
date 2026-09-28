@@ -117,34 +117,14 @@ class Repository(SQLModel, table=True):
     cleanup_cmd: str = ""              # run before it is released
     test_cmd: str = ""                 # what `prove` runs, when the repo says
 
+    # The human-in-the-loop dial for runs in this repository. It lived on
+    # `Process` until 3.0, where it was the only field of that record a run
+    # ever read. See oversight.LEVELS.
+    oversight: str = "supervised"
+
     ingest_interval_hours: int = 0     # 0 = manual; >0 = auto-ingest on this cadence
     last_ingest_at: str = ""           # ISO of the last scheduled ingest
     created_at: str = Field(default_factory=now_iso)
-
-
-class Process(SQLModel, table=True):
-    __tablename__ = "processes"
-    id: str = Field(default_factory=new_id, primary_key=True)
-    name: str
-    archetype: str
-    owner_id: str = Field(foreign_key="users.id", index=True)
-    initial: str
-    oversight: str = "dark"
-    min_approver_role: str = "platform"  # min role to approve a gated move (risk profile)
-    approval_chain: list = Field(default_factory=list, sa_column=Column(JSON))  # ordered roles; [] = [min_approver_role]
-    stages: list = Field(default_factory=list, sa_column=Column(JSON))
-    transitions: list = Field(default_factory=list, sa_column=Column(JSON))  # [[from, to], ...]
-    gates: list = Field(default_factory=list, sa_column=Column(JSON))
-    checks: dict = Field(default_factory=dict, sa_column=Column(JSON))  # {step: [check, ...]}
-    pack: str = Field(default="", index=True)  # source pack key when seeded by a pack
-    approval_sla_hours: int = 0  # hours an approval may sit pending before it's overdue; 0 = no SLA
-    created_at: str = Field(default_factory=now_iso)
-
-    def can_transition(self, frm: str, to: str) -> bool:
-        return [frm, to] in self.transitions
-
-    def required_checks(self, to: str) -> tuple[str, ...]:
-        return tuple(self.checks.get(to, ()))
 
 
 
@@ -282,31 +262,19 @@ class WorkItem(SQLModel, table=True):
     __tablename__ = "work_items"
     id: str = Field(default_factory=new_id, primary_key=True)
     repo_id: str = Field(foreign_key="repositories.id", index=True)
-    process_id: str = Field(foreign_key="processes.id")
     title: str
-    current_stage: str
     owner_id: str = Field(foreign_key="users.id", index=True)
+
+    # Tombstones. Both carried the pre-3.0 kanban and nothing reads them now —
+    # a work item's stage is derived from its runs (`work_items.stage_of`).
+    # They stay because the schema freeze forbids a drop, and because on an
+    # upgraded install these columns are NOT NULL with no default: removing the
+    # fields would make every insert fail there. Written as "" and never read.
+    process_id: str = ""
+    current_stage: str = ""
     created_at: str = Field(default_factory=now_iso)
     external_ref: str | None = None
 
-
-class StageHistory(SQLModel, table=True):
-    """Append-only record of every stage a work item has occupied — the basis for
-    first-class rollback (revert to a known-good prior stage)."""
-    __tablename__ = "stage_history"
-    id: str = Field(default_factory=new_id, primary_key=True)
-    work_item_id: str = Field(foreign_key="work_items.id", index=True)
-    stage: str
-    kind: str = "transition"          # initial | transition | rollback
-    actor_id: str | None = None
-    # forward change set this transition applied, categorized so a rollback can
-    # reverse each kind: {"code": {"commit","prev"}, "migrations": [id,...]} plus
-    # any number of open {name: {"old","new"}} maps (config, env, libraries, data,
-    # services, secrets, infra, dns, …). SECURITY: this column is plaintext +
-    # audited — carry *references* only (e.g. secret = version/vault ref), never
-    # material.
-    changes: dict = Field(default_factory=dict, sa_column=Column(JSON))
-    created_at: str = Field(default_factory=now_iso)
 
 
 class Integration(SQLModel, table=True):
@@ -509,19 +477,6 @@ class AuditorGrant(SQLModel, table=True):
     created_at: str = Field(default_factory=now_iso)
 
 
-class ApprovalRequest(SQLModel, table=True):
-    __tablename__ = "approval_requests"
-    id: str = Field(default_factory=new_id, primary_key=True)
-    work_item_id: str = Field(foreign_key="work_items.id", index=True)
-    to_step: str
-    requested_by: str = Field(foreign_key="users.id")
-    required_roles: list = Field(default_factory=list, sa_column=Column(JSON))  # ordered chain
-    approvals: list = Field(default_factory=list, sa_column=Column(JSON))       # [{role,user_id,at}]
-    status: str = Field(default="pending", index=True)  # pending | applied | rejected
-    due_at: str = Field(default="", index=True)  # SLA deadline (iso); "" = no SLA
-    escalated_at: str = ""  # set when an overdue-escalation was emitted (dedup)
-    created_at: str = Field(default_factory=now_iso)
-
 
 class ApprovalWorkflow(SQLModel, table=True):
     """Admin-configured approval chain for governance changes at a role layer."""
@@ -649,15 +604,6 @@ class Claim(SQLModel, table=True):
     owner_id: str = Field(foreign_key="users.id", index=True)
     created_at: str = Field(default_factory=now_iso)
 
-
-class Attestation(SQLModel, table=True):
-    __tablename__ = "attestations"
-    id: str = Field(default_factory=new_id, primary_key=True)
-    work_item_id: str = Field(foreign_key="work_items.id", index=True)
-    check_name: str
-    passed: bool
-    actor_id: str = Field(foreign_key="users.id")
-    created_at: str = Field(default_factory=now_iso)
 
 
 class RecertCampaign(SQLModel, table=True):

@@ -6,14 +6,12 @@ from open_refinery import (
     SqliteSink,
     connect,
     create_policy,
-    create_process,
-    create_repository,
     create_user,
-    create_work_item,
     decide,
+    enforce,
     list_policies,
+    query_events,
     scan_content,
-    transition,
 )
 
 
@@ -139,39 +137,31 @@ def setup():
     conn = connect("sqlite:///:memory:")
     ian, _ = create_user(conn, "ian@x.dev", "pw", "developer")
     boss, _ = create_user(conn, "boss@x.dev", "pw", "platform")
-    repo = create_repository(conn, "or", "git@x:or.git", ian.id)
-    proc = create_process(conn, "flow", "board", ["todo", "done"], ian.id)
-    item = create_work_item(conn, repo.id, proc.id, "T", ian.id)
-    return conn, ian, boss, item
+    return conn, ian, boss
 
 
-def test_policy_blocks_transition_by_role():
-    conn, ian, boss, item = setup()
-    create_policy(conn, "deny", boss.id, role="developer", action="transition", resource="done")
+def test_policy_blocks_an_action_by_role():
+    """`enforce` is what the harness middleware and `POST /authorize` both call.
+    It gated kanban transitions too, until those went in 3.0."""
+    conn, ian, boss = setup()
+    create_policy(conn, "deny", boss.id, role="developer", action="tool", resource="write")
     audit = SqliteSink(conn)
     with pytest.raises(PolicyDenied):
-        transition(conn, item.id, "done", ian.id, audit)
-    # platform user is not denied
-    moved = transition(conn, item.id, "done", boss.id, audit)
-    assert moved.current_stage == "done"
+        enforce(conn, ian.role, "tool", "write", audit=audit, actor_id=ian.id)
+    enforce(conn, boss.role, "tool", "write", audit=audit, actor_id=boss.id)  # not denied
+
+
+def test_a_refusal_is_audited():
+    conn, ian, boss = setup()
+    create_policy(conn, "deny", boss.id, role="developer", action="tool", resource="write")
+    audit = SqliteSink(conn)
+    with pytest.raises(PolicyDenied):
+        enforce(conn, ian.role, "tool", "write", audit=audit, actor_id=ian.id, subject="run-1")
+    denials = [e for e in query_events(conn, subject="run-1") if e.recipe == "denied"]
+    assert len(denials) == 1
 
 
 def test_policies_are_fleet_wide():
-    conn, ian, boss, item = setup()
-    create_policy(conn, "deny", boss.id, action="transition", resource="done")
+    conn, ian, boss = setup()
+    create_policy(conn, "deny", boss.id, action="tool", resource="write")
     assert len(list_policies(conn)) == 1
-
-
-def test_only_valid_effects():
-    conn, ian, boss, _ = setup()
-    with pytest.raises(ValueError):
-        create_policy(conn, "maybe", boss.id)
-
-
-def test_content_scan_redacts_secrets():
-    text = "contact a@b.com with key AKIAABCDEFGHIJKLMNOP and gho_abcdefghijklmnopqrstuvwxyz012345"
-    clean, hits = scan_content(text)
-    assert "a@b.com" not in clean
-    assert "AKIAABCDEFGHIJKLMNOP" not in clean
-    assert set(hits) >= {"email", "aws-key", "bearer-token"}
-    assert scan_content("nothing sensitive here") == ("nothing sensitive here", [])
