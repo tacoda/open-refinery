@@ -1,0 +1,42 @@
+name: Feedback on the design
+description: Tell us the idea is wrong, or that it did not fit how you work.
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the more valuable of the two templates. A bug is a thing we got
+        wrong by accident; this is for the things we may have got wrong on
+        purpose. Answer whichever questions you have an opinion about and ignore
+        the rest — a partial answer is worth more than none.
+
+  - type: textarea
+    id: first-ten-minutes
+    attributes:
+      label: Where did the first ten minutes go wrong?
+      description: >
+        From `make setup` to seeing something happen. The exact point where you
+        got stuck, bored, or confused is the most useful sentence in this form.
+
+  - type: textarea
+    id: ladder
+    attributes:
+      label: Is the ladder a real distinction, or a distinction without a difference?
+      description: >
+        A rule can be prose in a charter (rung 0) or a predicate that refuses a
+        write (rung 4). We think that difference is the whole product. Tell us if
+        it is not, in your org.
+
+  - type: textarea
+    id: would-you-run-it
+    attributes:
+      label: Would you point this at a repository you care about?
+      description: If not — what specifically stops you? Be blunt; that is the point.
+
+  - type: textarea
+    id: missing
+    attributes:
+      label: What did you look for and not find?
+      description: >
+        Including things we say in LIMITATIONS.md that we do not do. Knowing a
+        boundary is the one that blocks you is useful.

@@ -257,7 +257,7 @@ no existing column changes type.
 ## Reading further
 
 - [ADOPTING.md](ADOPTING.md) — install to first pull request
-- [LIMITATIONS.md](LIMITATIONS.md) — what this does not do
+- [LIMITATIONS.md](../LIMITATIONS.md) — what this does not do
 - [PLAN-3.0.md](PLAN-3.0.md) — the design record and why each decision went the
   way it did
 - [FEATURES.md](FEATURES.md) — features by permission, journeys as diagrams

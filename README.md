@@ -12,6 +12,28 @@ follows from a ticket to a pull request — connect their repositories, and ship
 work through it. Every step is owned, authorized, recorded, and queryable. It runs "dark" (lights-out automation) but stays
 "open": nothing happens without an attributable, auditable trail.
 
+> **Before you adopt it, read [LIMITATIONS.md](LIMITATIONS.md).** It is short,
+> and it is the half of the picture most READMEs leave out: SQLite and one
+> process, a schema frozen at 1.0, a pre-1.0 dependency carrying a pillar, and
+> exactly which rungs of the ladder this product does *not* carry. Every item
+> there is a deliberate boundary or a known gap, not a surprise waiting in
+> production.
+
+### Try it in two minutes
+
+No accounts, no API key, no network. The `local` forge writes a pull request as
+a file and the offline stub stands in for the model, so the whole governed loop
+runs on a throwaway repository `seed` makes for you:
+
+```bash
+make setup          # .env + a seeded database + a demo git repository
+make dev &          # then sign in at http://localhost:8000
+```
+
+Sign in as `owner@example.com` / `owner` — it holds every permission, so every
+screen is reachable. Name a ticket under **Work**, ship it, and watch the run
+hold at the plan gate.
+
 ### What it is
 
 The **platform layer** between your harnesses (agents, scripts, CI — the

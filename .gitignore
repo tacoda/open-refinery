@@ -8,6 +8,10 @@ dist/
 build/
 # audit trails / runtime state — regenerated, not versioned
 *.jsonl
+# the throwaway git repository `open-refinery seed` makes, so the seeded repo
+# points at a checkout a run can actually use
+devrepo/
+
 # sqlite database + WAL sidecars — never versioned
 *.db
 *.db-shm

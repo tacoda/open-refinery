@@ -13,7 +13,7 @@ cost, so a ceiling cannot be enforced the way the pre-3.0 `Quota` enforced one
 (refuse before consuming, because the units were known). What this does instead
 is refuse the *next* stage once the ceiling is passed. The bound that holds
 inside a single turn is `max_turns`, which is a turn cap and not a cost one —
-`docs/LIMITATIONS.md` says so plainly.
+`LIMITATIONS.md` says so plainly.
 
 A run's spend is the sum of its steps' `units`, so it is derived rather than
 stored: there is one number, and it is the audited one.

@@ -1,3 +1,4 @@
+import pathlib
 import pytest
 
 from open_refinery import (
@@ -69,3 +70,32 @@ def test_the_owner_email_is_yours_to_choose(monkeypatch):
     conn = connect("sqlite:///:memory:")
     owner, _ = seed(conn, owner_email="me@example.org")["users"]["owner"]
     assert owner.email == "me@example.org"
+
+
+def test_the_seeded_repository_is_one_a_run_can_actually_use(tmp_path, monkeypatch):
+    """`workspace.root_of` refuses a git_url that is not a local checkout, so a
+    seeded repo without one makes the first thing a new arrival does — name a
+    ticket and ship it — fail on a worktree that cannot be made."""
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+    from open_refinery.pipeline.workspace import root_of
+    from open_refinery.seeds import make_checkout
+
+    url = make_checkout(tmp_path / "devrepo")
+    conn = connect("sqlite:///:memory:")
+    repo = seed(conn, git_url=url)["repositories"][0]
+
+    assert root_of(repo.git_url).exists()          # would raise WorkspaceError
+    assert repo.forge == ""                        # "" resolves to `local` by URL
+
+    from open_refinery.pipeline.forge import for_repo
+    assert for_repo(repo.git_url, repo.forge).name == "local"
+
+
+def test_making_a_checkout_twice_leaves_the_first_alone(tmp_path):
+    from open_refinery.seeds import make_checkout
+
+    first = make_checkout(tmp_path / "devrepo")
+    (pathlib.Path(first) / "app.py").write_text("# edited\n")
+    again = make_checkout(tmp_path / "devrepo")
+    assert again == first
+    assert (pathlib.Path(first) / "app.py").read_text() == "# edited\n"

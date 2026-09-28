@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A PR from a fork gets read-only credentials; nothing here needs more.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]   # the floor in pyproject, and what we develop on
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev --python ${{ matrix.python }}
+      # The suite shells out to git; a run makes real worktrees and commits.
+      - name: Give git an identity
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI"
+      - run: uv run pytest -q
+
+  frontend:
+    name: Dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: cd frontend && bun install --frozen-lockfile
+      # `tsc -b` follows tsconfig.json's project references. `tsc --noEmit -p
+      # tsconfig.json` does NOT — that file lists no files of its own, so it
+      # checks nothing and passes unconditionally. Two real errors reached main
+      # that way. Build mode, always.
+      - name: Typecheck
+        run: cd frontend && bunx tsc -b
+      - name: Component tests
+        run: cd frontend && bun run test
+      - name: Build
+        run: cd frontend && bun run build
+
+  parity:
+    name: API types match the backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: oven-sh/setup-bun@v2
+      - run: uv sync --extra dev
+      - run: cd frontend && bun install --frozen-lockfile
+      # `make types` regenerates api-types.ts from the live OpenAPI schema. If
+      # that changes anything, the committed types have drifted from the API and
+      # the frontend is typechecking against a contract that no longer holds.
+      - name: Regenerate and diff
+        run: |
+          make types
+          git diff --exit-code -- frontend/src/api-types.ts \
+            || { echo "::error::frontend/src/api-types.ts is stale — run 'make types' and commit it"; exit 1; }

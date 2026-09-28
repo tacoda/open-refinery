@@ -493,14 +493,26 @@ def _migrate(args: argparse.Namespace) -> int:
 
 
 def _seed(args: argparse.Namespace) -> int:
+    import subprocess
     import sys
 
-    from .seeds import DEFAULT_OWNER, AlreadySeeded, seed
+    from .seeds import DEFAULT_OWNER, PLACEHOLDER_GIT_URL, AlreadySeeded, make_checkout, seed
     from .store import DEFAULT_DATABASE_URL, connect
+
+    # A repository the factory cannot run against is a broken demo, so seeding
+    # makes a real one unless told not to.
+    git_url = PLACEHOLDER_GIT_URL
+    if not args.no_checkout:
+        try:
+            git_url = make_checkout(args.checkout)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            print(f"warning: could not make a demo checkout at {args.checkout!r}: "
+                  f"{exc}. The seeded repository will have no clone, and a run "
+                  "cannot make a worktree.", file=sys.stderr)
 
     conn = connect(os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL))
     try:
-        data = seed(conn, owner_email=args.owner or DEFAULT_OWNER)
+        data = seed(conn, owner_email=args.owner or DEFAULT_OWNER, git_url=git_url)
     except AlreadySeeded:
         print("database already has users; seed needs a fresh DATABASE_URL", file=sys.stderr)
         return 1
@@ -511,8 +523,10 @@ def _seed(args: argparse.Namespace) -> int:
     for role, (user, token) in data["users"].items():
         print(f"  {role:<9} {user.email:<28} {PASSWORDS[role]:<10} {token}")
     print()
+    repo = data["repositories"][0]
     print(f"  {len(data['repositories'])} repo · {len(data['work_items'])} work items · "
           f"{len(data['pipelines'])} pipeline")
+    print(f"  repo 'web-app' -> {repo.git_url}")
     print()
     print("next:")
     print(f"  {'make dev':<34} # then sign in at http://localhost:8000")
@@ -672,6 +686,12 @@ def main(argv: list[str] | None = None) -> int:
     seed.add_argument("--owner", default=None,
                       help="email for the all-permissions owner account "
                            "(default: owner@example.com)")
+    seed.add_argument("--checkout", default="devrepo",
+                      help="where to make the demo git repository the seeded "
+                           "repo points at (default: ./devrepo)")
+    seed.add_argument("--no-checkout", action="store_true",
+                      help="skip it — the seeded repo then has no clone, and a "
+                           "run cannot make a worktree")
     seed.set_defaults(func=_seed)
 
     migrate = sub.add_parser("migrate", help="migrate the schema up (default) or down to --to N")

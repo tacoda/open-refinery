@@ -1,0 +1,68 @@
+name: Bug report
+description: Something behaved differently from how it is documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The most useful thing you can paste is the
+        output of `open-refinery doctor` — it answers most of what we would
+        otherwise have to ask you.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+      placeholder: |
+        I clicked Ship work under Work, and ...
+        I expected a run to start.
+        Instead ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`open-refinery doctor`"
+      description: >
+        Run it and paste the whole thing. It redacts nothing sensitive — it
+        reports whether keys are *set*, never what they are.
+      render: text
+      placeholder: |
+        $ open-refinery doctor
+        [ok  ] secret key     set
+        ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`open-refinery --version`, or the commit you are on."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      options:
+        - The dashboard
+        - The HTTP API
+        - The CLI
+        - A run / the factory
+        - Install or upgrade
+        - Somewhere else
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Anything in the logs
+      description: >
+        The server prints to stdout. A traceback is worth more than a
+        description of one.
+      render: text

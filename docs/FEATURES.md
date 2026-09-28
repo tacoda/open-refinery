@@ -2,7 +2,7 @@
 
 *What exists, and who can reach it. Companion to
 [GLOSSARY.md](GLOSSARY.md), which says what the words mean, and to
-[LIMITATIONS.md](LIMITATIONS.md), which says what the product does not do.*
+[LIMITATIONS.md](../LIMITATIONS.md), which says what the product does not do.*
 
 Two things to hold on to before the list:
 

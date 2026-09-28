@@ -14,7 +14,9 @@ A fresh production install seeds none of this: it goes to the setup wizard (or
 
 from __future__ import annotations
 
+import subprocess
 import sqlite3
+from pathlib import Path
 
 from .repositories import create_repository
 from .settings import set_setting
@@ -32,12 +34,48 @@ PASSWORDS = {"admin": "admin", "platform": "platform", "developer": "dev",
 # (or `make seed OWNER=…`) to seed your own.
 DEFAULT_OWNER = "owner@example.com"
 
+# A git URL nobody can clone. Used when no checkout is made — tests, mostly.
+PLACEHOLDER_GIT_URL = "git@github.com:acme/web-app.git"
+
+
+def make_checkout(path: str | Path) -> str:
+    """A real git repository for the seeded repo to point at.
+
+    **`workspace.root_of` refuses a `git_url` that is not a local checkout**, so
+    without this the first thing a new arrival does — name a ticket and ship it
+    — fails on a worktree that cannot be made. Seeding a repository the factory
+    cannot actually run against is seeding a broken demo.
+
+    Idempotent: an existing checkout is left alone. Returns the path as the
+    `git_url`, which is what a `local` repository's git URL *is*.
+    """
+    root = Path(path).expanduser().resolve()
+    if (root / ".git").exists():
+        return str(root)
+    root.mkdir(parents=True, exist_ok=True)
+
+    def git(*args):
+        subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+
+    git("init", "-q", "-b", "main")
+    # Local identity, so seeding does not depend on the machine's git config.
+    git("config", "user.email", "dev@example.com")
+    git("config", "user.name", "open-refinery dev")
+    (root / "README.md").write_text(
+        "# web-app\n\nA throwaway repository, so the factory has something real "
+        "to work on.\n")
+    (root / "app.py").write_text("def add(a, b):\n    return a + b\n")
+    git("add", "-A")
+    git("commit", "-q", "-m", "first")
+    return str(root)
+
 
 class AlreadySeeded(Exception):
     """Raised when seeding a store that already has users."""
 
 
-def seed(conn: sqlite3.Connection, *, owner_email: str = DEFAULT_OWNER) -> dict:
+def seed(conn: sqlite3.Connection, *, owner_email: str = DEFAULT_OWNER,
+         git_url: str = PLACEHOLDER_GIT_URL) -> dict:
     if count_users(conn) > 0:
         raise AlreadySeeded("seed expects an empty database")
 
@@ -53,7 +91,9 @@ def seed(conn: sqlite3.Connection, *, owner_email: str = DEFAULT_OWNER) -> dict:
                                          PASSWORDS["platform"], "platform")
     dev, dev_tok = create_user(conn, "dev@example.com", PASSWORDS["developer"], "developer")
 
-    web = create_repository(conn, "web-app", "git@github.com:acme/web-app.git", dev.id)
+    # `forge` stays "" — a path with no recognisable host resolves to `local`,
+    # so a pull request is a markdown file and the loop needs no accounts.
+    web = create_repository(conn, "web-app", git_url, dev.id)
 
     # The default pipeline, so a seeded environment can actually run something.
     # `POST /setup` does this for a real install; without it here, "Ship work"

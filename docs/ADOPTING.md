@@ -3,7 +3,7 @@
 The path from an empty machine to a pull request the factory opened, with the
 decision each step is really asking you to make.
 
-Read [LIMITATIONS.md](LIMITATIONS.md) first. It is short, and it is the half of
+Read [LIMITATIONS.md](../LIMITATIONS.md) first. It is short, and it is the half of
 this document that says no.
 
 ---

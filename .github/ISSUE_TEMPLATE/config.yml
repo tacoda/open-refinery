@@ -1,0 +1,12 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question, or "does this make sense?"
+    url: https://github.com/tacoda/open-refinery/discussions
+    about: >
+      Not sure it is a bug? Ask in Discussions. Issues are for defects and
+      design feedback; nothing is too small for a discussion.
+  - name: What this does not do
+    url: https://github.com/tacoda/open-refinery/blob/main/LIMITATIONS.md
+    about: >
+      Read this before filing — the boundary you hit may be a deliberate one,
+      and it is written down.
