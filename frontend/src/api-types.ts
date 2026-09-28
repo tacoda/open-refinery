@@ -850,7 +850,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Purge Audit */
+        /**
+         * Purge Audit
+         * @description Retention: drop events older than `days`, leaving a signed checkpoint.
+         *
+         *     **`manage:users`, not `read:audit`.** Destroying the record is an
+         *     administrative act, and it was guarded by the permission that reads the
+         *     record — which handed it to the time-boxed auditor grant, the one principal
+         *     whose whole purpose is to read and change nothing.
+         */
         post: operations["purge_audit_audit_purge_post"];
         delete?: never;
         options?: never;
@@ -953,7 +961,12 @@ export interface paths {
         /** Get Auditor Grants */
         get: operations["get_auditor_grants_auditor_grants_get"];
         put?: never;
-        /** Add Auditor Grant */
+        /**
+         * Add Auditor Grant
+         * @description Mint a time-boxed read-only credential. **`manage:users`** — handing
+         *     somebody access is the admin act, and under `read:audit` a grant could mint
+         *     itself a fresh one and never expire.
+         */
         post: operations["add_auditor_grant_auditor_grants_post"];
         delete?: never;
         options?: never;

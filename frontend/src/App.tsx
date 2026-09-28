@@ -414,9 +414,6 @@ export function Wizard({ onDone, me, roles }: { onDone: () => void; me: any; rol
   useEffect(() => { api('/connectors').then(setCatalog).catch(() => {}); reloadInteg() }, [])
 
   // step 1 — connect (shared OAuth-first flow)
-  const trackers = integs.filter((i) => {
-    const c = catalog.find((x) => x.kind === i.kind); return c?.caps.includes('tracker')
-  })
   const sources = integs.filter((i) => {
     const c = catalog.find((x) => x.kind === i.kind); return c?.caps.includes('source')
   })
@@ -1485,7 +1482,7 @@ function Policies() {
           </div>
           {kind === 'rule' && (
             <div className="policy-preview">
-              <span className="policy-sentence">{ruleSentence({ effect, role, action, resource, namespace })}</span>
+              <span className="policy-sentence">{ruleSentence({ effect, applies_to: appliesTo, action, resource, namespace })}</span>
               {' '}
               <Badge variant="outline">{layer} layer</Badge>
               {strict && <> <Badge>locked</Badge></>}
