@@ -13,7 +13,7 @@ vi.mock('./api', () => ({
   oauthLoginUrl: () => '',
 }))
 
-import { Drawer, EmptyRow, Ladder, Overview, Packs, Pipeline, Toggle, human, ruleSentence } from './App'
+import { Drawer, EmptyRow, Ladder, NAV, Overview, Packs, Pipeline, Toggle, human, ruleSentence } from './App'
 
 const ROLES = [
   { name: 'developer', rank: 1 },
@@ -249,5 +249,40 @@ describe('Ladder (where a rule is carried)', () => {
     render(<Ladder me={me} />)                                    // holds approve:code only
     await waitFor(() => expect(screen.getByText('mine')).toBeInTheDocument())
     expect(screen.getAllByRole('button', { name: 'Move' })).toHaveLength(1)
+  })
+})
+
+describe('navigation', () => {
+  // The point of step 7: one screen per question somebody has. Twenty entries
+  // in four groups became nine flat ones, and this pins that shape.
+  const of = (me: any) => NAV.filter((t) => t.always || (t.needs ?? []).some(
+    (p: string) => (me.permissions ?? []).includes(p)))
+
+  it('is nine screens, flat', () => {
+    expect(NAV).toHaveLength(9)
+    expect(NAV.map((t) => t.value)).toEqual([
+      'overview', 'work', 'approvals', 'pipelines', 'rules',
+      'connections', 'insight', 'audit', 'admin',
+    ])
+  })
+
+  it('shows a developer seven of them — no audit, no admin', () => {
+    const dev = { permissions: ['approve:code', 'propose:code', 'run:factory'] }
+    expect(of(dev).map((t) => t.label)).toEqual([
+      'Overview', 'Work', 'Approvals', 'Workflows', 'Rules', 'Connections', 'Insight',
+    ])
+  })
+
+  it('opens Audit and Admin to the permissions that carry them', () => {
+    const auditor = { permissions: ['read:audit'] }
+    expect(of(auditor).map((t) => t.value)).toContain('audit')
+    expect(of(auditor).map((t) => t.value)).not.toContain('admin')
+
+    const admin = { permissions: ['manage:users', 'read:audit'] }
+    expect(of(admin).map((t) => t.value)).toContain('admin')
+  })
+
+  it('every screen a person can reach is one somebody holds a permission for', () => {
+    for (const t of NAV) expect(t.always || (t.needs ?? []).length > 0).toBe(true)
   })
 })

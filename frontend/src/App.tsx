@@ -15,68 +15,44 @@ import {
 } from '@/components/ui/select'
 import { LogoMark } from './Brand'
 import {
-  LayoutDashboard, ListChecks, CheckSquare, GitBranch, Workflow, Shield, GitPullRequest,
-  Package, Boxes, Plug, Users as UsersIcon, BarChart3, Activity, Coins,
-  FlaskConical, ScrollText, Settings as SettingsIcon, PanelLeftClose,
-  PanelLeft, LogOut, Eye, Bot, Lock, ClipboardCheck,
+  LayoutDashboard, ListChecks, CheckSquare, Workflow, Shield,
+  Package, Plug, BarChart3, Activity,
+  ScrollText, Settings as SettingsIcon, PanelLeftClose,
+  PanelLeft, LogOut, Eye, Lock,
 } from 'lucide-react'
 
 // One icon per view — used by the sidebar and (later) overview cards.
 const VIEW_ICON: Record<string, any> = {
-  // Set up
-  connections: Plug, repos: GitBranch, users: UsersIcon, settings: SettingsIcon,
-  // Build
-  pipelines: Workflow, rules: Shield,
-  // Run
-  work: ListChecks, runs: Activity, approvals: CheckSquare,
-  proposals: GitPullRequest, harnesses: Bot,
-  // Watch
-  overview: LayoutDashboard, events: ScrollText, evidence: ClipboardCheck,
-  usage: Coins, experiments: FlaskConical, teams: Boxes,
-  metrics: BarChart3, myrules: Eye,
-}
-const GROUP_ICON: Record<string, any> = {
-  'Set up': Plug, Build: Workflow, Run: Activity, Watch: BarChart3,
+  overview: LayoutDashboard, work: ListChecks, approvals: CheckSquare,
+  pipelines: Workflow, rules: Shield, connections: Plug,
+  insight: BarChart3, audit: ScrollText, admin: SettingsIcon,
 }
 
-type View = 'overview' | 'connections' | 'repos' | 'users'
-  | 'pipelines' | 'rules'
-  | 'work' | 'runs' | 'approvals' | 'proposals' | 'harnesses'
-  | 'events' | 'metrics' | 'evidence' | 'experiments' | 'usage'
-  | 'teams' | 'settings' | 'myrules'
+type View = 'overview' | 'work' | 'approvals' | 'pipelines' | 'rules'
+  | 'connections' | 'insight' | 'audit' | 'admin'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
 
 // Navigation is gated by the PERMISSIONS the signed-in person holds — the same
-// set the backend checks (see authority.py). A tab lists what it needs; holding
+// set the backend checks (see authority.py). A view lists what it needs; holding
 // none of them hides it.
 //
-// Four groups, in the order somebody meets them: set the place up, build how
-// work should ship, run work through it, then watch what happened.
+// **Nine screens, flat.** There were twenty in four groups, and the groups were
+// doing the work a shorter list does better: `Work` competed with `Runs`,
+// `Overview` with `Metrics` with `Spend`, and three separate entries claimed to
+// be "the rules". Each screen below is one question somebody has; the tabs
+// inside it are the ways of answering that question.
 type NavTab = { value: View; label: string; needs?: string[]; always?: boolean }
-const NAV: { group: string; tabs: NavTab[] }[] = [
-  { group: 'Set up', tabs: [
-    { value: 'connections', label: 'Connections', always: true },   // your own keys
-    { value: 'repos', label: 'Repos', always: true },
-    { value: 'users', label: 'Users', needs: ['manage:users'] },
-    { value: 'settings', label: 'Settings', needs: ['see:operations'] } ] },
-  { group: 'Build', tabs: [
-    { value: 'pipelines', label: 'Workflows', always: true },       // read open; edit gated
-    { value: 'rules', label: 'Rules', always: true } ] },
-  { group: 'Run', tabs: [
-    { value: 'work', label: 'Work', always: true },
-    { value: 'runs', label: 'Runs', always: true },
-    { value: 'approvals', label: 'Approvals', always: true },
-    { value: 'proposals', label: 'Proposals', always: true },
-    { value: 'harnesses', label: 'Agents', needs: ['run:factory'] } ] },
-  { group: 'Watch', tabs: [
-    { value: 'overview', label: 'Overview', always: true },
-    { value: 'events', label: 'Audit log', needs: ['read:audit'] },
-    { value: 'evidence', label: 'Evidence', needs: ['read:audit'] },
-    { value: 'usage', label: 'Spend', always: true },
-    { value: 'experiments', label: 'Experiments', needs: ['see:operations'] },
-    { value: 'teams', label: 'Teams', needs: ['see:operations'] },
-    { value: 'metrics', label: 'Metrics', always: true } ] },
+export const NAV: NavTab[] = [
+  { value: 'overview', label: 'Overview', always: true },        // what needs attention
+  { value: 'work', label: 'Work', always: true },                // tickets + their runs
+  { value: 'approvals', label: 'Approvals', always: true },      // held runs + proposals
+  { value: 'pipelines', label: 'Workflows', always: true },      // read open; edit gated
+  { value: 'rules', label: 'Rules', always: true },              // the ladder + the rest
+  { value: 'connections', label: 'Connections', always: true },  // repos, services, agents
+  { value: 'insight', label: 'Insight', always: true },          // delivery, spend, experiments
+  { value: 'audit', label: 'Audit', needs: ['read:audit'] },     // the trail + evidence
+  { value: 'admin', label: 'Admin', needs: ['manage:users', 'see:operations'] },
 ]
 
 // Holding ANY of a tab's permissions opens it. The backend enforces the same
@@ -200,17 +176,13 @@ export default function App() {
   // Never sit on a view this person's permissions do not open (defence in
   // depth — the backend refuses it too).
   useEffect(() => {
-    const tab = NAV.flatMap((n) => n.tabs).find((t) => t.value === view)
-    if (me && !(tab?.always || holds(me, tab?.needs))) {
-      setGroup('Watch'); setView('overview')
-    }
+    const tab = NAV.find((t) => t.value === view)
+    if (me && !(tab?.always || holds(me, tab?.needs))) setView('overview')
   }, [view, me])
 
   // Everyone lands on the Overview — what needs attention now.
   useEffect(() => {
-    if (!me) return
-    setGroup('Watch')
-    setView('overview')
+    if (me) setView('overview')
   }, [me])
 
   // First-run: whoever runs the place sees the setup wizard until it is done.
@@ -222,24 +194,16 @@ export default function App() {
   }, [me])
 
   const canAudit = holds(me, ['read:audit'])
-  const [group, setGroup] = useState('Watch')
   const [collapsed, setCollapsed] = useState(false)
   const [onboarded, setOnboarded] = useState<boolean | null>(null)
 
-  const allow = (t: NavTab) => !!me && (t.always || holds(me, t.needs))
   // is `view` open to this person? (mirrors the backend, which enforces it)
   const can = (v: View) => {
-    const tab = NAV.flatMap((n) => n.tabs).find((t) => t.value === v)
+    const tab = NAV.find((t) => t.value === v)
     return !!me && !!(tab?.always || holds(me, tab?.needs))
   }
-  const tabsFor = (g: string) => (NAV.find((n) => n.group === g)?.tabs ?? []).filter(allow)
-  const groups = NAV.filter((n) => tabsFor(n.group).length > 0)
-  // jump straight to a view from anywhere (Overview drill-in), opening its group
-  const goto = (v: View) => {
-    const g = NAV.find((n) => n.tabs.some((t) => t.value === v))
-    if (g) setGroup(g.group)
-    setView(v)
-  }
+  const open = NAV.filter((t) => !!me && (t.always || holds(me, t.needs)))
+  const goto = (v: View) => setView(v)
 
   return (
     <>
@@ -255,22 +219,19 @@ export default function App() {
                 <LogoMark size={24} /><span className="brand-word">Open Refinery</span>
               </button>
               <nav className="sidebar-nav">
-                {groups.map((n) => (
-                  <div key={n.group} className="sidebar-section">
-                    <div className="sidebar-section-label">{n.group}</div>
-                    {tabsFor(n.group).map((t) => {
-                      const Icon = VIEW_ICON[t.value] ?? GROUP_ICON[n.group] ?? LayoutDashboard
-                      return (
-                        <button key={t.value} title={t.label}
-                                className={`sidebar-item${view === t.value ? ' active' : ''}`}
-                                onClick={() => { setGroup(n.group); setView(t.value) }}>
-                          <Icon size={16} className="sidebar-icon" />
-                          <span className="sidebar-label">{t.label}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                ))}
+                <div className="sidebar-section">
+                  {open.map((t) => {
+                    const Icon = VIEW_ICON[t.value] ?? LayoutDashboard
+                    return (
+                      <button key={t.value} title={t.label}
+                              className={`sidebar-item${view === t.value ? ' active' : ''}`}
+                              onClick={() => setView(t.value)}>
+                        <Icon size={16} className="sidebar-icon" />
+                        <span className="sidebar-label">{t.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
               </nav>
               <div className="sidebar-foot">
                 <button className="sidebar-item" onClick={() => setCollapsed((c) => !c)}
@@ -293,33 +254,23 @@ export default function App() {
               </header>
               <Tabs value={view} onValueChange={(v) => setView(v as View)}>
                 <TabsList className="sr-only">
-                  {tabsFor(group).map((t) => (
+                  {open.map((t) => (
                     <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
                   ))}
                 </TabsList>
-              {/* content order mirrors the nav (entity-dependency) standard */}
-              {/* Set up */}
-              <TabsContent value="connections"><Integrations /></TabsContent>
-              <TabsContent value="repos"><Repos /></TabsContent>
-              {can('users') && <TabsContent value="users"><Users me={me} /></TabsContent>}
-              {can('settings') && <TabsContent value="settings"><Settings /></TabsContent>}
-              {/* Build */}
+              {/* One screen per question somebody has; the tabs inside each are
+                  the ways of answering it. Order mirrors the nav. */}
+              <TabsContent value="overview"><Overview goto={goto} can={can} /></TabsContent>
+              <TabsContent value="work"><WorkView me={me} /></TabsContent>
+              <TabsContent value="approvals">
+                <ApprovalsView me={me} roles={roles} isAdmin={canAudit} />
+              </TabsContent>
               <TabsContent value="pipelines"><Pipelines me={me} /></TabsContent>
               <TabsContent value="rules"><Rules me={me} roles={roles} /></TabsContent>
-              {/* Run */}
-              <TabsContent value="work"><Work /></TabsContent>
-              <TabsContent value="runs"><Runs me={me} /></TabsContent>
-              <TabsContent value="approvals"><Approvals /></TabsContent>
-              <TabsContent value="proposals"><Proposals me={me} roles={roles} isAdmin={canAudit} /></TabsContent>
-              {can('harnesses') && <TabsContent value="harnesses"><Harnesses me={me} roles={roles} /></TabsContent>}
-              {/* Watch */}
-              <TabsContent value="overview"><Overview goto={goto} can={can} /></TabsContent>
-              {can('events') && <TabsContent value="events"><Events isAdmin={canAudit} /></TabsContent>}
-              {can('evidence') && <TabsContent value="evidence"><Evidence me={me} /></TabsContent>}
-              <TabsContent value="usage"><Usage me={me} /></TabsContent>
-              {can('experiments') && <TabsContent value="experiments"><Experiments /></TabsContent>}
-              {can('teams') && <TabsContent value="teams"><Teams /></TabsContent>}
-              <TabsContent value="metrics"><Metrics /></TabsContent>
+              <TabsContent value="connections"><ConnectionsView me={me} roles={roles} /></TabsContent>
+              <TabsContent value="insight"><InsightView me={me} /></TabsContent>
+              {can('audit') && <TabsContent value="audit"><AuditView me={me} isAdmin={canAudit} /></TabsContent>}
+              {can('admin') && <TabsContent value="admin"><AdminView me={me} /></TabsContent>}
               </Tabs>
             </main>
           </div>
@@ -633,8 +584,7 @@ function Repos() {
   const add = () => post('/repositories', { name, git_url: url })
     .then(() => { setName(''); setUrl(''); load() }).catch(fail)
   return (
-    <section className="page">
-      <h2 className="page-title">Repositories</h2>
+    <div className="space-y-3">
       <p className="muted">A repository is a project you ship work into. Each one can say where
         its agent configuration lives — the rules a run is handed before it touches anything.</p>
       <div className="field-form">
@@ -665,7 +615,7 @@ function Repos() {
         </Table>
       </CardContent></Card>
       <RepoSettingsDrawer repo={open} onClose={() => setOpen(null)} onSaved={load} />
-    </section>
+    </div>
   )
 }
 
@@ -771,8 +721,7 @@ function Harnesses({ me, roles }: any) {
     .then((r) => { toast.success(`Authorized ${r.harness.name}`); setUcode(''); load() }).catch(fail)
 
   return (
-    <section className="page">
-      <h2 className="page-title">Harnesses</h2>
+    <div className="space-y-3">
       <p className="muted">Give a coding agent (Claude Code, and more soon) an identity. Its token authenticates the CLI to the platform — and every action it takes is governed by its role under the current enforcement mode, just like a person.</p>
       <Card>
         <CardHeader><CardTitle>Authorize an agent (device flow)</CardTitle></CardHeader>
@@ -839,7 +788,7 @@ function Harnesses({ me, roles }: any) {
           </Table>
         </CardContent>
       </Card>
-    </section>
+    </div>
   )
 }
 
@@ -928,7 +877,7 @@ function Integrations() {
     api(`/credentials/${id}`, { method: 'DELETE' }).then(load).catch(fail)
 
   return (
-    <section className="page">
+    <div className="space-y-3">
       <header><h2>Connections</h2>
         <p className="muted">Your own keys. Every run uses the credentials of whoever started it,
           so a pull request is authored by the person accountable for it.</p></header>
@@ -968,7 +917,7 @@ function Integrations() {
             </Table>
           </CardContent></Card>
       ))}
-    </section>
+    </div>
   )
 }
 
@@ -1074,6 +1023,84 @@ const LAYER_HINT: Record<string, string> = {
 // why a rule that matters names both, and why this screen leads with what each
 // rung can see rather than with a list of rules.
 const LAYERS = ['code', 'harness', 'factory', 'charter']
+
+// A view made of tabs. Seven screens are shaped this way, so the chrome lives
+// in one place: a title, and the sections behind it.
+type Section = { value: string; label: string; show?: boolean; el: any }
+
+export function Sections({ title, blurb, tabs }:
+    { title: string; blurb?: string; tabs: Section[] }) {
+  const open = tabs.filter((t) => t.show !== false)
+  const [tab, setTab] = useState(open[0]?.value ?? '')
+  if (!open.length) return null
+  return (
+    <section className="page">
+      <h2 className="page-title">{title}</h2>
+      {blurb && <p className="muted">{blurb}</p>}
+      <Tabs value={open.some((t) => t.value === tab) ? tab : open[0].value} onValueChange={setTab}>
+        <TabsList>
+          {open.map((t) => <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>)}
+        </TabsList>
+        {open.map((t) => <TabsContent key={t.value} value={t.value}>{t.el}</TabsContent>)}
+      </Tabs>
+    </section>
+  )
+}
+
+const has = (me: any, p: string) => (me?.permissions ?? []).includes(p)
+
+// --- the nine screens -------------------------------------------------------
+// A ticket and its runs are the same object at two zooms, so they are one
+// screen rather than two competing ones.
+function WorkView({ me }: any) {
+  return <Sections title="Work" blurb="Tickets, and the runs that put them through the factory."
+    tabs={[{ value: 'items', label: 'Tickets', el: <Work /> },
+           { value: 'runs', label: 'Runs', el: <Runs me={me} /> }]} />
+}
+
+// Both tabs are "something is waiting for you to sign it". One is a run held at
+// a gate; the other is a change to governance itself.
+function ApprovalsView({ me, roles, isAdmin }: any) {
+  return <Sections title="Approvals" blurb="What is waiting on a person."
+    tabs={[{ value: 'runs', label: 'Held runs', el: <Approvals /> },
+           { value: 'proposals', label: 'Proposals', el: <Proposals me={me} roles={roles} isAdmin={isAdmin} /> }]} />
+}
+
+// What this factory is plugged into: the code it works on, the services it
+// reaches, and the harnesses that call it.
+function ConnectionsView({ me, roles }: any) {
+  return <Sections title="Connections" blurb="What this factory is plugged into."
+    tabs={[{ value: 'services', label: 'Services', el: <Integrations /> },
+           { value: 'repos', label: 'Repositories', el: <Repos /> },
+           { value: 'agents', label: 'Agents', show: has(me, 'run:factory'),
+             el: <Harnesses me={me} roles={roles} /> }]} />
+}
+
+// The numbers. Delivery and cost are the same question asked twice, and an
+// experiment is how you find out whether a change to the factory helped.
+function InsightView({ me }: any) {
+  return <Sections title="Insight" blurb="What the factory did, and what it cost."
+    tabs={[{ value: 'metrics', label: 'Delivery', el: <Metrics /> },
+           { value: 'spend', label: 'Spend', el: <Usage me={me} /> },
+           { value: 'experiments', label: 'Experiments', show: has(me, 'see:operations'),
+             el: <Experiments /> }]} />
+}
+
+// `read:audit` and nothing less — including the time-boxed auditor grant, whose
+// whole point is that this is all it opens.
+function AuditView({ me, isAdmin }: any) {
+  return <Sections title="Audit" blurb="The trail, and what it proves."
+    tabs={[{ value: 'events', label: 'Audit log', el: <Events isAdmin={isAdmin} /> },
+           { value: 'evidence', label: 'Evidence', el: <Evidence me={me} /> }]} />
+}
+
+// Running the place, as opposed to running work through it.
+function AdminView({ me }: any) {
+  return <Sections title="Admin" blurb="Who is here, and how the place is configured."
+    tabs={[{ value: 'users', label: 'People', show: has(me, 'manage:users'), el: <Users me={me} /> },
+           { value: 'teams', label: 'Teams', show: has(me, 'see:operations'), el: <Teams /> },
+           { value: 'settings', label: 'Settings', show: has(me, 'see:operations'), el: <Settings /> }]} />
+}
 
 // One place for "the rules". There were three — Standards (packs), Policies,
 // and My rules — none of which mentioned the ladder, which is the idea the
@@ -1543,8 +1570,7 @@ function Settings() {
   const del = (k: string) => api(`/settings/${encodeURIComponent(k)}`, { method: 'DELETE' })
     .then(load).catch(fail)
   return (
-    <section className="page">
-      <h2 className="page-title">Settings</h2>
+    <div className="space-y-3">
       <Card>
         <CardHeader><CardTitle>Configuration (stored encrypted; values never shown)</CardTitle></CardHeader>
         <CardContent>
@@ -1569,7 +1595,7 @@ function Settings() {
       </Card>
       <Notifications />
       <Webhooks />
-    </section>
+    </div>
   )
 }
 
@@ -1677,8 +1703,7 @@ function Experiments() {
     v === 'significant improvement' ? 'default' : v === 'significant regression' ? 'destructive' : 'secondary'
 
   return (
-    <section className="page">
-      <h2 className="page-title">Evals & experiments</h2>
+    <div className="space-y-3">
       <Card>
         <CardHeader><CardTitle>New experiment (hypothesis → change → before/after evals)</CardTitle></CardHeader>
         <CardContent>
@@ -1740,7 +1765,7 @@ function Experiments() {
           </CardContent>
         </Card>
       )}
-    </section>
+    </div>
   )
 }
 
@@ -1777,8 +1802,7 @@ function Proposals({ me, roles, isAdmin }: any) {
   const canReview = (p: any) => p.status === 'pending' && rank(me.role) >= rank(p.chain[p.current])
 
   return (
-    <section className="page">
-      <h2 className="page-title">Change proposals</h2>
+    <div className="space-y-3">
       <p className="muted">Propose a governance change; it walks the layer's approval chain (accept / deny / feedback).</p>
 
       {isAdmin && (
@@ -1902,7 +1926,7 @@ function Proposals({ me, roles, isAdmin }: any) {
           </Table>
         </CardContent>
       </Card>
-    </section>
+    </div>
   )
 }
 
@@ -2012,8 +2036,7 @@ function Users({ me }: any) {
     }).catch(fail)
 
   return (
-    <section className="page">
-      <h2 className="page-title">Users</h2>
+    <div className="space-y-3">
       <p className="muted">A person holds a set of permissions, and that set is what is checked.
         Presets are a starting point — editing one later does not change anybody already added.</p>
 
@@ -2060,7 +2083,7 @@ function Users({ me }: any) {
 
       <PermissionEditor user={open} catalog={catalog} presets={presets}
         onClose={() => setOpen(null)} onSaved={load} />
-    </section>
+    </div>
   )
 }
 
@@ -2275,8 +2298,7 @@ function Runs({ me }: any) {
     .then(() => { toast.success('Approved'); load() }).catch(fail)
 
   return (
-    <section className="page">
-      <h2 className="page-title">Runs</h2>
+    <div className="space-y-3">
       <p className="muted">Work going through the factory. A run advances on the server, one stage
         at a time, and survives a restart.</p>
       <div className="canvas-bar">
@@ -2328,7 +2350,7 @@ function Runs({ me }: any) {
           </TableBody>
         </Table>
       </CardContent></Card>}
-    </section>
+    </div>
   )
 }
 
@@ -2400,8 +2422,7 @@ function Teams() {
   const teamName = (id: string) => rows.find((t: any) => t.id === id)?.name ?? '—'
 
   return (
-    <section className="page">
-      <h2 className="page-title">Teams</h2>
+    <div className="space-y-3">
       <p className="muted">Group users for cost attribution and live concurrency caps (0 = unlimited concurrent invokes).</p>
       <Card>
         <CardHeader><CardTitle>New team</CardTitle></CardHeader>
@@ -2457,7 +2478,7 @@ function Teams() {
           </Table>
         </CardContent>
       </Card>
-    </section>
+    </div>
   )
 }
 
@@ -2647,8 +2668,7 @@ function Work() {
   const stages = WORK_STAGES.filter((s) => rows.some((w) => w.stage === s))
 
   return (
-    <section className="page">
-      <h2 className="page-title">Work</h2>
+    <div className="space-y-3">
       <p className="muted">Your work, by what its latest run is doing. Select an item for detail.</p>
       <div className="field-form">
         <Field label="Title"><Input className="field" placeholder="what needs doing" value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
@@ -2681,7 +2701,7 @@ function Work() {
       <Drawer open={!!selected} title={selected?.title ?? ''} onClose={() => setSelId(null)}>
         {selected && <WorkRow bare w={selected} onStart={start} />}
       </Drawer>
-    </section>
+    </div>
   )
 }
 
@@ -2744,8 +2764,7 @@ function Approvals() {
   const clear = (runId: string) => post(`/runs/${runId}/approve`, {})
     .then(() => { toast.success('approved'); load() }).catch(fail)
   return (
-    <section className="page">
-      <h2 className="page-title">Waiting on a person</h2>
+    <div className="space-y-3">
       <p className="muted">Runs held at a gate. Clearing one needs <span className="mono">approve:code</span>, and you cannot clear your own.</p>
       <div className="work-list">
         {rows.map((r) => (
@@ -2763,7 +2782,7 @@ function Approvals() {
         ))}
         {!rows.length && <div className="muted">nothing is waiting</div>}
       </div>
-    </section>
+    </div>
   )
 }
 
@@ -2792,8 +2811,7 @@ function Usage({ me }: any) {
        ?? teams.find((t: any) => t.id === b.scope_id)?.name ?? b.scope_id)
 
   return (
-    <section className="page">
-      <h2 className="page-title">Spend</h2>
+    <div className="space-y-3">
       <p className="muted">
         What runs cost, in units the provider reported. A ceiling is checked
         <em> between</em> stages — nothing knows what a turn costs until it is over.
@@ -2880,7 +2898,7 @@ function Usage({ me }: any) {
           </Table>
         </CardContent>
       </Card>
-    </section>
+    </div>
   )
 }
 
@@ -2892,8 +2910,7 @@ function Events({ isAdmin }: any) {
     .then((r) => { toast.success(`Purged ${r.purged} event(s)`); load() }).catch(fail)
   const verify = () => api('/audit/verify').then(setChain).catch(fail)
   return (
-    <section className="page">
-      <h2 className="page-title">Audit trail</h2>
+    <div className="space-y-3">
       <p className="muted">Tamper-evident: every event is hash-chained to the previous. Verify the chain, or export a signed record for auditors.</p>
       <div className="field-form">
         <Button variant="secondary" onClick={verify}>Verify trail</Button>
@@ -2927,7 +2944,7 @@ function Events({ isAdmin }: any) {
           ))}</TableBody>
         </Table>
       </CardContent></Card>
-    </section>
+    </div>
   )
 }
 
@@ -2958,8 +2975,7 @@ function Evidence({ me }: any) {
 
   const badge = (s: string) => s === 'met' ? 'default' : s === 'partial' ? 'secondary' : 'destructive'
   return (
-    <section className="page">
-      <h2 className="page-title">Compliance evidence</h2>
+    <div className="space-y-3">
       <p className="muted">A framework-mapped bundle drawn from the audit trail, policies, versioned history, and attestations — proof that controls are enforced. Backed by the tamper-evident chain.</p>
       <div className="field-form">
         <Field label="Framework">
@@ -3027,7 +3043,7 @@ function Evidence({ me }: any) {
           </CardContent>
         </Card>
       )}
-    </section>
+    </div>
   )
 }
 
@@ -3051,8 +3067,7 @@ function Metrics() {
   ]
   const keyLabel = (p: any, k: string) => p.actor ? (names[k] ?? `${k.slice(0, 8)}…`) : humanKey(k)
   return (
-    <section className="page">
-      <h2 className="page-title">Metrics</h2>
+    <div className="space-y-3">
 
       <Card className="accent-orange">
         <CardHeader><CardTitle>Delivery</CardTitle></CardHeader>
@@ -3121,7 +3136,7 @@ function Metrics() {
       </div>
 
       {improve && <ImproveLane improve={improve} />}
-    </section>
+    </div>
   )
 }
 

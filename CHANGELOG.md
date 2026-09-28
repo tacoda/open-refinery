@@ -9,6 +9,38 @@ All notable changes to open-refinery are documented here. Format follows
 two governed call sites, two workflow engines — and the older half of each
 was what the docs, the dashboard and `doctor` still pointed at.*
 
+### Step 7 — nine screens, flat
+
+#### Changed
+- **Twenty nav entries in four groups became nine, with no groups.** The groups
+  were doing the work a shorter list does better. What competed:
+
+  | was | is |
+  |---|---|
+  | Work · Runs | **Work** — a ticket and its runs are the same object at two zooms |
+  | Approvals · Proposals | **Approvals** — both are "something is waiting for you to sign it" |
+  | Connections · Repos · Agents | **Connections** — what this factory is plugged into |
+  | Metrics · Spend · Experiments | **Insight** — what the factory did, and what it cost |
+  | Audit log · Evidence | **Audit** — `read:audit` and nothing less |
+  | Users · Teams · Settings | **Admin** — running the place, not running work through it |
+  | Standards · Policies · My rules | **Rules** *(step 6)* |
+
+  Overview, Workflows and Rules stand alone. **A developer sees seven**;
+  *Audit* needs `read:audit` and *Admin* needs `manage:users` or
+  `see:operations`.
+- **`Sections`** — one helper for a tabbed screen, since seven are now shaped
+  that way. The fifteen components that became tabs lost their own
+  `<section className="page">` and heading; the screen above them owns both.
+- The sidebar lost its group headers and the `group` state that tracked them.
+  `goto` is `setView` now: with a flat list there is no group to open first.
+
+#### Added
+- Tests pinning the shape: nine entries in order, a developer seeing exactly
+  seven, and `audit` / `admin` opening only to the permissions that carry them.
+  The nav is the product's table of contents, so it is worth a test.
+
+842 backend tests and 24 frontend tests pass.
+
 ### Step 6 — give the ladder a screen, and collapse the rules surfaces onto it
 
 #### Added

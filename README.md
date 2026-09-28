@@ -118,7 +118,8 @@ open-refinery serve              # server + dashboard on port 8000
 
 Open `http://your-host:8000` — on a fresh instance the **dashboard** walks you
 through creating the first admin (no CLI needed), then signs you in. From there,
-manage repos, pipelines, work, oversight, and the audit trail. The UI (React +
+manage repos, pipelines, work, oversight, and the audit trail across **nine
+screens**. The UI (React +
 shadcn/ui, light/dark/auto themes) is bundled in the package — no Node to run.
 
 Prefer the CLI to seed the admin? `open-refinery create-admin --email you@x.dev`
