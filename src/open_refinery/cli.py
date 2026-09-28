@@ -495,21 +495,21 @@ def _migrate(args: argparse.Namespace) -> int:
 def _seed(args: argparse.Namespace) -> int:
     import sys
 
-    from .seeds import AlreadySeeded, seed
+    from .seeds import DEFAULT_OWNER, AlreadySeeded, seed
     from .store import DEFAULT_DATABASE_URL, connect
 
     conn = connect(os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL))
     try:
-        data = seed(conn)
+        data = seed(conn, owner_email=args.owner or DEFAULT_OWNER)
     except AlreadySeeded:
         print("database already has users; seed needs a fresh DATABASE_URL", file=sys.stderr)
         return 1
     from .seeds import PASSWORDS
 
     print("seeded sample data.\n")
-    print(f"  {'role':<9} {'email':<24} {'password':<10} api token")
+    print(f"  {'account':<9} {'email':<28} {'password':<10} api token")
     for role, (user, token) in data["users"].items():
-        print(f"  {role:<9} {user.email:<24} {PASSWORDS[role]:<10} {token}")
+        print(f"  {role:<9} {user.email:<28} {PASSWORDS[role]:<10} {token}")
     print()
     print(f"  {len(data['repositories'])} repo · {len(data['work_items'])} work items · "
           f"{len(data['pipelines'])} pipeline")
@@ -669,6 +669,9 @@ def main(argv: list[str] | None = None) -> int:
     admin.set_defaults(func=_create_admin)
 
     seed = sub.add_parser("seed", help="populate the database with sample data (dev)")
+    seed.add_argument("--owner", default=None,
+                      help="email for the all-permissions owner account "
+                           "(default: owner@example.com)")
     seed.set_defaults(func=_seed)
 
     migrate = sub.add_parser("migrate", help="migrate the schema up (default) or down to --to N")

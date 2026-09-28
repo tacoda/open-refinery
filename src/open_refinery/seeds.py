@@ -2,7 +2,9 @@
 
 `seed(conn)` populates an empty store with the three default-role users, one
 repository, and a couple of work items — just enough to sign in and see the app
-working. Everything richer (standards, governed artifacts) ships as **packs**,
+working. `owner_email` adds a fourth account holding **every** permission, for
+dogfooding against a live account: testing the whole product means reaching all
+of it, and no preset does. Everything richer (standards, governed artifacts) ships as **packs**,
 enabled on demand. Returns the created objects and the users' tokens so a caller
 can sign in.
 
@@ -22,17 +24,30 @@ from .work_items import create_work_item
 # Dev passwords, fixed and obvious. `seed` is dev/eval only — a production
 # install goes to the setup wizard — and a developer who cannot sign in to the
 # thing they just seeded has been given a database, not an environment.
-PASSWORDS = {"admin": "admin", "platform": "platform", "developer": "dev"}
+PASSWORDS = {"admin": "admin", "platform": "platform", "developer": "dev",
+             "owner": "owner"}
+
+# Deliberately generic. A real address here would ship in the package and turn
+# up in every contributor's dev database — pass `--owner you@example.com`
+# (or `make seed OWNER=…`) to seed your own.
+DEFAULT_OWNER = "owner@example.com"
 
 
 class AlreadySeeded(Exception):
     """Raised when seeding a store that already has users."""
 
 
-def seed(conn: sqlite3.Connection) -> dict:
+def seed(conn: sqlite3.Connection, *, owner_email: str = DEFAULT_OWNER) -> dict:
     if count_users(conn) > 0:
         raise AlreadySeeded("seed expects an empty database")
 
+    # The owner holds everything, the way `POST /setup`'s first account does.
+    # A preset cannot stand in: no single one reaches every screen, which is the
+    # point of an account you dogfood with.
+    from .authority import PERMISSIONS
+
+    owner, owner_tok = create_user(conn, owner_email, PASSWORDS["owner"], "admin",
+                                   permissions=list(PERMISSIONS))
     admin, admin_tok = create_user(conn, "admin@example.com", PASSWORDS["admin"], "admin")
     platform, platform_tok = create_user(conn, "platform@example.com",
                                          PASSWORDS["platform"], "platform")
@@ -56,6 +71,7 @@ def seed(conn: sqlite3.Connection) -> dict:
 
     return {
         "users": {
+            "owner": (owner, owner_tok),
             "admin": (admin, admin_tok),
             "platform": (platform, platform_tok),
             "developer": (dev, dev_tok),

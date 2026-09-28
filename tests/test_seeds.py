@@ -14,7 +14,7 @@ def test_seed_populates_a_minimal_dataset(monkeypatch):
     conn = connect("sqlite:///:memory:")
     data = seed(conn)
 
-    assert set(data["users"]) == {"admin", "platform", "developer"}
+    assert set(data["users"]) == {"owner", "admin", "platform", "developer"}
     assert all(tok for _, tok in data["users"].values())
     items = list_work_items(conn)
     assert len(items) == 2
@@ -47,3 +47,25 @@ def test_seed_leaves_a_runnable_environment(monkeypatch):
     item = list_work_items(conn)[0]
     run = ps.start_run(conn, item.id, data["pipelines"][0], item.repo_id, item.owner_id)
     assert run.stage == "prepare"
+
+
+def test_the_owner_account_holds_every_permission(monkeypatch):
+    """A preset cannot stand in for it: no single one reaches every screen,
+    which is the point of an account you dogfood the whole product with."""
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+    from open_refinery.authority import PERMISSIONS
+    from open_refinery.seeds import DEFAULT_OWNER
+
+    conn = connect("sqlite:///:memory:")
+    owner, _ = seed(conn)["users"]["owner"]
+    assert owner.email == DEFAULT_OWNER
+    assert set(owner.permissions) == set(PERMISSIONS)
+
+
+def test_the_owner_email_is_yours_to_choose(monkeypatch):
+    """The default is deliberately generic: a real address here would ship in
+    the package and turn up in every contributor's dev database."""
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+    conn = connect("sqlite:///:memory:")
+    owner, _ = seed(conn, owner_email="me@example.org")["users"]["owner"]
+    assert owner.email == "me@example.org"

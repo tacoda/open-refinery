@@ -62,9 +62,10 @@ reseed: ## Drop devtest.db and seed it again (seed needs an empty database)
 	@rm -f $(CURDIR)/devtest.db $(CURDIR)/devtest.db-shm $(CURDIR)/devtest.db-wal
 	@$(MAKE) --no-print-directory seed
 
-seed: ## Seed the local devtest.db with sample data + login credentials
+seed: ## Seed the local devtest.db with sample data + login credentials (OWNER=you@example.com)
 	@test -f .env || { echo "no .env — copy .env.example to .env and set SECRET_KEY"; exit 1; }
-	set -a; . ./.env; set +a; DATABASE_URL=$(DEV_DB) uv run open-refinery seed
+	set -a; . ./.env; set +a; DATABASE_URL=$(DEV_DB) uv run open-refinery seed \
+		$(if $(OWNER),--owner $(OWNER),)
 
 demo: ## Produce one artifact and print its provenance record
 	uv run open-refinery demo
