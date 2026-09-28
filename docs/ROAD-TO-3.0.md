@@ -22,9 +22,9 @@ This is the cleanup that follows it.*
 | 2 | Fold `Process` into `Pipeline`; a work item's stage is derived from its runs | **done** |
 | 3 | Put metering and a spend ceiling back on the run | **done** |
 | 4 | Scope the content filter to egress | **done** |
-| 5 | Rebuild Overview and Metrics on `Run` / `RunStep` | in progress |
-| 6 | Give the ladder a UI; collapse the three rules surfaces into it | |
-| 7 | Collapse the navigation to ~8 views | |
+| 5 | Rebuild Overview and Metrics on `Run` / `RunStep` | **done** |
+| 6 | Give the ladder a UI; collapse the three rules surfaces into it | **done** |
+| 7 | Collapse the navigation to ~8 views | next |
 | 8 | One authorization model — policies key off permissions, not `role_rank` | |
 | 9 | Publish the feature list and the domain glossary | |
 

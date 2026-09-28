@@ -13,7 +13,7 @@ vi.mock('./api', () => ({
   oauthLoginUrl: () => '',
 }))
 
-import { Drawer, EmptyRow, Overview, Packs, Pipeline, Toggle, human, ruleSentence } from './App'
+import { Drawer, EmptyRow, Ladder, Overview, Packs, Pipeline, Toggle, human, ruleSentence } from './App'
 
 const ROLES = [
   { name: 'developer', rank: 1 },
@@ -189,5 +189,65 @@ describe('human (a duration a person can read)', () => {
     expect(human(600)).toBe('10m')
     expect(human(7200)).toBe('2h')
     expect(human(432000)).toBe('5d')
+  })
+})
+
+describe('Ladder (where a rule is carried)', () => {
+  beforeEach(() => { api.mockReset() })
+
+  const VIEW = {
+    rungs: [
+      { rung: 0, sees: 'prose in the charter — sees nothing, and asks', ours: true },
+      { rung: 1, sees: 'the tool grant — function ids, before any call', ours: true },
+      { rung: 2, sees: 'a hook on the call — the arguments, before the write lands', ours: false },
+      { rung: 3, sees: 'a callback in the turn', ours: true },
+      { rung: 4, sees: 'the delivery gate — the finished diff', ours: true },
+      { rung: 5, sees: 'CI — the merged tree, after everybody left', ours: false },
+    ],
+    constraints: [
+      { id: 'r1', text: 'money is Decimal', layer: 'code', rung: 0, enabled: true, mechanical: false, withholds: [] },
+      { id: 'r2', text: 'no secrets in a diff', layer: 'code', rung: 4, enabled: true, mechanical: true, predicate: 'no-secrets-in-diff', withholds: [] },
+    ],
+    capabilities: [],
+    withheld: ['execute'],
+    predicates: [{ name: 'no-secrets-in-diff', about: 'refuses a diff carrying a credential', sees: 'diff' }],
+  }
+  const me = { role: 'developer', permissions: ['approve:code'] }
+
+  it('shows every rung, what it sees, and which are not ours', async () => {
+    api.mockResolvedValue(VIEW)
+    render(<Ladder me={me} />)
+    await waitFor(() => expect(screen.getByText(/rung 0 ·/)).toBeInTheDocument())
+    expect(screen.getByText(/rung 5 ·/)).toBeInTheDocument()
+    // rung 2 is the target repo's commit hook, rung 5 is its CI
+    expect(screen.getAllByText('not ours')).toHaveLength(2)
+  })
+
+  it('separates a rule that asks from one that is enforced', async () => {
+    api.mockResolvedValue(VIEW)
+    render(<Ladder me={me} />)
+    await waitFor(() => expect(screen.getByText('money is Decimal')).toBeInTheDocument())
+    expect(screen.getByText('asks')).toBeInTheDocument()          // rung 0, prose
+    expect(screen.getByText('enforced')).toBeInTheDocument()      // rung 4, predicate
+  })
+
+  it('shows the net tool grant, which is what rung 1 produces', async () => {
+    api.mockResolvedValue(VIEW)
+    render(<Ladder me={me} />)
+    await waitFor(() => expect(screen.getByText('The net tool grant')).toBeInTheDocument())
+    expect(screen.getByText('execute')).toBeInTheDocument()
+  })
+
+  it('offers Move only for a layer you may approve', async () => {
+    api.mockResolvedValue({
+      ...VIEW,
+      constraints: [
+        { id: 'r1', text: 'mine', layer: 'code', rung: 0, enabled: true, mechanical: false, withholds: [] },
+        { id: 'r3', text: 'not mine', layer: 'charter', rung: 0, enabled: true, mechanical: false, withholds: [] },
+      ],
+    })
+    render(<Ladder me={me} />)                                    // holds approve:code only
+    await waitFor(() => expect(screen.getByText('mine')).toBeInTheDocument())
+    expect(screen.getAllByRole('button', { name: 'Move' })).toHaveLength(1)
   })
 })

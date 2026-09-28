@@ -9,6 +9,37 @@ All notable changes to open-refinery are documented here. Format follows
 two governed call sites, two workflow engines — and the older half of each
 was what the docs, the dashboard and `doctor` still pointed at.*
 
+### Step 6 — give the ladder a screen, and collapse the rules surfaces onto it
+
+#### Added
+- **A ladder view.** `/ladder` appeared **zero times** in the dashboard: the
+  sharpest idea in the product — rung 0 prose versus rung 4 predicate — was
+  reachable only over the API and the CLI. The screen leads with **what each
+  rung can see**, because that is the decision somebody is actually making:
+  - every rung, in order, with the rules sitting on it and whether each one
+    **asks** (prose) or is **enforced** (a predicate, or a rung-1 withholding);
+  - the two rungs that are **not ours** — rung 2 is the target repository's own
+    commit hook, rung 5 is its CI — marked as such rather than quietly missing;
+  - **the net tool grant**, which is what every rung-1 rule produces together;
+  - the **predicate catalog**, so "what could this rule be made mechanical with"
+    is a list rather than a question;
+  - **moving a rule**, over the pure preview: it names the direction, what the
+    new rung would see, whether a predicate is required, and whether a second
+    signer is. A demotion removes enforcement, so it asks for one.
+
+#### Changed
+- **Three rules surfaces became one.** *Standards* (packs), *Policies* and *My
+  rules* were three nav entries for "the rules", none of which mentioned the
+  ladder — the idea the other three are instances of. They are now tabs behind
+  **Rules**, with the ladder first. 19 nav entries → **17**.
+- The Policies tab says what it is: role-keyed allow/deny artifacts evaluated by
+  `policies.enforce`, **a different mechanism from the ladder**. A policy gates
+  an action *name*; a rung carries a rule at a *place*. Conflating them is the
+  confusion this screen existed to create, and step 8 is where the two
+  authorization models are reconciled.
+
+842 backend tests and 20 frontend tests pass.
+
 ### Step 5 — rebuild Overview and Metrics on the runs
 
 #### Changed

@@ -26,7 +26,7 @@ const VIEW_ICON: Record<string, any> = {
   // Set up
   connections: Plug, repos: GitBranch, users: UsersIcon, settings: SettingsIcon,
   // Build
-  pipelines: Workflow, packs: Package, policies: Shield,
+  pipelines: Workflow, rules: Shield,
   // Run
   work: ListChecks, runs: Activity, approvals: CheckSquare,
   proposals: GitPullRequest, harnesses: Bot,
@@ -40,7 +40,7 @@ const GROUP_ICON: Record<string, any> = {
 }
 
 type View = 'overview' | 'connections' | 'repos' | 'users'
-  | 'pipelines' | 'packs' | 'policies'
+  | 'pipelines' | 'rules'
   | 'work' | 'runs' | 'approvals' | 'proposals' | 'harnesses'
   | 'events' | 'metrics' | 'evidence' | 'experiments' | 'usage'
   | 'teams' | 'settings' | 'myrules'
@@ -62,8 +62,7 @@ const NAV: { group: string; tabs: NavTab[] }[] = [
     { value: 'settings', label: 'Settings', needs: ['see:operations'] } ] },
   { group: 'Build', tabs: [
     { value: 'pipelines', label: 'Workflows', always: true },       // read open; edit gated
-    { value: 'packs', label: 'Standards', always: true },
-    { value: 'policies', label: 'Policies', needs: ['approve:charter', 'see:operations'] } ] },
+    { value: 'rules', label: 'Rules', always: true } ] },
   { group: 'Run', tabs: [
     { value: 'work', label: 'Work', always: true },
     { value: 'runs', label: 'Runs', always: true },
@@ -77,8 +76,7 @@ const NAV: { group: string; tabs: NavTab[] }[] = [
     { value: 'usage', label: 'Spend', always: true },
     { value: 'experiments', label: 'Experiments', needs: ['see:operations'] },
     { value: 'teams', label: 'Teams', needs: ['see:operations'] },
-    { value: 'metrics', label: 'Metrics', always: true },
-    { value: 'myrules', label: 'My rules', always: true } ] },
+    { value: 'metrics', label: 'Metrics', always: true } ] },
 ]
 
 // Holding ANY of a tab's permissions opens it. The backend enforces the same
@@ -307,8 +305,7 @@ export default function App() {
               {can('settings') && <TabsContent value="settings"><Settings /></TabsContent>}
               {/* Build */}
               <TabsContent value="pipelines"><Pipelines me={me} /></TabsContent>
-              <TabsContent value="packs"><Packs me={me} roles={roles} /></TabsContent>
-              {can('policies') && <TabsContent value="policies"><Policies /></TabsContent>}
+              <TabsContent value="rules"><Rules me={me} roles={roles} /></TabsContent>
               {/* Run */}
               <TabsContent value="work"><Work /></TabsContent>
               <TabsContent value="runs"><Runs me={me} /></TabsContent>
@@ -323,7 +320,6 @@ export default function App() {
               {can('experiments') && <TabsContent value="experiments"><Experiments /></TabsContent>}
               {can('teams') && <TabsContent value="teams"><Teams /></TabsContent>}
               <TabsContent value="metrics"><Metrics /></TabsContent>
-              <TabsContent value="myrules"><MyRules me={me} /></TabsContent>
               </Tabs>
             </main>
           </div>
@@ -1073,6 +1069,256 @@ const LAYER_HINT: Record<string, string> = {
 
 // Read-only governance view for developers: the rules that actually apply to
 // them, in plain language. No authoring — legibility, not control.
+// The ladder. Six rungs, and a rung is a PLACE rather than a strictness: rung 3
+// sees a call and never a diff, rung 4 sees a diff and never the call. Which is
+// why a rule that matters names both, and why this screen leads with what each
+// rung can see rather than with a list of rules.
+const LAYERS = ['code', 'harness', 'factory', 'charter']
+
+// One place for "the rules". There were three — Standards (packs), Policies,
+// and My rules — none of which mentioned the ladder, which is the idea the
+// other three are instances of. The ladder leads; the rest are tabs behind it.
+export function Rules({ me, roles }: any) {
+  const [tab, setTab] = useState('ladder')
+  const canPolicies = (me?.permissions ?? []).some(
+    (p: string) => p === 'approve:charter' || p === 'see:operations')
+  return (
+    <section className="page">
+      <h2 className="page-title">Rules</h2>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="ladder">The ladder</TabsTrigger>
+          <TabsTrigger value="mine">What applies to me</TabsTrigger>
+          <TabsTrigger value="standards">Standards</TabsTrigger>
+          {canPolicies && <TabsTrigger value="policies">Policies</TabsTrigger>}
+        </TabsList>
+        <TabsContent value="ladder"><Ladder me={me} /></TabsContent>
+        <TabsContent value="mine"><MyRules me={me} /></TabsContent>
+        <TabsContent value="standards"><Packs me={me} roles={roles} /></TabsContent>
+        {canPolicies && <TabsContent value="policies"><Policies /></TabsContent>}
+      </Tabs>
+    </section>
+  )
+}
+
+export function Ladder({ me }: { me: any }) {
+  const [v, setV] = useState<any>(null)
+  const load = () => api('/ladder').then(setV).catch(fail)
+  useEffect(() => { load() }, [])
+
+  const [text, setText] = useState(''), [layer, setLayer] = useState('code')
+  const [rung, setRung] = useState('0'), [side, setSide] = useState('constraint')
+  const [predicate, setPredicate] = useState(''), [scope, setScope] = useState('*')
+  const [withholds, setWithholds] = useState('')
+
+  const mayApprove = (l: string) => (me?.permissions ?? []).includes(`approve:${l}`)
+  const add = () => post('/ladder', {
+    text, layer, rung: Number(rung) || 0, side, predicate, scope,
+    withholds: withholds.split(',').map((w) => w.trim()).filter(Boolean),
+  }).then(() => { setText(''); setWithholds(''); load(); toast.success('On the ladder') }).catch(fail)
+
+  // moving a rule — the preview is pure, so asking what it would take is free
+  const [moving, setMoving] = useState<any>(null)
+  const [to, setTo] = useState('0'), [plan, setPlan] = useState<any>(null)
+  const [movePred, setMovePred] = useState(''), [signer, setSigner] = useState('')
+  const openMove = (r: any) => { setMoving(r); setTo(String(r.rung)); setPlan(null); setMovePred(r.predicate ?? ''); setSigner('') }
+  const preview = (rungTo: string) => {
+    setTo(rungTo)
+    api(`/ladder/${moving.id}/move?to=${Number(rungTo) || 0}`).then(setPlan).catch(fail)
+  }
+  const doMove = () => post(`/ladder/${moving.id}/move`, {
+    to: Number(to) || 0, predicate: movePred, second_signer: signer,
+  }).then(() => { setMoving(null); load(); toast.success('Moved') }).catch(fail)
+
+  if (!v) return null
+  const rules = [...(v.constraints ?? []), ...(v.capabilities ?? [])]
+  const onRung = (n: number) => rules.filter((r: any) => r.rung === n && r.enabled)
+
+  return (
+    <div className="space-y-3">
+      <p className="muted">
+        Where a rule is <em>carried</em>. “Money is Decimal” in a markdown file is
+        rung&nbsp;0, and prose is a request; the same sentence as a predicate that
+        refuses the write is a guarantee. <strong>A rung is a place, not a
+        strictness</strong> — rung&nbsp;3 sees a call and never a diff, rung&nbsp;4
+        sees a diff and never the call, so a rule that matters names both.
+      </p>
+
+      {(v.rungs ?? []).map((r: any) => {
+        const here = onRung(r.rung)
+        return (
+          <Card key={r.rung} className={r.ours ? '' : 'muted-card'}>
+            <CardHeader>
+              <CardTitle>
+                rung {r.rung} · {r.sees}
+                {!r.ours && <> <Badge variant="outline">not ours</Badge></>}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!r.ours && (
+                <p className="muted">
+                  {r.rung === 2
+                    ? 'The target repository’s own commit hook carries this one.'
+                    : 'CI carries this one — after everybody has left, which is the wrong place for anything catchable earlier.'}
+                </p>
+              )}
+              {here.length === 0
+                ? <span className="muted">nothing here</span>
+                : here.map((rule: any) => (
+                    <div key={rule.id} className="work-head">
+                      <Badge variant={rule.mechanical ? 'default' : 'secondary'}>
+                        {rule.mechanical ? 'enforced' : 'asks'}
+                      </Badge>
+                      <Badge variant="outline">{rule.layer}</Badge>
+                      <span>{rule.text}</span>
+                      {rule.predicate && <span className="mono muted">{rule.predicate}</span>}
+                      {rule.withholds?.length > 0 && <span className="mono muted">−{rule.withholds.join(' −')}</span>}
+                      {mayApprove(rule.layer) && (
+                        <Button variant="outline" size="sm" onClick={() => openMove(rule)}>Move</Button>
+                      )}
+                    </div>
+                  ))}
+            </CardContent>
+          </Card>
+        )
+      })}
+
+      <Card>
+        <CardHeader><CardTitle>The net tool grant</CardTitle></CardHeader>
+        <CardContent>
+          <p className="muted">
+            Rung 1 is subtraction: what a phase is never given, it cannot misuse.
+            This is what every rule at rung 1 withholds, together.
+          </p>
+          <div className="toolbar">
+            {(v.withheld ?? []).length
+              ? v.withheld.map((w: string) => <Badge key={w} variant="destructive">{w}</Badge>)
+              : <span className="muted">nothing is withheld</span>}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Predicates a rule can be made mechanical with</CardTitle></CardHeader>
+        <CardContent>
+          <p className="muted">
+            Rungs 2, 3 and 4 need code. A rule outside this set stays at rung 0
+            until somebody writes one — which is the honest answer, because
+            storing it at a rung nothing enforces would make it <em>look</em> protected.
+          </p>
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>Name</TableHead><TableHead>Sees</TableHead><TableHead>About</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              <EmptyRow show={!(v.predicates ?? []).length} cols={3}>none registered</EmptyRow>
+              {(v.predicates ?? []).map((pr: any) => (
+                <TableRow key={pr.name}>
+                  <TableCell className="mono">{pr.name}</TableCell>
+                  <TableCell><Badge variant="outline">{pr.sees}</Badge></TableCell>
+                  <TableCell className="muted">{pr.about}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Put a rule on the ladder</CardTitle></CardHeader>
+        <CardContent>
+          <p className="muted">Adding one needs <span className="mono">approve:</span>the layer it is about.</p>
+          <div className="field-form">
+            <Field label="Rule"><Input className="field" style={{ width: '22rem' }} placeholder="money is Decimal"
+              value={text} onChange={(e) => setText(e.target.value)} /></Field>
+            <Field label="Side">
+              <Select value={side} onValueChange={(x) => setSide(x ?? 'constraint')}>
+                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="constraint">constraint (withholds)</SelectItem>
+                  <SelectItem value="capability">capability (grants)</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Layer">
+              <Select value={layer} onValueChange={(x) => setLayer(x ?? 'code')}>
+                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                <SelectContent>{LAYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            <Field label="Rung">
+              <Select value={rung} onValueChange={(x) => setRung(x ?? '0')}>
+                <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(v.rungs ?? []).filter((r: any) => r.ours).map((r: any) =>
+                    <SelectItem key={r.rung} value={String(r.rung)}>{r.rung}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Predicate">
+              <Select value={predicate} onValueChange={(x) => setPredicate(x ?? '')}>
+                <SelectTrigger className="field"><SelectValue placeholder="none" /></SelectTrigger>
+                <SelectContent>{(v.predicates ?? []).map((pr: any) =>
+                  <SelectItem key={pr.name} value={pr.name}>{pr.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            <Field label="Withholds"><Input className="field" placeholder="execute, write_file"
+              value={withholds} onChange={(e) => setWithholds(e.target.value)} /></Field>
+            <Field label="Scope"><Input className="field" value={scope}
+              onChange={(e) => setScope(e.target.value)} /></Field>
+            <Button onClick={add} disabled={!text || !mayApprove(layer)}>Add</Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Drawer open={!!moving} title={moving?.text ?? ''} onClose={() => setMoving(null)}>
+        <div className="space-y-3">
+          <p className="muted">
+            Promotion and demotion are not symmetric, and that asymmetry is the
+            safety property. A promotion adds enforcement. A <strong>demotion
+            removes</strong> it, so it needs a second signer and the factory never
+            performs one itself.
+          </p>
+          <Field label="Carry it at">
+            <Select value={to} onValueChange={(x) => preview(x ?? '0')}>
+              <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {(v.rungs ?? []).filter((r: any) => r.ours).map((r: any) =>
+                  <SelectItem key={r.rung} value={String(r.rung)}>rung {r.rung} — {r.sees}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Field>
+          {plan && (
+            <Card>
+              <CardContent>
+                <div className="kv-row"><span>Direction</span>
+                  <b><Badge variant={plan.direction === 'demotion' ? 'destructive' : 'secondary'}>{plan.direction}</Badge></b></div>
+                <div className="kv-row"><span>It would see</span><b>{plan.sees}</b></div>
+                {plan.needs_predicate && (
+                  <Field label="Predicate (required at this rung)">
+                    <Select value={movePred} onValueChange={(x) => setMovePred(x ?? '')}>
+                      <SelectTrigger className="field"><SelectValue placeholder="pick one" /></SelectTrigger>
+                      <SelectContent>{(v.predicates ?? []).map((pr: any) =>
+                        <SelectItem key={pr.name} value={pr.name}>{pr.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </Field>
+                )}
+                {plan.needs_second_signer && (
+                  <Field label="Second signer (email)">
+                    <Input className="field" placeholder="somebody who holds approve for this layer"
+                      value={signer} onChange={(e) => setSigner(e.target.value)} />
+                  </Field>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          <Button onClick={doMove} disabled={!plan}>Move it</Button>
+        </div>
+      </Drawer>
+    </div>
+  )
+}
+
 export function MyRules({ me }: { me: any }) {
   const { rows } = useList('/policies')
   const applies = rows.filter((p: any) => p.kind === 'rule' && (p.role === '*' || p.role === me.role))
@@ -1094,12 +1340,14 @@ export function MyRules({ me }: { me: any }) {
     </Card>
   )
   return (
-    <section className="page">
-      <h2 className="page-title">Rules that apply to me</h2>
-      <p className="muted">The governance rules in effect for your role ({me.role}). Read-only — proposing changes is a platform/admin action.</p>
+    <div className="space-y-3">
+      <p className="muted">
+        The rules in effect for your role ({me.role}). Read-only — putting one on
+        the ladder needs <span className="mono">approve:</span>the layer it is about.
+      </p>
       <Section title="What I may not do" items={denies} tone="destructive" />
       <Section title="What I'm explicitly allowed" items={allows} tone="secondary" />
-    </section>
+    </div>
   )
 }
 
@@ -1128,8 +1376,12 @@ function Policies() {
     .then(setEffective).catch(fail)
 
   return (
-    <section className="page">
-      <h2 className="page-title">Policies</h2>
+    <div className="space-y-3">
+      <p className="muted">
+        Role-keyed allow/deny artifacts, evaluated by <span className="mono">policies.enforce</span>.
+        These are a different mechanism from the ladder: a policy gates an
+        <em> action name</em>, a rung carries a rule at a <em>place</em>.
+      </p>
       <Card>
         <CardHeader><CardTitle>Add a governed artifact (rule / skill / command / agent)</CardTitle></CardHeader>
         <CardContent>
@@ -1271,7 +1523,7 @@ function Policies() {
           {hist !== null && !hist.length && <span className="muted">No changes recorded yet.</span>}
         </div>
       </Drawer>
-    </section>
+    </div>
   )
 }
 
@@ -1669,8 +1921,7 @@ export function Packs({ me, roles }: any) {
   const enabledCount = rows.filter((p: any) => p.enabled).length
 
   return (
-    <section className="page">
-      <h2 className="page-title">Pack marketplace</h2>
+    <div className="space-y-3">
       <p className="muted">
         Browse starter bundles of standards & governed artifacts — the modern software / platform / team-workflow
         canon. Enable what fits your team ({enabledCount}/{rows.length} enabled).
@@ -1734,7 +1985,7 @@ export function Packs({ me, roles }: any) {
           </div>
         )}
       </Drawer>
-    </section>
+    </div>
   )
 }
 

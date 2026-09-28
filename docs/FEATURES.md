@@ -71,6 +71,7 @@ and only the layer's owner signs it.
 |---|---|
 | Who am I, what do I hold | `GET /me` · `GET /users/{id}/permissions` (your own) |
 | Read the vocabulary | `GET /permissions` · `GET /permissions/approvers/{layer}` · `GET /roles` |
+| Read the rules, and where each is carried | `GET /ladder` · `GET /ladder/{id}/move` |
 | Read the shared workflow | `GET /pipelines` |
 | Your own connections | `GET|POST|PUT|DELETE /credentials` · `GET /credentials/catalog` |
 | Your own repos and work | `GET /repositories` · `GET /work-items` · `GET /metrics` |
@@ -98,6 +99,14 @@ returned to anyone at any permission.
 |---|---|
 | The stage graph | `POST /pipelines` |
 | Ceilings on what runs may spend | `POST|DELETE /budgets` |
+
+### `approve:<layer>` — a rule is the layer owner's
+
+| Feature | Routes |
+|---|---|
+| Put a rule on the ladder | `POST /ladder` |
+| Move it to another rung | `POST /ladder/{id}/move` — a demotion needs a second signer |
+| Turn one off | `DELETE /ladder/{id}` — refused above rung 0 |
 
 ### `approve:charter` — the standards are the lead's
 
