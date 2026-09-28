@@ -55,8 +55,8 @@ needs.
 
 | Feature | What it does |
 |---|---|
-| **Audit chain** | Append-only, hash-chained and **keyed** — each link an HMAC under a subkey of `SECRET_KEY`, so forging an event and recomputing the chain does not work without the key. Verify, export (JSON/CSV), purge with a signed **checkpoint** explaining the gap. |
-| **Auditor grants** | A time-boxed, read-only token that reads the trail and evidence and mutates nothing. |
+| **Audit chain** | Append-only, hash-chained and **keyed** — each link an HMAC under a subkey of `SECRET_KEY`, so forging an event and recomputing the chain does not work without the key. Verify and export (JSON/CSV) with `read:audit`; **retention (purge) is `manage:users`**, and leaves a signed **checkpoint** explaining the gap. |
+| **Auditor grants** | A time-boxed, read-only token for an external auditor with no account: it reads the trail and the evidence packs and mutates nothing. Minting and revoking one is `manage:users` — handing out access is the admin act, and a grant that could mint another would never expire. |
 | **Evidence packs** | The trail mapped onto `soc2` · `iso27001` · `hipaa` · `gdpr`, control by control. |
 | **Metrics** | Delivery — runs, landed/closed/failed, `landed_pct` over *finished* runs, time to a pull request and to an outcome — plus per-stage health, worst first, and work by stage. |
 | **Spend** | What each run cost, and what is used against every ceiling. |
@@ -200,17 +200,23 @@ returned to anyone at any permission.
 | Add people, set permissions | `POST /users` · `PUT /users/{id}/permissions` |
 | Define presets | `PUT|DELETE /presets/{name}` |
 | Who approves governance changes | `POST /approval-workflows` |
+| Lend read-only access out | `POST|DELETE /auditor-grants` |
+| Retention | `POST /audit/purge` |
 
 ### `read:audit` — admin and the time-boxed auditor grant
+
+**Reading the record and administering it are different permissions.** Every
+route here is a GET: retention and minting a grant are `manage:users` above,
+because a read-only auditor that could purge the trail or issue itself a fresh
+credential is not read-only.
 
 | Feature | Routes |
 |---|---|
 | The trail | `GET /events` |
 | Prove it was not altered | `GET /audit/verify` · `GET /audit/export` · `/audit/export.csv` |
-| Retention | `POST /audit/purge` |
 | Compliance packs | `GET /evidence` · `GET /evidence/frameworks` |
 | The improve lane | `GET /improve` · `GET /improve/proposals` |
-| Lend read-only access out | `/auditor-grants` |
+| Who is holding a grant | `GET /auditor-grants` |
 
 ---
 

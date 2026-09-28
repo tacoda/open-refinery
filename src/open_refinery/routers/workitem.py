@@ -61,8 +61,15 @@ def get_events(q: EventFilter = Depends(), session: Session = Depends(get_sessio
 
 @router.post("/audit/purge")
 def purge_audit(days: int, session: Session = Depends(get_session),
-                _: User = Depends(reads_audit)):
-    return {"purged": purge_events(session, days)}  # retention: drop events older than `days`
+                _: User = Depends(manages_users)):
+    """Retention: drop events older than `days`, leaving a signed checkpoint.
+
+    **`manage:users`, not `read:audit`.** Destroying the record is an
+    administrative act, and it was guarded by the permission that reads the
+    record — which handed it to the time-boxed auditor grant, the one principal
+    whose whole purpose is to read and change nothing.
+    """
+    return {"purged": purge_events(session, days)}
 
 @router.get("/audit/verify")
 def audit_verify(session: Session = Depends(get_session), _: User = Depends(oversight)):
@@ -96,13 +103,16 @@ def get_auditor_grants(session: Session = Depends(get_session),
 
 @router.post("/auditor-grants", status_code=201)
 def add_auditor_grant(body: NewAuditor, session: Session = Depends(get_session),
-                      user: User = Depends(reads_audit)):
+                      user: User = Depends(manages_users)):
+    """Mint a time-boxed read-only credential. **`manage:users`** — handing
+    somebody access is the admin act, and under `read:audit` a grant could mint
+    itself a fresh one and never expire."""
     grant, token = mint_auditor(session, body.label, user.id, ttl_days=body.ttl_days)
     return {"grant": auditor_view(grant), "token": token}  # shown once
 
 @router.delete("/auditor-grants/{grant_id}")
 def remove_auditor_grant(grant_id: str, session: Session = Depends(get_session),
-                         _: User = Depends(reads_audit)):
+                         _: User = Depends(manages_users)):
     revoke_auditor(session, grant_id)
     return {"status": "revoked"}
 

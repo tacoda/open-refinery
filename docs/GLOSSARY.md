@@ -160,6 +160,22 @@ commit.
 
 ## The record
 
+### Three things called "audit"
+
+The word does three jobs here. Keeping them apart is the difference between
+"who may read the record" and "who may destroy it".
+
+| Term | What it is | Who |
+|---|---|---|
+| **the audit trail** | the hash-chained record of what happened — `Event` rows, `audit.py` | read with `read:audit` |
+| **an auditor grant** | a time-boxed read-only credential for somebody with no account | minted with `manage:users`, reads with `read:audit` |
+| ~~a debt audit~~ | a health score over an area — **gone in 2.15.0**, replaced by the **improve lane** | — |
+
+**Reading the record and administering it are different permissions.**
+`read:audit` reads; retention (`POST /audit/purge`) and minting a grant are
+`manage:users`. Filing them under `read:audit` gave a read-only external auditor
+the power to purge the trail and to issue itself a fresh grant.
+
 **event** — one entry in the audit trail. Hash-chained and **keyed**: each link
 is an HMAC under a subkey of `SECRET_KEY`, so forging one and recomputing the
 chain does not work without the key.
@@ -174,8 +190,9 @@ whole tool history is one query on it.
 **checkpoint** — a signed explanation for a gap in the chain, written when
 events are purged. A gap without one is tampering.
 
-**auditor grant** — a time-boxed, read-only token. It reads the trail and
-evidence and mutates nothing.
+**auditor grant** — a time-boxed, read-only token for an external auditor with
+no account. It reads the trail and the evidence packs and mutates nothing.
+Minting and revoking one is `manage:users`.
 
 **evidence pack** — the trail mapped onto a compliance framework
 (`soc2` · `iso27001` · `hipaa` · `gdpr`), control by control.

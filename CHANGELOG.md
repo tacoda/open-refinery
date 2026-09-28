@@ -11,6 +11,24 @@ was what the docs, the dashboard and `doctor` still pointed at.*
 
 ### Step 9 — say what it is
 
+#### Fixed — the auditor grant was not read-only
+
+Asking *"is this for admins or external auditors?"* was the right question, and
+it found that three **write** routes were guarded by `read:audit` — the
+permission that *reads* the record. An auditor grant resolves to a principal
+holding exactly `read:audit`, so a time-boxed, read-only external auditor could:
+
+- **`POST /audit/purge`** — destroy the trail it was brought in to read;
+- **`POST /auditor-grants`** — mint itself a fresh grant, so the time box meant
+  nothing;
+- **`DELETE /auditor-grants/{id}`** — revoke everybody else's.
+
+All three are `manage:users` now. **Reading the record and administering it are
+different permissions**, and `auditors.py` had said so in its own docstring
+since it was written — *"it can read evidence packs and the audit trail, and
+mutate nothing"* — while the routes said otherwise.
+
+
 #### Added
 - **`docs/GLOSSARY.md`** — every term the product uses, defined once. It leads
   with the four that read alike and are not: a **stage** is a node in a

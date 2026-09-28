@@ -142,3 +142,37 @@ def test_an_auditor_grant_reads_the_trail_and_writes_nothing(ctx):
     assert client.post("/users", headers=h,
                        json={"email": "x@x.io", "password": "pw",
                              "role": "developer"}).status_code == 403
+
+
+# --- the auditor grant is read-only, and that has to be structural -----------
+
+def test_an_auditor_grant_cannot_purge_the_trail_it_came_to_read(ctx):
+    """`POST /audit/purge` was guarded by `read:audit` — the permission that
+    *reads* the record — which handed destroying it to the one principal whose
+    whole purpose is to read and change nothing."""
+    from open_refinery.auditors import mint_auditor
+
+    session, client, hdr, people = ctx
+    _, token = mint_auditor(session, "external review", people["admin"].id, ttl_days=1)
+    h = {"Authorization": f"Bearer {token}"}
+
+    assert client.get("/events", headers=h).status_code == 200       # still reads
+    assert client.post("/audit/purge?days=1", headers=h).status_code == 403
+    assert client.post("/audit/purge?days=1", headers=hdr("admin")).status_code == 200
+
+
+def test_an_auditor_grant_cannot_extend_itself(ctx):
+    """Minting a credential is the admin act. Under `read:audit` a time-boxed
+    grant could issue itself a fresh one and never expire."""
+    from open_refinery.auditors import mint_auditor
+
+    session, client, hdr, people = ctx
+    grant, token = mint_auditor(session, "external review", people["admin"].id, ttl_days=1)
+    h = {"Authorization": f"Bearer {token}"}
+
+    assert client.post("/auditor-grants", headers=h,
+                       json={"label": "and another", "ttl_days": 3650}).status_code == 403
+    assert client.delete(f"/auditor-grants/{grant.id}", headers=h).status_code == 403
+    # admin holds both
+    assert client.post("/auditor-grants", headers=hdr("admin"),
+                       json={"label": "q3", "ttl_days": 30}).status_code == 201
