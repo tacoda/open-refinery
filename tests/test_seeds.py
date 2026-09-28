@@ -32,3 +32,18 @@ def test_seed_refuses_non_empty_db(monkeypatch):
     seed(conn)
     with pytest.raises(AlreadySeeded):
         seed(conn)
+
+
+def test_seed_leaves_a_runnable_environment(monkeypatch):
+    """`POST /setup` seeds `ship-a-ticket` for a real install. A seeded dev box
+    needs it too, or starting a run 404s on a pipeline nobody made."""
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+    from open_refinery.pipeline import store as ps
+
+    conn = connect("sqlite:///:memory:")
+    data = seed(conn)
+    assert ps.latest_pipeline(conn, "ship-a-ticket").id == data["pipelines"][0].id
+
+    item = list_work_items(conn)[0]
+    run = ps.start_run(conn, item.id, data["pipelines"][0], item.repo_id, item.owner_id)
+    assert run.stage == "prepare"

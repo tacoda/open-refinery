@@ -722,6 +722,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Usage
+         * @description What runs have cost, in model units.
+         *
+         *     Your own runs, or everyone's with `see:operations`. Until 3.0 this read a
+         *     ledger fed only by `POST /execute`, which the factory never called — so it
+         *     was empty for anyone actually running the factory. It reads the recorded
+         *     steps now, which is the same number the budgets are charged against.
+         */
+        get: operations["get_usage_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Budgets */
+        get: operations["get_budgets_budgets_get"];
+        put?: never;
+        /**
+         * Add Budget
+         * @description A ceiling is factory configuration, so platform signs it.
+         */
+        post: operations["add_budget_budgets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Budget */
+        delete: operations["remove_budget_budgets__budget_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/authorize": {
         parameters: {
             query?: never;
@@ -2275,6 +2338,29 @@ export interface components {
              */
             ttl_days: number;
         };
+        /**
+         * NewBudget
+         * @description A shared ceiling. `scope_id` names the team or repo; org needs none.
+         */
+        NewBudget: {
+            /**
+             * Scope
+             * @default org
+             */
+            scope: string;
+            /**
+             * Scope Id
+             * @default
+             */
+            scope_id: string;
+            /** Limit */
+            limit: number;
+            /**
+             * Window Seconds
+             * @default 0
+             */
+            window_seconds: number;
+        };
         /** NewCredential */
         NewCredential: {
             /** Provider */
@@ -2628,6 +2714,8 @@ export interface components {
             ingest_interval_hours?: number | null;
             /** Oversight */
             oversight?: string | null;
+            /** Max Run Units */
+            max_run_units?: number | null;
         };
         /** ResubmitBody */
         ResubmitBody: {
@@ -4189,6 +4277,136 @@ export interface operations {
                 "application/json": components["schemas"]["AssignTeam"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_usage_usage_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_budgets_budgets_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_budget_budgets_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewBudget"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_budget_budgets__budget_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

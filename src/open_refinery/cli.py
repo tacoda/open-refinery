@@ -508,7 +508,8 @@ def _seed(args: argparse.Namespace) -> int:
     for role, (user, token) in data["users"].items():
         print(f"  {role:<9} {user.email:<24} {PASSWORDS[role]:<10} {token}")
     print()
-    print(f"  {len(data['repositories'])} repo · {len(data['work_items'])} work items")
+    print(f"  {len(data['repositories'])} repo · {len(data['work_items'])} work items · "
+          f"{len(data['pipelines'])} pipeline")
     print()
     print("next:")
     print(f"  {'make dev':<34} # then sign in at http://localhost:8000")

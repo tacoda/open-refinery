@@ -40,8 +40,11 @@ with `pip install` and one command; manage everything from the web dashboard.
   seam lets a harness verify identity + intent against policy *before* it runs a
   tool / command / host-egress action; **per-namespace whitelists** scope rules;
   every refused attempt is audited.
-- **Teams & concurrency caps** — group users into teams; a team's live
-  in-flight cap bounds how many runs it can have going at once.
+- **Teams, concurrency caps & spend ceilings** — group users into teams; a
+  team's live in-flight cap bounds how many runs it can have going at once, and
+  **budgets** cap what they may spend: `max_run_units` on a repository bounds
+  one run, and an org / team / repo **budget** over a rolling window bounds the
+  burn. `GET /usage` reports what runs actually cost.
 - **Connects your code hosts and issue trackers** — GitHub, GitLab (code hosts);
   GitHub Issues, Jira, Linear (issue trackers), connected by token or OAuth,
   credentials encrypted at rest. Trackers expose **workflow discovery** — the
@@ -169,6 +172,11 @@ curl -s -H "$H" localhost:9000/runs -d '{"work_item_id":"<item>"}'
 curl -s -H "$H" localhost:9000/approvals
 curl -s -H "$H" localhost:9000/runs/<run>/approve -d '{}'
 
+# what it cost, and a ceiling so it cannot cost that again
+curl -s -H "$H" localhost:9000/usage
+curl -s -H "$H" localhost:9000/budgets \
+  -d '{"scope":"org","limit":5000000,"window_seconds":86400}'
+
 # read the audit trail — every move, owned and attributed
 curl -s -H "$H" "localhost:9000/events?subject=<item>"
 ```
@@ -225,7 +233,7 @@ artifact, record = factory.produce("upper", actor="ian", text="hello")
 | Oversight       | Per-repository autonomy levels L0–L4; a gated stage holds the run for a person |
 | Observability   | `GET /metrics` — WIP, event counts, per-actor activity, lead times; per-run live logs |
 | Governance      | Policy layer (`audit` / `strict` enforcement, layered strict overrides, per-namespace whitelists) + pre-action `/authorize` gate |
-| Cost & limits   | Live per-team concurrency caps. **No spend ceiling** — see [LIMITATIONS](docs/LIMITATIONS.md) |
+| Cost & limits   | Per-run and org/team/repo **spend ceilings** in model units, metered off the provider's own usage; live per-team concurrency caps |
 
 ## Durable audit trail
 

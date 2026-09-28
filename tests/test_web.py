@@ -210,3 +210,35 @@ def test_oversight_is_set_on_the_repository(ctx):
     bad = client.put(f"/repositories/{repo['id']}", headers=h, json={"oversight": "loose"})
     assert bad.status_code == 400
     assert "unknown oversight level" in bad.json()["detail"]
+
+
+def test_budgets_are_platforms_and_usage_reads_the_real_number(ctx):
+    """`/usage` read a ledger fed only by `POST /execute` until 3.0 — a call
+    site the factory never used, so it was empty for anyone running it."""
+    _, client, _, admin_token, ops_token = ctx
+    h = dev_auth(client, admin_token)
+
+    # a ceiling is factory configuration
+    refused = client.post("/budgets", headers=h, json={"scope": "org", "limit": 1000})
+    assert refused.status_code == 403
+    made = client.post("/budgets", headers=auth(ops_token),
+                       json={"scope": "org", "limit": 1000, "window_seconds": 3600})
+    assert made.status_code == 201, made.json()
+    assert made.json()["used"] == 0
+
+    assert client.get("/usage", headers=h).json() == {"total_units": 0, "by_run": []}
+
+    listed = client.get("/budgets", headers=h).json()
+    assert [b["limit"] for b in listed] == [1000]
+    assert client.delete(f"/budgets/{made.json()['id']}",
+                         headers=auth(ops_token)).status_code == 200
+
+
+def test_a_repositorys_per_run_ceiling_is_set_on_the_repository(ctx):
+    _, client, _, admin_token, _ = ctx
+    h = dev_auth(client, admin_token)
+    repo = client.post("/repositories", headers=h,
+                       json={"name": "or", "git_url": "git@x:or.git"}).json()
+    assert repo["max_run_units"] == 0            # unlimited by default
+    ok = client.put(f"/repositories/{repo['id']}", headers=h, json={"max_run_units": 50_000})
+    assert ok.status_code == 200 and ok.json()["max_run_units"] == 50_000

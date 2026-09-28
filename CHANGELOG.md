@@ -9,6 +9,61 @@ All notable changes to open-refinery are documented here. Format follows
 two governed call sites, two workflow engines — and the older half of each
 was what the docs, the dashboard and `doctor` still pointed at.*
 
+### Step 3 — put metering and a spend ceiling on the run
+
+#### Added
+- **`budgets.py`** — spend ceilings in model units, in two shapes because there
+  are two questions:
+  - **`Repository.max_run_units`** — what *one* run may spend (0 = unlimited).
+    It bounds the blast radius of a runaway ticket, and sits beside
+    `max_revisions`, which is the same kind of per-run bound.
+  - **`Budget`** — a shared counter over a rolling window at `org`, `team` or
+    `repo` scope. It bounds the burn. This is the windowed-counter logic the
+    pre-3.0 `Quota` carried, restored against the call site that actually
+    exists.
+- **`GET|POST|DELETE /budgets`** — a ceiling is factory configuration, so
+  `approve:factory` signs it; anyone may read one.
+- **`GET /usage` is back, on real data.** It read a ledger fed only by
+  `POST /execute` — a call site the factory never used — so it was structurally
+  empty for anyone running the factory. It sums `RunStep.units` now.
+- A **Spend** dashboard view: ceilings, what is used against them, and cost per
+  run. The per-run ceiling sits in the repository's settings drawer next to
+  oversight.
+- `budget-exceeded` audit recipe.
+
+#### Changed
+- **Runs are metered.** `agent.units_of` reads `usage_metadata` — LangChain's
+  normalised shape, so one reading for every provider — and sums *total* tokens
+  across the turn's messages, because in an agent loop the transcript is re-sent
+  every step and input is most of the bill. `Result.units` carries it,
+  `RunStep.units` records it. Both existed and neither was ever populated.
+  A provider that reports nothing meters zero, which is honest: a budget cannot
+  bound what nothing measures.
+- **`pipeline/middleware.py` stops claiming a quota it never performed.** Its
+  docstring listed quota as check #4 since the module was written. The check
+  cannot live there — that seam sees a tool call, and a turn's cost is not known
+  until the turn is over — so the docstring now says where it does live.
+- **A budget refusal fails the run outright** rather than becoming an `ERROR`
+  result. A stage carrying `on_error: continue` would otherwise walk the rest of
+  the graph, spending a stage at a time to discover the same thing each time.
+- **`open-refinery seed` now seeds `ship-a-ticket`.** `POST /setup` always did;
+  `seed` did not, and since step 2 made "Ship work" start a run immediately, a
+  seeded dev box 404'd on a pipeline nobody had made.
+
+#### Schema
+- **Migration v32**: `ALTER TABLE repositories ADD COLUMN max_run_units INTEGER
+  NOT NULL DEFAULT 0`, with its reverse in `DOWNGRADES`. `budgets` is a new
+  table, so `create_all` builds it and it needs no entry.
+
+#### Known limits, stated rather than papered over
+- **A ceiling is enforced between stages, not inside a turn.** A single stage
+  can overshoot by one turn; `max_turns` is what bounds that turn, and it is a
+  turn cap rather than a cost one.
+- **Units are tokens, not money.** The product does not know anybody's rate
+  card.
+
+814 tests pass.
+
 ### Step 2 — fold `Process` into `Pipeline`
 *Road to 3.0, step 2: fold `Process` into `Pipeline`. The second workflow engine
 goes; a work item's stage is derived from its runs.*

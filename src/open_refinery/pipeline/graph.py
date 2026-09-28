@@ -34,6 +34,10 @@ class Result:
     event: str = ""
     produced: tuple[str, ...] = ()
     error: str = ""
+    # What the stage spent, in model units. An action spends nothing; a turn
+    # reports what the provider billed. Recorded on the step and charged to the
+    # budgets the run answers to.
+    units: int = 0
 
 
 @dataclass(frozen=True)

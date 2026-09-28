@@ -50,16 +50,6 @@ def interrupts_for(level: str) -> dict:
     return INTERRUPTS.get(level, INTERRUPTS["supervised"])
 
 
-@dataclass
-class Turn:
-    """What one turn produced."""
-
-    text: str = ""
-    units: int = 0
-    interrupted: bool = False
-    error: str = ""
-
-
 def governance_middleware(governed: Governed):
     """Adapt `Governed` to the harness's tool-call hook.
 
@@ -214,7 +204,8 @@ def run_phase(session, run: Run, stage, ctx, *, audit, session_factory,
         return Result(BLOCKED_ON_PERSON, reason="a tool call is waiting on a person")
 
     text = _last_text(answer)
-    return Result(OK, reason=text, produced=tuple(stage.produces))
+    return Result(OK, reason=text, produced=tuple(stage.produces),
+                  units=units_of(answer))
 
 
 def _brief(run: Run, stage) -> str:
@@ -230,6 +221,30 @@ def _brief(run: Run, stage) -> str:
     wanted = stage.requires or ("spec",)
     parts = [f"## {name}\n\n{doc.get(name)}" for name in wanted if doc.has(name)]
     return "\n\n".join(parts) or (run.document or "")
+
+
+def units_of(answer) -> int:
+    """What the turn cost, summed over every message that reported usage.
+
+    `usage_metadata` is LangChain's normalised shape, so this is one reading for
+    every provider rather than one per SDK. Total tokens rather than output
+    tokens: in an agent loop the transcript is re-sent on every step, and input
+    is most of the bill.
+
+    A provider that reports nothing meters zero, which is honest — a budget
+    cannot bound what nothing measures.
+    """
+    messages = answer.get("messages") if isinstance(answer, dict) else None
+    total = 0
+    for message in messages or ():
+        usage = getattr(message, "usage_metadata", None)
+        if not isinstance(usage, dict):
+            continue
+        billed = usage.get("total_tokens")
+        if not isinstance(billed, int):
+            billed = (usage.get("input_tokens") or 0) + (usage.get("output_tokens") or 0)
+        total += int(billed or 0)
+    return total
 
 
 def _last_text(answer) -> str:

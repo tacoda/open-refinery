@@ -63,6 +63,8 @@ def update_repo(repo_id: str, body: RepoSettings, session: Session = Depends(get
         repo.integration_id = body.integration_id or None
     if body.ingest_interval_hours is not None:
         repo.ingest_interval_hours = max(0, body.ingest_interval_hours)
+    if body.max_run_units is not None:
+        repo.max_run_units = max(0, body.max_run_units)
     if body.oversight is not None:
         from ..oversight import LEVELS
         if body.oversight not in LEVELS:

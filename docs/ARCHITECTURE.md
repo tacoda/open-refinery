@@ -130,8 +130,17 @@ A refusal is handed back to the model as a tool result, not raised: an exception
 ends the turn, and a refusal the model can read is one it can work around.
 — `pipeline/middleware.py`, `ladder.py`, `policies.py`
 
-**There is no spend ceiling here yet.** `max_turns` caps turns, not cost. Until
-a per-run budget lands, nothing predicts or bounds what a run will spend.
+**The spend ceiling is not here.** It cannot be: this seam sees a tool call,
+and the cost of a turn is not known until the turn is over. `budgets.py` holds
+it instead — `check_budget` before each stage, `charge` after — so a ceiling
+refuses the *next* stage rather than the call that passed it. Inside one turn
+the bound is `max_turns`, a turn cap rather than a cost one.
+
+Two shapes, because there are two questions. `Repository.max_run_units` bounds
+what **one** run may spend. A `Budget` is a shared counter over a rolling
+window, at `org`, `team` or `repo` scope, and bounds what **everybody** spends.
+A run's own spend is the sum of its steps' `units`, so there is one number and
+it is the audited one.
 
 Until 3.0 a *second* call site existed — `POST /execute`, resolving a `Route` to
 a `Target`, consuming a `Quota` and metering a ledger. The factory never used

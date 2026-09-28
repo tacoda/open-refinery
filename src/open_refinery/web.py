@@ -108,6 +108,14 @@ from .store import (
     query_events,
     verify_chain,
 )
+from .budgets import (
+    BudgetExceeded,
+    create_budget,
+    delete_budget,
+    list_budgets,
+    spend_by_run,
+    spend_of,
+)
 from .concurrency import ConcurrencyExceeded
 from .teams import create_team, delete_team, list_teams, set_user_team
 from .users import (
@@ -174,6 +182,14 @@ class NewRepo(BaseModel):
 class NewWorkItem(BaseModel):
     repo_id: str
     title: str
+
+
+class NewBudget(BaseModel):
+    """A shared ceiling. `scope_id` names the team or repo; org needs none."""
+    scope: str = "org"                  # org | team | repo
+    scope_id: str = ""
+    limit: int
+    window_seconds: int = 0             # 0 = lifetime cap
 
 
 class NewTeam(BaseModel):
@@ -285,6 +301,7 @@ class RepoSettings(BaseModel):
     integration_id: str | None = None
     ingest_interval_hours: int | None = None
     oversight: str | None = None             # oversight.LEVELS
+    max_run_units: int | None = None         # ceiling for ONE run; 0 = unlimited
 
 
 class NewRule(BaseModel):
@@ -473,6 +490,7 @@ async def _live_ws(websocket: WebSocket, token: str = ""):
 _EXC_CODES = (
     (DuplicateUser, 409),
     (DuplicateRepository, 409),
+    (BudgetExceeded, 429),
     (ConcurrencyExceeded, 429),
     (DeviceExpired, 400),
     (PolicyDenied, 403),

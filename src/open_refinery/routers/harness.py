@@ -95,6 +95,41 @@ def assign_team(user_id: str, body: AssignTeam, session: Session = Depends(get_s
     u = set_user_team(session, user_id, body.team_id)
     return {"id": u.id, "team_id": u.team_id}
 
+# --- spend: what runs cost, and the ceilings on them ---
+@router.get("/usage")
+def get_usage(session: Session = Depends(get_session), user: User = Depends(current_user)):
+    """What runs have cost, in model units.
+
+    Your own runs, or everyone's with `see:operations`. Until 3.0 this read a
+    ledger fed only by `POST /execute`, which the factory never called — so it
+    was empty for anyone actually running the factory. It reads the recorded
+    steps now, which is the same number the budgets are charged against.
+    """
+    scope = None if authority.sees_operations(user) else user.id
+    rows = spend_by_run(session, actor_id=scope)
+    return {"total_units": sum(r["units"] for r in rows), "by_run": rows}
+
+
+@router.get("/budgets")
+def get_budgets(session: Session = Depends(get_session), _: User = Depends(current_user)):
+    return list_budgets(session)
+
+
+@router.post("/budgets", status_code=201)
+def add_budget(body: NewBudget, session: Session = Depends(get_session),
+               user: User = Depends(approves("factory"))):
+    """A ceiling is factory configuration, so platform signs it."""
+    return create_budget(session, body.scope, body.limit, user.id,
+                         scope_id=body.scope_id, window_seconds=body.window_seconds)
+
+
+@router.delete("/budgets/{budget_id}")
+def remove_budget(budget_id: str, session: Session = Depends(get_session),
+                  _: User = Depends(approves("factory"))):
+    delete_budget(session, budget_id)
+    return {"status": "deleted"}
+
+
 @router.post("/authorize")
 def authorize(body: AuthorizeReq, session: Session = Depends(get_session),
               user: User = Depends(current_user)):

@@ -4,8 +4,11 @@ This is what makes the factory open-refinery rather than an agent runner: every
 tool a turn reaches for goes through a grant, a predicate, a filter and the audit
 trail before it runs.
 
-**No spend ceiling lives here yet.** There is no per-run budget — `max_turns` is
-a turn cap, not a cost one. That is the next thing this seam needs.
+**The spend ceiling is not here.** It cannot be: nothing knows what a turn will
+cost until it is over, and this seam sees a tool call rather than a model call.
+`budgets.check_budget` runs before each stage instead, against what the run has
+already spent — see `budgets.py`. Inside one turn the only bound is `max_turns`,
+which is a turn cap and not a cost one.
 
 Three things happen before a call runs, in this order, because each is cheaper
 than the last:

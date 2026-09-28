@@ -74,6 +74,8 @@ REQUIRED = {
     "repositories": "/repositories",
     "work items": "/work-items",
     "what is waiting on a person": "/approvals",
+    "what runs cost": "/usage",
+    "ceilings on what they may cost": "/budgets",
     "runs": "/runs",
     # operations
     "settings": "/settings",
@@ -103,7 +105,7 @@ def test_no_route_survives_a_deleted_module(paths):
     # 3.0: the pre-3.0 execution path. The factory never routed through it —
     # a run resolves its model from the phase and the actor's credential.
     "/execute", "/targets", "/routes", "/quotas", "/routing-policy",
-    "/traffic", "/usage",
+    "/traffic",
     # 3.0: the kanban. A work item has no state machine of its own — its stage
     # is derived from its runs, and a run is what a person approves.
     "/processes", "/work-items/{item_id}/transition",

@@ -113,6 +113,7 @@ class Repository(SQLModel, table=True):
     base_branch: str = "main"          # what a run branches from and targets
     forge: str = ""                    # github | gitlab | local; "" = by git URL
     max_revisions: int = 2             # ceiling on a stage's refusal loop
+    max_run_units: int = 0             # ceiling on what ONE run may spend; 0 = unlimited
     prepare_cmd: str = ""              # run after the worktree is claimed
     cleanup_cmd: str = ""              # run before it is released
     test_cmd: str = ""                 # what `prove` runs, when the repo says
@@ -549,6 +550,28 @@ class EvalRun(SQLModel, table=True):
     n: int = 0
     mean: float = 0.0
     std: float = 0.0
+    created_at: str = Field(default_factory=now_iso)
+
+
+class Budget(SQLModel, table=True):
+    """A shared spend ceiling, in model units, over a window.
+
+    The per-run ceiling is `Repository.max_run_units` — a plain number compared
+    against one run's own spend. This is the other question: how much everybody
+    together may spend, per day / hour / ever. `used` accumulates and the window
+    rolls, which is the counter the pre-3.0 `Quota` carried for a call site the
+    factory never used.
+    """
+
+    __tablename__ = "budgets"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    scope: str = Field(default="org", index=True)   # org | team | repo
+    scope_id: str = Field(default="", index=True)   # team/repo id; "" when scope is org
+    limit: int                          # max units per window (lifetime if window_seconds=0)
+    used: int = 0                       # units consumed in the current window
+    window_seconds: int = 0             # rolling window length; 0 = lifetime cap
+    window_started_at: str = ""         # start of the current window; "" until first use
+    owner_id: str = Field(foreign_key="users.id", index=True)
     created_at: str = Field(default_factory=now_iso)
 
 

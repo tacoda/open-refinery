@@ -42,11 +42,16 @@ shape for parallelism is more workers running more runs, not one run split into
 pieces that have to be reassembled. A run is the unit that maps to a worktree,
 a branch and a pull request; splitting it loses that correspondence.
 
-**`max_turns` is a ceiling, not a budget.** Nothing bounds what a run
-spends. The quota mechanism that used to exist governed `POST /execute`, which
-the factory never called, and went with it in 3.0; a per-run budget at the tool
-seam is the replacement and is not built yet. Until it is, bound cost outside
-the product — at the provider.
+**A budget is enforced between stages, not inside a turn.** Nothing predicts
+what a turn will cost, so `budgets.check_budget` refuses the *next* stage once a
+ceiling is passed rather than refusing the call that passes it. A single stage
+can therefore overshoot its ceiling by one turn; `max_turns` is what bounds that
+turn, and it is a turn cap rather than a cost one.
+
+**Units are what the provider reports.** `usage_metadata` is LangChain's
+normalised shape, and a provider that fills none of it meters zero — a budget
+cannot bound what nothing measures. Units are tokens, not money: the product
+does not know anybody's rate card.
 
 ## The ladder
 

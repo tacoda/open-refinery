@@ -16,7 +16,7 @@ import {
 import { LogoMark } from './Brand'
 import {
   LayoutDashboard, ListChecks, CheckSquare, GitBranch, Workflow, Shield, GitPullRequest,
-  Package, Boxes, Plug, Users as UsersIcon, BarChart3, Activity,
+  Package, Boxes, Plug, Users as UsersIcon, BarChart3, Activity, Coins,
   FlaskConical, ScrollText, Settings as SettingsIcon, PanelLeftClose,
   PanelLeft, LogOut, Eye, Bot, Lock, ClipboardCheck,
 } from 'lucide-react'
@@ -32,7 +32,7 @@ const VIEW_ICON: Record<string, any> = {
   proposals: GitPullRequest, harnesses: Bot,
   // Watch
   overview: LayoutDashboard, events: ScrollText, evidence: ClipboardCheck,
-  experiments: FlaskConical, teams: Boxes,
+  usage: Coins, experiments: FlaskConical, teams: Boxes,
   metrics: BarChart3, myrules: Eye,
 }
 const GROUP_ICON: Record<string, any> = {
@@ -42,7 +42,7 @@ const GROUP_ICON: Record<string, any> = {
 type View = 'overview' | 'connections' | 'repos' | 'users'
   | 'pipelines' | 'packs' | 'policies'
   | 'work' | 'runs' | 'approvals' | 'proposals' | 'harnesses'
-  | 'events' | 'metrics' | 'evidence' | 'experiments'
+  | 'events' | 'metrics' | 'evidence' | 'experiments' | 'usage'
   | 'teams' | 'settings' | 'myrules'
 type Role = { name: string; rank: number }
 const fail = (e: any) => toast.error(e.message ?? String(e))
@@ -74,6 +74,7 @@ const NAV: { group: string; tabs: NavTab[] }[] = [
     { value: 'overview', label: 'Overview', always: true },
     { value: 'events', label: 'Audit log', needs: ['read:audit'] },
     { value: 'evidence', label: 'Evidence', needs: ['read:audit'] },
+    { value: 'usage', label: 'Spend', always: true },
     { value: 'experiments', label: 'Experiments', needs: ['see:operations'] },
     { value: 'teams', label: 'Teams', needs: ['see:operations'] },
     { value: 'metrics', label: 'Metrics', always: true },
@@ -318,6 +319,7 @@ export default function App() {
               <TabsContent value="overview"><Overview goto={goto} can={can} /></TabsContent>
               {can('events') && <TabsContent value="events"><Events isAdmin={canAudit} /></TabsContent>}
               {can('evidence') && <TabsContent value="evidence"><Evidence me={me} /></TabsContent>}
+              <TabsContent value="usage"><Usage me={me} /></TabsContent>
               {can('experiments') && <TabsContent value="experiments"><Experiments /></TabsContent>}
               {can('teams') && <TabsContent value="teams"><Teams /></TabsContent>}
               <TabsContent value="metrics"><Metrics /></TabsContent>
@@ -676,12 +678,14 @@ function RepoSettingsDrawer({ repo, onClose, onSaved }: any) {
   const [paths, setPaths] = useState('')
   const [hours, setHours] = useState('0')
   const [oversight, setOversight] = useState('supervised')
+  const [maxUnits, setMaxUnits] = useState('0')
   useEffect(() => { api('/repositories/charter-presets').then(setPresets).catch(() => {}) }, [])
   useEffect(() => {
     if (!repo) return
     setPaths((repo.charter_paths ?? []).join('\n'))
     setHours(String(repo.ingest_interval_hours ?? 0))
     setOversight(repo.oversight ?? 'supervised')
+    setMaxUnits(String(repo.max_run_units ?? 0))
   }, [repo])
   if (!repo) return null
 
@@ -690,6 +694,7 @@ function RepoSettingsDrawer({ repo, onClose, onSaved }: any) {
       charter_paths: paths.split('\n').map((s) => s.trim()).filter(Boolean),
       ingest_interval_hours: Number(hours) || 0,
       oversight,
+      max_run_units: Number(maxUnits) || 0,
     }) }).then(() => { toast.success('Saved'); onSaved?.(); onClose() }).catch(fail)
 
   return (
@@ -729,6 +734,15 @@ function RepoSettingsDrawer({ repo, onClose, onSaved }: any) {
           At <strong>autonomous</strong> and <strong>dark</strong>, <span className="mono">ask</span>{' '}
           degrades to <em>refuse</em> rather than to yes — an unattended factory reading{' '}
           <span className="mono">ask</span> as yes has answered a question nobody put.
+        </p>
+        <Field label="Ceiling for one run (units)">
+          <Input className="field" type="number" value={maxUnits} title="0 = unlimited"
+            onChange={(e) => setMaxUnits(e.target.value)} />
+        </Field>
+        <p className="muted">
+          What a single run may spend before it is stopped. 0 is unlimited. Checked
+          between stages, so a stage already under way runs to its end — bound that
+          with the phase's turn cap.
         </p>
         <Button onClick={save}>Save</Button>
       </div>
@@ -2443,6 +2457,123 @@ function Approvals() {
         ))}
         {!rows.length && <div className="muted">nothing is waiting</div>}
       </div>
+    </section>
+  )
+}
+
+function Usage({ me }: any) {
+  // What runs cost, and the ceilings on them. Units are tokens as the provider
+  // reported them — the product does not know anybody's rate card.
+  const [data, setData] = useState<any>(null)
+  const { rows: budgets, load: loadBudgets } = useList('/budgets')
+  const { rows: repos } = useList('/repositories')
+  const { rows: teams } = useList('/teams')
+  const [scope, setScope] = useState('org'), [scopeId, setScopeId] = useState('')
+  const [limit, setLimit] = useState(''), [window, setWindow] = useState('0')
+  const mayEdit = (me?.permissions ?? []).includes('approve:factory')
+  const load = () => api('/usage').then(setData).catch(fail)
+  useEffect(() => { load() }, [])
+
+  const add = () => post('/budgets', {
+    scope, scope_id: scope === 'org' ? '' : scopeId,
+    limit: Number(limit) || 0, window_seconds: Number(window) || 0,
+  }).then(() => { setLimit(''); loadBudgets() }).catch(fail)
+  const del = (id: string) => api(`/budgets/${id}`, { method: 'DELETE' }).then(loadBudgets).catch(fail)
+
+  const options = scope === 'repo' ? repos : scope === 'team' ? teams : []
+  const nameOf = (b: any) => b.scope === 'org' ? 'everything'
+    : (repos.find((r: any) => r.id === b.scope_id)?.name
+       ?? teams.find((t: any) => t.id === b.scope_id)?.name ?? b.scope_id)
+
+  return (
+    <section className="page">
+      <h2 className="page-title">Spend</h2>
+      <p className="muted">
+        What runs cost, in units the provider reported. A ceiling is checked
+        <em> between</em> stages — nothing knows what a turn costs until it is over.
+      </p>
+
+      <Card>
+        <CardHeader><CardTitle>Ceilings</CardTitle></CardHeader>
+        <CardContent>
+          {mayEdit && (
+            <div className="field-form">
+              <Field label="Scope">
+                <Select value={scope} onValueChange={(v) => { setScope(v ?? 'org'); setScopeId('') }}>
+                  <SelectTrigger className="field"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="org">org</SelectItem>
+                    <SelectItem value="repo">repo</SelectItem>
+                    <SelectItem value="team">team</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              {scope !== 'org' && (
+                <Field label={scope === 'repo' ? 'Repository' : 'Team'}>
+                  <Select value={scopeId} onValueChange={(v) => setScopeId(v ?? '')}>
+                    <SelectTrigger className="field"><SelectValue placeholder="which…" /></SelectTrigger>
+                    <SelectContent>
+                      {options.map((o: any) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
+              <Field label="Units"><Input className="field" type="number" value={limit}
+                onChange={(e) => setLimit(e.target.value)} /></Field>
+              <Field label="Per (seconds)"><Input className="field" type="number" value={window}
+                title="0 = a lifetime cap that never rolls" onChange={(e) => setWindow(e.target.value)} /></Field>
+              <Button onClick={add} disabled={!limit || (scope !== 'org' && !scopeId)}>Set ceiling</Button>
+            </div>
+          )}
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>Scope</TableHead><TableHead>Used</TableHead>
+              <TableHead>Limit</TableHead><TableHead>Window</TableHead><TableHead />
+            </TableRow></TableHeader>
+            <TableBody>
+              <EmptyRow show={!budgets.length} cols={5}>
+                No ceiling set — runs may spend without limit.
+              </EmptyRow>
+              {budgets.map((b: any) => (
+                <TableRow key={b.id}>
+                  <TableCell><Badge variant="outline">{b.scope}</Badge> {nameOf(b)}</TableCell>
+                  <TableCell className={b.used >= b.limit ? 'log-error' : ''}>{b.used}</TableCell>
+                  <TableCell>{b.limit}</TableCell>
+                  <TableCell className="muted">{b.window_seconds ? `${b.window_seconds}s` : 'lifetime'}</TableCell>
+                  <TableCell>{mayEdit && <Button variant="outline" size="sm" onClick={() => del(b.id)}>Remove</Button>}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <p className="muted">
+            A ceiling on <strong>one</strong> run is the repository's{' '}
+            <span className="mono">max_run_units</span>, in its settings drawer.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>By run ({data?.total_units ?? 0} units)</CardTitle></CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>Run</TableHead><TableHead>Stage</TableHead><TableHead>Units</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              <EmptyRow show={!(data?.by_run ?? []).length} cols={3}>
+                Nothing has run yet.
+              </EmptyRow>
+              {(data?.by_run ?? []).map((r: any) => (
+                <TableRow key={r.run_id}>
+                  <TableCell className="mono">{r.run_id.slice(0, 8)}</TableCell>
+                  <TableCell><Badge variant="outline">{r.outcome || r.stage}</Badge></TableCell>
+                  <TableCell>{r.units}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </section>
   )
 }

@@ -40,6 +40,12 @@ def seed(conn: sqlite3.Connection) -> dict:
 
     web = create_repository(conn, "web-app", "git@github.com:acme/web-app.git", dev.id)
 
+    # The default pipeline, so a seeded environment can actually run something.
+    # `POST /setup` does this for a real install; without it here, "Ship work"
+    # on a seeded dev box 404s on a pipeline that was never made.
+    from .pipeline import store as ps
+    pipeline = ps.ensure_default(conn, platform.id)
+
     # Two tickets, neither run yet: both show as `open` until somebody starts a
     # run, which is what the board now reads off.
     items = [create_work_item(conn, web.id, "Add login page", dev.id),
@@ -56,4 +62,5 @@ def seed(conn: sqlite3.Connection) -> dict:
         },
         "repositories": [web],
         "work_items": items,
+        "pipelines": [pipeline],
     }

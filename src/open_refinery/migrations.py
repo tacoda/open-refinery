@@ -169,6 +169,9 @@ MIGRATIONS: list[str] = [
     # v31 (3.0.0): the oversight dial moves from the process onto the repository.
     # It was the only field of a `Process` a run ever read.
     "ALTER TABLE repositories ADD COLUMN oversight TEXT NOT NULL DEFAULT 'supervised';",
+    # v32 (3.0.0): a ceiling on what one run may spend. `budgets` is a new table,
+    # so create_all builds it and it needs no entry here.
+    "ALTER TABLE repositories ADD COLUMN max_run_units INTEGER NOT NULL DEFAULT 0;",
 ]
 
 # Reverse of each MIGRATIONS entry (same index), for downgrading to a pinned
@@ -247,6 +250,7 @@ DOWNGRADES: list[str] = [
     "ALTER TABLE integrations DROP COLUMN intake_pipeline;"
     "ALTER TABLE integrations DROP COLUMN autostart;",                                   # v30
     "ALTER TABLE repositories DROP COLUMN oversight;",                                   # v31
+    "ALTER TABLE repositories DROP COLUMN max_run_units;",                               # v32
 ]
 
 

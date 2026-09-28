@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from sqlmodel import Session
 
+from .. import budgets
 from ..audit import AuditSink
 from ..models import Repository, Run, now_iso
 from ..provenance import Record
@@ -23,7 +24,7 @@ from . import store as ps
 from . import workspace as ws
 from .actions import Context, perform
 from .contracts import BUILT_IN, contract, read as read_contract
-from .graph import ERROR, OK, Result, advance, plan_next
+from .graph import ERROR, OK, Move, Result, advance, plan_next
 
 
 class RunnerError(RuntimeError):
@@ -131,6 +132,20 @@ def step(session: Session, run: Run, audit: AuditSink, *,
                                   output=planned.why, subject=run.id))
         return ps.apply_move(session, run, planned)
 
+    # 1b. Is there budget left? Checked here rather than inside the turn,
+    #     because nothing knows what a turn costs until it is over. A refusal
+    #     fails the run outright rather than becoming an ERROR result: a stage
+    #     with `on_error: continue` would otherwise walk the rest of the graph,
+    #     spending a stage at a time to discover the same thing each time.
+    try:
+        budgets.check_budget(session, run)
+    except budgets.BudgetExceeded as exc:
+        ps.record_step(session, run, run.stage, outcome="blocked", why=str(exc))
+        audit.write(Record.of(recipe="budget-exceeded", actor=run.actor_id,
+                              owner=run.actor_id, inputs={"stage": run.stage},
+                              output=str(exc), subject=run.id))
+        return ps.apply_move(session, run, Move("failed", str(exc)))
+
     stage = graph.stage(run.stage)
     ctx = context_for(session, run, credential=credential)
 
@@ -170,8 +185,10 @@ def step(session: Session, run: Run, audit: AuditSink, *,
 
     ps.record_step(session, run, stage.name, outcome=result.outcome,
                    why=result.error or result.reason or "", phase=stage.phase,
-                   action=stage.action, answer=answer,
+                   action=stage.action, answer=answer, units=result.units,
                    attempt=run.revisions + 1)
+    # Charged after the fact: nothing knows what a turn costs until it is over.
+    budgets.charge(session, run, result.units)
 
     # 4. Where does it go?
     moved = advance(ps.run_state(run), graph, result)
