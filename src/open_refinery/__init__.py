@@ -117,7 +117,8 @@ from .migrations import migrate_to, run_migrations
 from .metrics import (
     activity_by_actor,
     event_counts,
-    lead_times,
+    delivery,
+    stage_health,
     summary,
     wip_by_stage,
 )
@@ -218,7 +219,8 @@ __all__ = [
     "wip_by_stage",
     "event_counts",
     "activity_by_actor",
-    "lead_times",
+    "delivery",
+    "stage_health",
     "seed",
     "AlreadySeeded",
     "run_migrations",

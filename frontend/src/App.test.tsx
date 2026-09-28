@@ -13,7 +13,7 @@ vi.mock('./api', () => ({
   oauthLoginUrl: () => '',
 }))
 
-import { Drawer, EmptyRow, Overview, Packs, Pipeline, Toggle, ruleSentence } from './App'
+import { Drawer, EmptyRow, Overview, Packs, Pipeline, Toggle, human, ruleSentence } from './App'
 
 const ROLES = [
   { name: 'developer', rank: 1 },
@@ -130,24 +130,64 @@ describe('Overview (visibility-first home)', () => {
   const byPath = (map: Record<string, any>) => (p: string) =>
     Promise.resolve(map[p.split('?')[0]] ?? (map[p] ?? []))
 
-  it('highlights actionable counts and drills in on click', async () => {
+  // Everything on this page is about runs now. It used to count `invoke-failed`
+  // and `rollback` — recipes that no longer exist anywhere in the product.
+  const METRICS = {
+    delivery: {
+      runs: 3, in_flight: 1, held: 0, landed: 1, closed: 0, failed: 1,
+      finished: 2, landed_pct: 50, reached_a_pull_request: 1,
+      avg_seconds_to_pull_request: 600, avg_seconds_to_outcome: 400,
+    },
+    wip_by_stage: { running: 1, landed: 1, failed: 1 },
+    stage_health: [{ stage: 'run', attempts: 2, refused: 1, error: 1, retries: 1, trouble_pct: 100, units: 160 }],
+    event_counts: {}, activity_by_actor: {},
+  }
+
+  it('counts what is waiting, in flight and failed, and drills in on click', async () => {
     api.mockImplementation(byPath({
-      '/work-items': [{ id: 'a', current_stage: 'doing' }, { id: 'b', current_stage: 'doing' }],
-      '/approvals': [{ id: 'r1' }],
-      '/events': [{ recipe: 'denied' }, { recipe: 'invoke-failed' }, { recipe: 'rollback' }],
+      '/metrics': METRICS,
+      '/approvals': [{ run_id: 'r1' }],
+      '/runs': [{ id: 'run-abcdef12', stage: 'run', held: false, outcome: '' }],
+      '/improve': { findings: [] },
     }))
     const goto = vi.fn()
     render(<Overview goto={goto} />)
-    await waitFor(() => expect(screen.getByText('Approvals awaiting')).toBeInTheDocument())
-    // 1 pending approval, 2 work items, 1 denial, 1 failure, 1 rollback-to-apply
-    expect(screen.getByText('Approvals awaiting').previousSibling).toHaveTextContent('1')
-    fireEvent.click(screen.getByText('Approvals awaiting'))
+    await waitFor(() => expect(screen.getByText('Waiting on a person')).toBeInTheDocument())
+    expect(screen.getByText('Waiting on a person').previousSibling).toHaveTextContent('1')
+    expect(screen.getByText('Runs in flight').previousSibling).toHaveTextContent('1')
+    expect(screen.getByText('Runs failed').previousSibling).toHaveTextContent('1')
+    fireEvent.click(screen.getByText('Waiting on a person'))
     expect(goto).toHaveBeenCalledWith('approvals')
   })
 
-  it('empty state: zero counts, no work-by-stage rows', async () => {
-    api.mockImplementation(byPath({ '/work-items': [], '/approvals': [], '/events': [] }))
+  it('shows delivery and the stages that keep going wrong', async () => {
+    api.mockImplementation(byPath({
+      '/metrics': METRICS, '/approvals': [], '/runs': [], '/improve': { findings: [] },
+    }))
     render(<Overview goto={() => {}} />)
-    await waitFor(() => expect(screen.getByText(/No work items yet/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Delivery')).toBeInTheDocument())
+    expect(screen.getByText(/50%/)).toBeInTheDocument()          // landed, of finished
+    expect(screen.getByText('Stages that keep going wrong')).toBeInTheDocument()
+    expect(screen.getByText('run')).toBeInTheDocument()
+  })
+
+  it('empty state: nothing has run yet', async () => {
+    api.mockImplementation(byPath({
+      '/metrics': { delivery: { runs: 0 }, wip_by_stage: {}, stage_health: [] },
+      '/approvals': [], '/runs': [], '/improve': { findings: [] },
+    }))
+    render(<Overview goto={() => {}} />)
+    await waitFor(() => expect(screen.getByText(/Nothing has run yet/)).toBeInTheDocument())
+    expect(screen.getByText(/No runs yet/)).toBeInTheDocument()
+  })
+})
+
+describe('human (a duration a person can read)', () => {
+  it('reads seconds, minutes, hours and days', () => {
+    expect(human(0)).toBe('—')
+    expect(human(45)).toBe('45s')
+    expect(human(600)).toBe('10m')
+    expect(human(7200)).toBe('2h')
+    expect(human(432000)).toBe('5d')
   })
 })

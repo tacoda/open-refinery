@@ -2253,30 +2253,41 @@ function MfaCard() {
   )
 }
 
+// A duration a person can read. Seconds are what the API reports, because the
+// API should not guess what unit a reader wants.
+export function human(seconds: number): string {
+  if (!seconds || seconds < 1) return '—'
+  if (seconds < 90) return `${Math.round(seconds)}s`
+  if (seconds < 5400) return `${Math.round(seconds / 60)}m`
+  if (seconds < 172800) return `${Math.round(seconds / 3600)}h`
+  return `${Math.round(seconds / 86400)}d`
+}
+
 export function Overview({ goto, can = () => true }: { goto: (v: any) => void; can?: (v: any) => boolean }) {
-  const [items, setItems] = useState<any[]>([])
+  // Everything here is about runs. It used to count `invoke-failed` and
+  // `rollback` — recipes that no longer exist anywhere — so the home page was
+  // reporting on a subsystem the factory never used.
+  const [m, setM] = useState<any>(null)
   const [pending, setPending] = useState(0)
-  const [events, setEvents] = useState<any[]>([])
   const [findings, setFindings] = useState<any[]>([])
+  const [runs, setRuns] = useState<any[]>([])
   useEffect(() => {
-    api('/work-items').then(setItems).catch(() => {})
+    api('/metrics').then(setM).catch(() => {})
     api('/approvals?status=pending').then((r) => setPending(r.length)).catch(() => {})
-    api('/events').then(setEvents).catch(() => {})  // 403 for some roles → stays empty
+    api('/runs').then((r) => setRuns(r.slice(0, 8))).catch(() => {})
     // The improve lane: what went wrong, each traced to its evidence.
     api('/improve').then((r) => setFindings(r.findings ?? [])).catch(() => {})
   }, [])
-  const count = (recipe: string) => events.filter((e) => e.recipe === recipe).length
-  const denials = count('denied')
-  const byStage = items.reduce((m: Record<string, number>, w) => {
-    m[w.stage] = (m[w.stage] ?? 0) + 1; return m
-  }, {})
+  const d = m?.delivery ?? {}
 
   const cards = [
-    { label: 'Approvals awaiting', n: pending, go: 'approvals', attn: pending > 0, Icon: CheckSquare },
-    { label: 'Work in progress', n: items.length, go: 'work', attn: false, Icon: ListChecks },
-    { label: 'Policy denials', n: denials, go: 'events', attn: denials > 0, Icon: Shield },
-    { label: 'Things to look at', n: findings.length, go: 'events', attn: findings.length > 0, Icon: Activity },
+    { label: 'Waiting on a person', n: pending, go: 'approvals', attn: pending > 0, Icon: CheckSquare },
+    { label: 'Runs in flight', n: d.in_flight ?? 0, go: 'runs', attn: false, Icon: Activity },
+    { label: 'Runs failed', n: d.failed ?? 0, go: 'runs', attn: (d.failed ?? 0) > 0, Icon: Shield },
+    { label: 'Things to look at', n: findings.length, go: 'metrics', attn: findings.length > 0, Icon: Eye },
   ]
+  const worst = (m?.stage_health ?? []).filter((r: any) => r.trouble_pct > 0).slice(0, 4)
+
   return (
     <section className="page">
       <h2 className="page-title">Overview</h2>
@@ -2292,6 +2303,36 @@ export function Overview({ goto, can = () => true }: { goto: (v: any) => void; c
           </button>
         ))}
       </div>
+
+      <Card>
+        <CardHeader><CardTitle>Delivery</CardTitle></CardHeader>
+        <CardContent>
+          {d.runs ? (
+            <div className="metric-grid">
+              <div className="kv-row"><span>Landed</span><b>{d.landed_pct}% <span className="muted">of {d.finished} finished</span></b></div>
+              <div className="kv-row"><span>To a pull request</span><b>{human(d.avg_seconds_to_pull_request)}</b></div>
+              <div className="kv-row"><span>To an outcome</span><b>{human(d.avg_seconds_to_outcome)}</b></div>
+              <div className="kv-row"><span>Landed · closed · failed</span><b>{d.landed} · {d.closed} · {d.failed}</b></div>
+            </div>
+          ) : <span className="muted">Nothing has run yet — start one under Work.</span>}
+        </CardContent>
+      </Card>
+
+      {worst.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Stages that keep going wrong</CardTitle></CardHeader>
+          <CardContent>
+            <p className="muted">A stage that refuses on every repository is a fact about the workflow, not about any one ticket.</p>
+            {worst.map((r: any) => (
+              <div key={r.stage} className="kv-row">
+                <span>{r.stage}</span>
+                <b>{r.trouble_pct}% <span className="muted">of {r.attempts} attempt(s)</span></b>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       {findings.length > 0 && (
         <Card>
           <CardHeader><CardTitle>Things to look at</CardTitle></CardHeader>
@@ -2308,16 +2349,22 @@ export function Overview({ goto, can = () => true }: { goto: (v: any) => void; c
           </CardContent>
         </Card>
       )}
+
       <Card>
-        <CardHeader><CardTitle>Work by stage</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Latest runs</CardTitle></CardHeader>
         <CardContent>
-          {items.length ? (
-            <div className="toolbar">
-              {Object.entries(byStage).map(([s, n]) => (
-                <Badge key={s} variant="secondary">{s}: {n}</Badge>
+          {runs.length ? (
+            <div className="work-list">
+              {runs.map((r: any) => (
+                <div key={r.id} className="work-head">
+                  <Badge variant={r.held ? 'destructive' : 'outline'}>{r.outcome || r.stage}</Badge>
+                  {r.held && <Badge>waiting on a person</Badge>}
+                  <span className="mono muted">{r.id.slice(0, 8)}</span>
+                  {r.pr_url && <a className="muted" href={r.pr_url} target="_blank" rel="noreferrer">pull request</a>}
+                </div>
               ))}
             </div>
-          ) : <span className="muted">No work items yet — start one under Work.</span>}
+          ) : <span className="muted">No runs yet.</span>}
         </CardContent>
       </Card>
       <MfaCard />
@@ -2745,25 +2792,78 @@ function Metrics() {
     api('/users').then((us: any[]) => setNames(Object.fromEntries(us.map((u) => [u.id, u.email])))).catch(() => {})
   }, [])
   if (!m) return null
+  const d = m.delivery ?? {}
   const panels = [
-    { title: 'WIP by step', data: m.wip_by_stage, accent: 'accent-blue', actor: false },
+    { title: 'Work by stage', data: m.wip_by_stage, accent: 'accent-blue', actor: false },
     { title: 'Events', data: m.event_counts, accent: 'accent-green', actor: false },
     { title: 'Activity by actor', data: m.activity_by_actor, accent: 'accent-purple', actor: true },
-    { title: 'Lead times', data: m.lead_times, accent: 'accent-orange', actor: false },
   ]
   const keyLabel = (p: any, k: string) => p.actor ? (names[k] ?? `${k.slice(0, 8)}…`) : humanKey(k)
   return (
     <section className="page">
       <h2 className="page-title">Metrics</h2>
+
+      <Card className="accent-orange">
+        <CardHeader><CardTitle>Delivery</CardTitle></CardHeader>
+        <CardContent>
+          <p className="muted">
+            What shipped and how long it took. <strong>Landed</strong> is over
+            <em> finished</em> runs — counting one still in flight as a failure to
+            land would make the number sag whenever the factory is busy.
+          </p>
+          <div className="metric-grid">
+            <div className="kv-row"><span>Runs</span><b>{d.runs ?? 0}</b></div>
+            <div className="kv-row"><span>In flight</span><b>{d.in_flight ?? 0}</b></div>
+            <div className="kv-row"><span>Waiting on a person</span><b>{d.held ?? 0}</b></div>
+            <div className="kv-row"><span>Landed</span><b>{d.landed ?? 0} ({d.landed_pct ?? 0}%)</b></div>
+            <div className="kv-row"><span>Closed</span><b>{d.closed ?? 0}</b></div>
+            <div className="kv-row"><span>Failed</span><b>{d.failed ?? 0}</b></div>
+            <div className="kv-row"><span>Reached a pull request</span><b>{d.reached_a_pull_request ?? 0}</b></div>
+            <div className="kv-row"><span>Time to a pull request</span><b>{human(d.avg_seconds_to_pull_request ?? 0)}</b></div>
+            <div className="kv-row"><span>Time to an outcome</span><b>{human(d.avg_seconds_to_outcome ?? 0)}</b></div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Stage health</CardTitle></CardHeader>
+        <CardContent>
+          <p className="muted">Worst first — the row somebody opened this to find.</p>
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>Stage</TableHead><TableHead>Attempts</TableHead>
+              <TableHead>Refused</TableHead><TableHead>Errors</TableHead>
+              <TableHead>Redone</TableHead><TableHead>Trouble</TableHead><TableHead>Units</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              <EmptyRow show={!(m.stage_health ?? []).length} cols={7}>
+                Nothing has run yet.
+              </EmptyRow>
+              {(m.stage_health ?? []).map((r: any) => (
+                <TableRow key={r.stage}>
+                  <TableCell>{r.stage}</TableCell>
+                  <TableCell>{r.attempts}</TableCell>
+                  <TableCell>{r.refused}</TableCell>
+                  <TableCell>{r.error}</TableCell>
+                  <TableCell>{r.retries}</TableCell>
+                  <TableCell className={r.trouble_pct > 0 ? 'log-error' : ''}>{r.trouble_pct}%</TableCell>
+                  <TableCell className="muted">{r.units}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
       <div className="metric-grid">
         {panels.map((p) => (
           <Card key={p.title} className={p.accent}>
             <CardHeader><CardTitle>{p.title}</CardTitle></CardHeader>
             <CardContent>
-              {Object.entries(p.data).map(([k, v]) => (
+              {Object.entries(p.data ?? {}).map(([k, v]) => (
                 <div key={k} className="kv-row"><span>{keyLabel(p, k)}</span><b>{String(v)}</b></div>
               ))}
-              {!Object.keys(p.data).length && <div className="muted">none yet</div>}
+              {!Object.keys(p.data ?? {}).length && <div className="muted">none yet</div>}
             </CardContent>
           </Card>
         ))}

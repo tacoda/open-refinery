@@ -9,6 +9,42 @@ All notable changes to open-refinery are documented here. Format follows
 two governed call sites, two workflow engines — and the older half of each
 was what the docs, the dashboard and `doctor` still pointed at.*
 
+### Step 5 — rebuild Overview and Metrics on the runs
+
+#### Changed
+- **`metrics.py` describes the factory.** It aggregated the kanban: work items
+  by the column somebody dragged them into, and a `lead_times` that was the span
+  between a subject's first and last audit event. Neither said anything about
+  shipping software. Two new read-models, both derived from `runs` and
+  `run_steps`:
+  - **`delivery`** — runs, in flight, held, landed / closed / failed,
+    `landed_pct`, how many reached a pull request, and the average time to a
+    pull request and to an outcome.
+  - **`stage_health`** — per stage: attempts, refusals, errors, how often it had
+    to be redone, and what it cost. Ordered **worst first**, because that is the
+    row somebody opened the page to find.
+- **`landed_pct` is over *finished* runs, not all of them.** Counting a run that
+  is still going as a failure to land would make the number sag exactly when the
+  factory is busy — which is when nobody should be misreading it.
+- **The Overview is about runs.** It counted `denied`, plus (until step 1)
+  `invoke-failed` and `rollback` — recipes that exist nowhere in the product. It
+  now shows what is waiting on a person, what is in flight, what failed,
+  delivery at a glance, the stages that keep going wrong, and the latest runs.
+- **The Metrics screen** leads with delivery and a stage-health table instead of
+  four flat key/value panels, one of which reported a number nobody could act on.
+- `lead_times` is removed. `delivery` answers the question it was reaching for,
+  against the record that actually describes a delivery.
+
+#### Added
+- `docs/ROAD-TO-3.0.md` — the nine-step subtraction plan and where it stands,
+  written down rather than living in a conversation.
+- **Step 9** on that plan: publish the feature list and the domain glossary. The
+  product's vocabulary has drifted — *process* and *pipeline* meant the same
+  thing until step 2, *quota* and *budget* until step 3, and *stage*, *step*,
+  *phase* and *rung* are four different ideas that read alike.
+
+842 tests pass.
+
 ### Step 4 — scope the content filter to egress
 
 #### Changed
