@@ -1,3 +1,4 @@
+import pytest
 import sqlite3
 
 from sqlalchemy import text
@@ -208,5 +209,53 @@ def test_migrate_down_then_up_round_trips(tmp_path):
         migrate_to(raw, len(MIGRATIONS))         # back up to latest
         assert {"namespace", "pack", "layer", "kind"} <= pol_cols()
         assert raw.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
+    finally:
+        raw.close()
+
+
+def test_a_downgrade_that_cannot_run_is_refused_before_it_changes_anything(tmp_path):
+    """`executescript` commits as it goes, so a migration that fails halfway
+    leaves the schema partly unwound and the version no longer describing it.
+    A fresh 3.0 database has never had the pre-3.0 tables the older downgrades
+    unwind, so this is reachable — and the check is what makes it "refused"
+    rather than "corrupted"."""
+    import sqlite3
+
+    from open_refinery.migrations import MigrationRefused, migrate_to
+    from open_refinery.store import engine_for
+
+    url = f"sqlite:///{tmp_path/'fresh.db'}"
+    engine_for(url)                       # a database created AT the latest version
+    raw = sqlite3.connect(tmp_path / "fresh.db")
+    try:
+        before = raw.execute("PRAGMA user_version").fetchone()[0]
+        cols = {r[1] for r in raw.execute("PRAGMA table_info(policies)")}
+
+        with pytest.raises(MigrationRefused, match="processes"):
+            migrate_to(raw, 0)
+
+        assert raw.execute("PRAGMA user_version").fetchone()[0] == before
+        assert {r[1] for r in raw.execute("PRAGMA table_info(policies)")} == cols
+    finally:
+        raw.close()
+
+
+def test_a_downgrade_within_reach_still_runs(tmp_path):
+    """The refusal is about tables this database never had, not about
+    downgrading in general."""
+    import sqlite3
+
+    from open_refinery.migrations import migrate_to
+    from open_refinery.store import engine_for
+
+    url = f"sqlite:///{tmp_path/'fresh.db'}"
+    engine_for(url)
+    raw = sqlite3.connect(tmp_path / "fresh.db")
+    try:
+        latest = len(MIGRATIONS)
+        migrate_to(raw, latest - 2)       # only touches tables 3.0 still builds
+        assert raw.execute("PRAGMA user_version").fetchone()[0] == latest - 2
+        migrate_to(raw, latest)
+        assert raw.execute("PRAGMA user_version").fetchone()[0] == latest
     finally:
         raw.close()

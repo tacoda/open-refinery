@@ -443,7 +443,7 @@ def _migrate(args: argparse.Namespace) -> int:
     import sqlite3
     import sys
 
-    from .migrations import MIGRATIONS, migrate_to
+    from .migrations import MIGRATIONS, MigrationRefused, migrate_to
     from .store import DEFAULT_DATABASE_URL, _sqlite_path, engine_for
 
     url = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
@@ -476,6 +476,9 @@ def _migrate(args: argparse.Namespace) -> int:
         conn = sqlite3.connect(path)
         try:
             migrate_to(conn, target)
+        except MigrationRefused as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
         finally:
             conn.close()
 

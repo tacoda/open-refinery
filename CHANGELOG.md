@@ -9,6 +9,24 @@ All notable changes to open-refinery are documented here. Format follows
 two governed call sites, two workflow engines — and the older half of each
 was what the docs, the dashboard and `doctor` still pointed at.*
 
+### Fixed — a failed downgrade could corrupt the database
+
+Found on the last pre-merge check, not by a test. `open-refinery migrate --to 0`
+on a **fresh** 3.0 install raised a raw `sqlite3.OperationalError` partway
+through — and `executescript` commits as it goes, so the schema was left partly
+unwound with `user_version` no longer describing it. Every later `migrate` then
+failed too.
+
+It is reachable because 3.0 stopped building the pre-3.0 tables (`processes`,
+`targets`, `quotas`, `approval_requests`) while the downgrades that unwind their
+columns are still in the list — an *upgraded* install has those tables and still
+needs them; a database created at 3.0 never had them.
+
+`migrate_to` now checks which tables a downgrade would touch **before running
+anything** and raises `MigrationRefused`, naming them. Refused instead of
+corrupted. A downgrade within reach still runs, both directions, and
+`docs/LIMITATIONS.md` says where the floor is.
+
 ### Step 9 — say what it is
 
 #### Fixed — the auditor grant was not read-only

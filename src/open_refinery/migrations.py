@@ -23,6 +23,7 @@ drops, renames, or restructures.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 
 # Append-only list of incremental schema changes. The current register_schema
@@ -267,8 +268,29 @@ DOWNGRADES: list[str] = [
 ]
 
 
+class MigrationRefused(Exception):
+    """A migration was refused before it ran, so nothing changed."""
+
+
 def _version(conn: sqlite3.Connection) -> int:
     return conn.execute("PRAGMA user_version").fetchone()[0]
+
+
+_ALTERED = re.compile(r"\bALTER\s+TABLE\s+(\w+)", re.I)
+
+
+def _missing_tables(conn: sqlite3.Connection, scripts: list[str]) -> list[str]:
+    """Tables a set of scripts would ALTER that this database does not have.
+
+    3.0 stopped building the pre-3.0 tables (`processes`, `targets`, `quotas`,
+    `approval_requests`, …), so a database created *at* 3.0 has never had them —
+    while the downgrades that unwind their columns are still in the list, because
+    an upgraded install does have them and still needs them.
+    """
+    have = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    want = {t for s in scripts for t in _ALTERED.findall(s)}
+    return sorted(t for t in want if t not in have)
 
 
 def run_migrations(conn: sqlite3.Connection, migrations: list[str] | None = None) -> int:
@@ -287,6 +309,11 @@ def migrate_to(conn: sqlite3.Connection, target: int) -> int:
 
     Down-migrations are destructive (dropping a column drops its data) — the CLI
     warns before running one. Assumes DOWNGRADES stays aligned with MIGRATIONS.
+
+    **Refused before anything runs** if a step would touch a table this database
+    does not have. `executescript` commits as it goes, so a migration that fails
+    halfway leaves the schema partly unwound and the version no longer describing
+    it. Checking first is the difference between "refused" and "corrupted".
     """
     assert len(DOWNGRADES) == len(MIGRATIONS), "DOWNGRADES must mirror MIGRATIONS"
     n = len(MIGRATIONS)
@@ -297,6 +324,13 @@ def migrate_to(conn: sqlite3.Connection, target: int) -> int:
             conn.executescript(MIGRATIONS[i])
             conn.execute(f"PRAGMA user_version = {i + 1}")
     elif target < cur:                     # down (reverse order)
+        steps = [DOWNGRADES[i] for i in range(cur - 1, target - 1, -1)]
+        if missing := _missing_tables(conn, steps):
+            raise MigrationRefused(
+                f"cannot unwind schema v{cur} → v{target}: this database has no "
+                f"{', '.join(missing)}. It was created at a version that no longer "
+                "builds those tables, so an older schema cannot be reconstructed "
+                "from it — restore a backup taken at the version you want.")
         for i in range(cur - 1, target - 1, -1):
             conn.executescript(DOWNGRADES[i])
             conn.execute(f"PRAGMA user_version = {i}")

@@ -22,6 +22,14 @@ process is a single point of failure and horizontal scale-out is not available.
 migrate` moves the schema in either direction, and downgrading is destructive
 by construction: dropping a column drops its data.
 
+**A database created at 3.0 cannot be wound back past 3.0.** The downgrades for
+older versions unwind columns on tables 3.0 no longer builds — `processes`,
+`targets`, `quotas`, `approval_requests` — which an *upgraded* install still has
+and a fresh one never did. `migrate` checks before it starts and refuses,
+naming the tables, because `executescript` commits as it goes: a migration that
+failed halfway would leave the schema partly unwound and the version no longer
+describing it. Restoring a backup taken at the version you want is the way back.
+
 ## The schema
 
 **A pre-3.0 role-scoped policy does not carry over cleanly.** Migration v33
